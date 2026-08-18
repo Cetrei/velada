@@ -359,6 +359,11 @@ export const server = {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
       }
       await supabase.auth.signOut();
+      // Tambien limpia el gate del panel: sin esto, un admin que cierra
+      // sesion desde /inscripcion se queda con velada_panel_unlocked=true
+      // de una sesion Supabase vieja, y el proximo login por cualquier via
+      // salta directo al panel sin pedir la passphrase de nuevo.
+      context.cookies.delete("velada_panel_unlocked", { path: "/" });
       return { success: true };
     }
   }),

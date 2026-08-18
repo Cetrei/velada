@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { actions } from "astro:actions";
 import type { Participant, ParticipantStat } from "@velada/core";
 import { PAGES, PARTICIPANT_MANAGER } from "@velada/core";
+import PlayerCard from "./PlayerCard";
 
 type RiotCheckStatus = "idle" | "checking" | "found" | "not_found" | "invalid" | "error";
 
@@ -74,6 +75,8 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
   );
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
+  const [bannerPreviewUrl, setBannerPreviewUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<StatusMessage>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
@@ -127,6 +130,30 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
       if (riotCheckTimer.current) clearTimeout(riotCheckTimer.current);
     };
   }, [form.lolUsername, form.lolServer]);
+
+  // Genera un object URL local para previsualizar la foto/banner elegidos
+  // en la PlayerCard antes de subirlos de verdad (recien se suben al hacer
+  // submit). Se revoca el URL anterior en cada cambio y al desmontar para
+  // no filtrar memoria.
+  useEffect(() => {
+    if (!photoFile) {
+      setPhotoPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(photoFile);
+    setPhotoPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [photoFile]);
+
+  useEffect(() => {
+    if (!bannerFile) {
+      setBannerPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(bannerFile);
+    setBannerPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [bannerFile]);
 
   function updateField<K extends keyof typeof EMPTY_FORM>(key: K, value: (typeof EMPTY_FORM)[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -206,22 +233,25 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
     });
   }
 
+  const previewRank = riotCheck.status === "found" ? riotCheck.rank ?? currentRank : currentRank;
+
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="bg-lol-cardBg border border-lol-border p-4 sm:p-6 rounded-xl space-y-4"
-    >
-      {status && (
-        <div
-          className={`text-sm p-3 rounded ${
-            status.type === "success"
-              ? "bg-green-900/30 text-green-400 border border-green-800"
-              : "bg-red-900/30 text-red-400 border border-red-800"
-          }`}
-        >
-          {status.text}
-        </div>
-      )}
+    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_280px] gap-6 items-start">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-lol-cardBg border border-lol-border p-4 sm:p-6 rounded-xl space-y-4"
+      >
+        {status && (
+          <div
+            className={`text-sm p-3 rounded ${
+              status.type === "success"
+                ? "bg-green-900/30 text-green-400 border border-green-800"
+                : "bg-red-900/30 text-red-400 border border-red-800"
+            }`}
+          >
+            {status.text}
+          </div>
+        )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Field label={PARTICIPANT_MANAGER.fields.name} invalid={invalidFields.has("name")}>
@@ -458,7 +488,24 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
           to { transform: rotate(360deg); }
         }
       `}</style>
-    </form>
+      </form>
+
+      <aside className="lg:sticky lg:top-24">
+        <p className="text-xs uppercase text-slate-500 mb-2 text-center lg:text-left">Vista previa</p>
+        <PlayerCard
+          data={{
+            name: form.name,
+            nickname: form.nickname,
+            mainRole: form.mainRole,
+            favChampion: form.favChampion,
+            lolRank: previewRank,
+            photo: photoPreviewUrl ?? existingParticipant?.photo ?? null,
+            banner: bannerPreviewUrl ?? existingParticipant?.banner ?? null,
+            stats: stats.map(({ label, value }) => ({ label, value }))
+          }}
+        />
+      </aside>
+    </div>
   );
 }
 

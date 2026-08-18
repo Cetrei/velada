@@ -1,8 +1,9 @@
 ---
 import Layout from "../../layouts/Layout.astro";
+import PlayerCard from "../../components/PlayerCard";
 import { loadParticipants } from "../../lib/loadParticipants";
 import { fetchMatches, fetchPredictionTallies } from "../../lib/matches";
-import { PAGES, rankIconPath } from "@velada/core";
+import { PAGES } from "@velada/core";
 
 const { id } = Astro.params;
 
@@ -30,7 +31,6 @@ const participantPct = totalVotes > 0 ? Math.round((participantVotes / totalVote
 const rivalPct = totalVotes > 0 ? Math.round((100 - participantPct) * 10) / 10 : 50;
 
 const copy = PAGES.fighterDetail;
-const fallbackPhoto = `https://placehold.co/800x1000/0A1428/C8AA6E?text=${encodeURIComponent(participant.nickname)}`;
 ---
 
 <Layout title={copy.tabTitle(participant.name)}>
@@ -46,14 +46,20 @@ const fallbackPhoto = `https://placehold.co/800x1000/0A1428/C8AA6E?text=${encode
 
       <div class="grid grid-cols-1 lg:grid-cols-5 gap-10">
         <div class="lg:col-span-2 relative">
-          <div class="relative overflow-hidden bg-lol-cardBg border border-lol-border clip-edges aspect-[4/5]">
-            <img
-              src={participant.photo ?? fallbackPhoto}
-              alt={participant.name}
-              class="w-full h-full object-cover"
-            />
-            <div class="absolute inset-0 bg-gradient-to-t from-lol-darkBg via-transparent to-transparent" />
-          </div>
+          <PlayerCard
+            client:load
+            data={{
+              name: participant.name,
+              nickname: participant.nickname,
+              mainRole: participant.mainRole,
+              favChampion: participant.favChampion,
+              lolRank: participant.lolRank,
+              photo: participant.photo,
+              banner: participant.banner,
+              stats: participant.stats
+            }}
+            className="clip-edges"
+          />
           <div class="flex items-center gap-4 mt-4">
             {participant.instagramHandle && (
               <span class="flex items-center gap-1.5 text-slate-300 text-sm">
@@ -71,77 +77,41 @@ const fallbackPhoto = `https://placehold.co/800x1000/0A1428/C8AA6E?text=${encode
         </div>
 
         <div class="lg:col-span-3">
-          <div class="flex items-center gap-3 mb-3">
-            {participant.countryFlag && <span class="text-2xl">{participant.countryFlag}</span>}
-            <span class="px-3 py-1 bg-lol-darkBg border border-lol-gold text-lol-gold text-xs font-bold uppercase tracking-wider rounded-sm">
-              {participant.mainRole}
-            </span>
-          </div>
+          {participant.countryFlag && (
+            <div class="flex items-center gap-3 mb-3">
+              <span class="text-2xl">{participant.countryFlag}</span>
+            </div>
+          )}
 
           <h1 class="font-display text-4xl md:text-6xl font-bold text-white uppercase tracking-tight mb-2">
             {participant.name}
           </h1>
           <p class="text-lol-blue italic text-lg mb-8">"{participant.nickname}"</p>
 
-          <div class="grid grid-cols-2 gap-x-8 gap-y-5 bg-lol-cardBg border border-lol-border p-6 mb-8">
-            {participant.country && (
-              <div>
-                <p class="text-slate-500 text-xs uppercase tracking-wide mb-1">{copy.countryLabel}</p>
-                <p class="text-white font-bold">{participant.country}</p>
-              </div>
-            )}
-            {participant.height && (
-              <div>
-                <p class="text-slate-500 text-xs uppercase tracking-wide mb-1">{copy.heightLabel}</p>
-                <p class="text-white font-bold">{participant.height}</p>
-              </div>
-            )}
-            {participant.weight && (
-              <div>
-                <p class="text-slate-500 text-xs uppercase tracking-wide mb-1">{copy.weightLabel}</p>
-                <p class="text-white font-bold">{participant.weight}</p>
-              </div>
-            )}
-            <div>
-              <p class="text-slate-500 text-xs uppercase tracking-wide mb-1">{copy.categoryLabel}</p>
-              <p class="text-white font-bold">{participant.mainRole}</p>
-            </div>
-            <div>
-              <p class="text-slate-500 text-xs uppercase tracking-wide mb-1">Rango</p>
-              <p class="flex items-center gap-2 text-white font-bold">
-                <img
-                  src={rankIconPath(participant.lolRank)}
-                  alt=""
-                  class="w-6 h-6 object-contain"
-                  loading="lazy"
-                  onerror="this.style.display='none'"
-                />
-                {participant.lolRank}
-              </p>
-            </div>
-            <div>
-              <p class="text-slate-500 text-xs uppercase tracking-wide mb-1">Campeón favorito</p>
-              <p class="text-white font-bold">{participant.favChampion}</p>
-            </div>
-          </div>
-
-          {participant.description && <p class="text-slate-300 leading-relaxed mb-8">{participant.description}</p>}
-
-          {participant.stats && participant.stats.length > 0 && (
-            <div class="space-y-4 mb-8">
-              {participant.stats.map((stat) => (
+          {(participant.country || participant.height || participant.weight) && (
+            <div class="grid grid-cols-2 gap-x-8 gap-y-5 bg-lol-cardBg border border-lol-border p-6 mb-8">
+              {participant.country && (
                 <div>
-                  <div class="flex justify-between text-xs uppercase text-slate-400 mb-1">
-                    <span>{stat.label}</span>
-                    <span>{stat.value}</span>
-                  </div>
-                  <div class="h-2 bg-lol-darkBg rounded-full overflow-hidden border border-lol-border/50">
-                    <div class="h-full bg-gradient-to-r from-lol-gold to-yellow-400" style={`width: ${stat.value}%`} />
-                  </div>
+                  <p class="text-slate-500 text-xs uppercase tracking-wide mb-1">{copy.countryLabel}</p>
+                  <p class="text-white font-bold">{participant.country}</p>
                 </div>
-              ))}
+              )}
+              {participant.height && (
+                <div>
+                  <p class="text-slate-500 text-xs uppercase tracking-wide mb-1">{copy.heightLabel}</p>
+                  <p class="text-white font-bold">{participant.height}</p>
+                </div>
+              )}
+              {participant.weight && (
+                <div>
+                  <p class="text-slate-500 text-xs uppercase tracking-wide mb-1">{copy.weightLabel}</p>
+                  <p class="text-white font-bold">{participant.weight}</p>
+                </div>
+              )}
             </div>
           )}
+
+          {participant.description && <p class="text-slate-300 leading-relaxed mb-8">{participant.description}</p>}
 
           <div class="flex items-center justify-between bg-lol-cardBg border border-lol-border p-5 mb-8">
             <div>

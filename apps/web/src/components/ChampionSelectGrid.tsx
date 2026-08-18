@@ -419,13 +419,13 @@ export default function ChampionSelectGrid({
         }
 
         .champ-portrait.no-photo {
-            background-color: #0a2530;
-            background-image: radial-gradient(circle at center, rgba(11, 212, 212, 0.08) 0%, rgba(5, 20, 25, 0.85) 100%);
+            background-color: #1e2328;
+            background-image: radial-gradient(circle at center, #1e2328 0%, rgba(5, 20, 25, 0.85) 100%);
         }
 
         .champ-portrait-random {
-            background-color: #0a2530;
-            background-image: radial-gradient(circle at center, rgba(11, 212, 212, 0.12) 0%, rgba(5, 20, 25, 0.9) 100%);
+            background-color: #1e2328;
+            background-image: radial-gradient(circle at center, #1e2328 0%, rgba(5, 20, 25, 0.9) 100%);
         }
 
         .champ-portrait-random:disabled {
@@ -434,20 +434,20 @@ export default function ChampionSelectGrid({
         }
 
         .random-icon {
-            color: #4dd8d8;
+            color: #0f1017;
             font-size: 1.4rem;
-            text-shadow: 0 0 8px rgba(11, 212, 212, 0.5);
+            text-shadow: 0 0 8px rgba(54, 54, 54, 0.5);
             transition: color 0.2s ease, text-shadow 0.2s ease;
         }
 
         .champ-portrait-random:hover:not(:disabled) .random-icon {
             color: #e0f8f8;
-            text-shadow: 0 0 12px rgba(11, 212, 212, 0.9);
+            text-shadow: 0 0 12px #0b9ed4a6;
         }
 
         .champ-portrait:hover, .champ-portrait.selected {
-            border-color: #0bd4d4;
-            box-shadow: 0 0 8px rgba(11, 212, 212, 0.8), inset 0 0 10px rgba(11, 212, 212, 0.5);
+            border-color: #0b9bd492;
+            box-shadow: 0 0 8px rgba(11, 172, 212, 0.56), inset 0 0 10px rgba(11, 212, 212, 0.32);
             transform: scale(1.05);
             z-index: 10;
         }
@@ -455,7 +455,7 @@ export default function ChampionSelectGrid({
         .champ-portrait.selected {
             border-width: 2px;
             border-style: solid;
-            border-image: linear-gradient(to bottom, #e0f8f8, #0bd4d4) 1;
+            border-image: linear-gradient(to bottom, #e0f8f8, #0b9ed4a6) 1;
         }
 
         .champ-name {
