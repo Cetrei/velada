@@ -2,12 +2,21 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
-const REQUIRED_SECRETS = [
+const GITHUB_ACTIONS_SECRETS = [
   "PUBLIC_SUPABASE_URL",
   "PUBLIC_SUPABASE_ANON_KEY",
   "CLOUDFLARE_API_TOKEN",
   "CLOUDFLARE_ACCOUNT_ID",
 ] as const;
+
+// Estas NO van como GitHub Actions secret (no se usan en build time) - van
+// directo al Worker desplegado via `wrangler secret put`, porque
+// createSupabaseAdminClient() y el lookup de Riot las leen en runtime
+// (import.meta.env dentro del handler de una Action), no al compilar. Si
+// faltan, cualquier Action que use el admin client (saveParticipant,
+// deleteParticipant, subida de fotos) falla en producción con
+// "Supabase admin no configurado." aunque el build haya sido exitoso.
+const WORKER_RUNTIME_SECRETS = ["SUPABASE_SERVICE_ROLE_KEY", "RIOT_API_KEY"] as const;
 
 function parseEnvFile(path: string): Record<string, string> {
   const raw = readFileSync(path, "utf-8");
@@ -59,6 +68,30 @@ function setGithubSecret(name: string, value: string): void {
   console.log(`✓ ${name} configurado en GitHub Actions secrets`);
 }
 
+function ensureWranglerCli(cwd: string): void {
+  const check = spawnSync("bunx", ["wrangler", "--version"], { stdio: "ignore", cwd });
+  if (check.status !== 0) {
+    console.error("wrangler no disponible via bunx. Corre `bun install` en apps/web primero.");
+    process.exit(1);
+  }
+}
+
+function setWorkerSecret(name: string, value: string, cwd: string): void {
+  const result = spawnSync("bunx", ["wrangler", "secret", "put", name], {
+    input: value,
+    stdio: ["pipe", "pipe", "pipe"],
+    encoding: "utf-8",
+    cwd
+  });
+
+  if (result.status !== 0) {
+    console.error(`Fallo al setear ${name} en el Worker:`, result.stderr.trim());
+    process.exit(1);
+  }
+
+  console.log(`✓ ${name} configurado como secret del Worker (velada-lol)`);
+}
+
 function main(): void {
   const rootEnvPath = resolve(import.meta.dir, "..", ".env");
   if (!existsSync(rootEnvPath)) {
@@ -67,7 +100,9 @@ function main(): void {
   }
 
   const env = parseEnvFile(rootEnvPath);
-  const missing = REQUIRED_SECRETS.filter((key) => !env[key]);
+  const missingGithub = GITHUB_ACTIONS_SECRETS.filter((key) => !env[key]);
+  const missingWorker = WORKER_RUNTIME_SECRETS.filter((key) => !env[key]);
+  const missing = [...missingGithub, ...missingWorker];
   if (missing.length > 0) {
     console.error(`Faltan variables en .env: ${missing.join(", ")}`);
     process.exit(1);
@@ -76,18 +111,29 @@ function main(): void {
   ensureGhCli();
 
   console.log("Configurando GitHub Actions secrets para el workflow de deploy...\n");
-  for (const key of REQUIRED_SECRETS) {
+  for (const key of GITHUB_ACTIONS_SECRETS) {
     setGithubSecret(key, env[key]!);
+  }
+
+  const webDir = resolve(import.meta.dir, "..", "apps", "web");
+  ensureWranglerCli(webDir);
+
+  console.log("\nConfigurando secrets del Worker (runtime, via wrangler)...\n");
+  for (const key of WORKER_RUNTIME_SECRETS) {
+    setWorkerSecret(key, env[key]!, webDir);
   }
 
   console.log(
     "\nListo. El workflow .github/workflows/deploy.yml ya puede leer estos" +
-      " secrets en el proximo push a main o release."
+      " secrets en el proximo push a main o release, y el Worker ya tiene" +
+      " SUPABASE_SERVICE_ROLE_KEY / RIOT_API_KEY disponibles en runtime."
   );
   console.log(
     "Nota: PUBLIC_SUPABASE_URL y PUBLIC_SUPABASE_ANON_KEY se inyectan en" +
       " build time (Astro las incrusta al compilar), por eso van como" +
-      " GitHub secret y no como `wrangler secret put` en el Worker."
+      " GitHub secret. SUPABASE_SERVICE_ROLE_KEY y RIOT_API_KEY se leen en" +
+      " runtime dentro de las Astro Actions, por eso van directo al Worker" +
+      " con `wrangler secret put` en vez de a GitHub Actions."
   );
 }
 
