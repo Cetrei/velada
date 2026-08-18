@@ -18,32 +18,46 @@ type SortDirection = "asc" | "desc";
  * grid de filtro de rol. SVG propio con viewBox/tamano fijo elimina esa
  * dependencia fragil de un CDN externo y garantiza espaciado uniforme via
  * el `gap` del flexbox, sin variacion por glyph.
+ *
+ * Pictogramas solidos (fill, no stroke delgado), verificados visualmente a
+ * 40px antes de fijarlos (el primer intento con paths a mano alzada no se
+ * leia como nada reconocible a 18px, sobre todo Jungle y Mid). Geometria
+ * inspirada en el selector de posicion real del client de LoL: daga con
+ * guarda (Top), daga vertical con guarda ancha (Jungle, distinta de Top en
+ * proporcion para no confundirse), rombo hueco tipo orbe arcano (Mid),
+ * punta de flecha con asta (ADC), escudo con cruz (Support).
  */
-const ROLE_FILTERS: Array<{ role: RoleFilter; label: string; path: string }> = [
+const ROLE_FILTERS: Array<{ role: RoleFilter; label: string; path: string; fillRule?: "evenodd" }> = [
+  // Top: espada vertical con guarda cruzada
   {
     role: "Top",
     label: "Top",
-    path: "M6.5 2 4 4.5l7.5 7.5L4 19.5 6.5 22l7.5-7.5 4 4 2-2-4-4L20 8.5 17.5 6 14 9.5z"
+    path: "M11 1h2v13h-2zM7 6h10v2H7zM9 14h6l-1 3h-1v6h-2v-6H10z"
   },
+  // Jungle: daga vertical con guarda ancha (silueta compacta, se distingue de Top)
   {
     role: "Jungle",
     label: "Jungle",
-    path: "M12 2 4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5z"
+    path: "M9 3h6v9h-6zM7 5h2v2H7zM15 5h2v2h-2zM10 14h4l-1 3h-1v6h-1v-6h-1z"
   },
+  // Mid: rombo hueco tipo orbe arcano
   {
     role: "Mid",
     label: "Mid",
-    path: "M15 3 13.5 4.5 15.5 6.5 17 5zM2 22 12.5 11.5 10.5 9.5 0 20zM18 2l.7 1.8L20.5 4.5l-1.8.7L18 7l-.7-1.8L15.5 4.5l1.8-.7zM21 8l.5 1.3L23 9.8l-1.3.5L21 12l-.5-1.3L19 10.3l1.3-.5z"
+    path: "M12 2 2 12l10 10 10-10z M12 6l6 6-6 6-6-6z",
+    fillRule: "evenodd"
   },
+  // ADC: punta de flecha con asta
   {
     role: "ADC",
     label: "ADC",
-    path: "M4 2c8 0 15 5.5 17 10-2 4.5-9 10-17 10 4-3 7-6.5 8-10-1-3.5-4-7-8-10zM2 12h10M9 9l3 3-3 3"
+    path: "M12 1 3 10h5v12h8V10h5z"
   },
+  // Support: escudo con cruz
   {
     role: "Support",
     label: "Support",
-    path: "M12 21s-7-4.6-9.5-9C.8 8.6 2 5 5.5 4.2 8 3.6 10 5 12 7c2-2 4-3.4 6.5-2.8C22 5 23.2 8.6 21.5 12 19 16.4 12 21 12 21zM11 8v6M8 11h6"
+    path: "M12 1 4 4v6c0 5.2 3.4 9.6 8 11 4.6-1.4 8-5.8 8-11V4zM11 7h2v4h4v2h-4v4h-2v-4H7v-2h4z"
   }
 ];
 
@@ -129,7 +143,7 @@ export default function ChampionSelectGrid({
             
             <div className="controls-bar w-full max-w-2xl flex flex-wrap justify-between items-center gap-3 mb-2 px-2 sm:px-[20px] pb-[10px] border-b border-[#c8aa6e]/30">
                 <div className="role-filters flex flex-nowrap items-center gap-2.5 sm:gap-[15px] text-[#a09b8c] text-base sm:text-base order-2 sm:order-1 flex-shrink-0">
-                    {ROLE_FILTERS.map(({ role, label, path }) => (
+                    {ROLE_FILTERS.map(({ role, label, path, fillRule }) => (
                         <button
                             key={role}
                             type="button"
@@ -139,8 +153,8 @@ export default function ChampionSelectGrid({
                             aria-pressed={roleFilter === role}
                             onClick={() => setRoleFilter((current) => (current === role ? null : role))}
                         >
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                                <path d={path} />
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                <path d={path} fillRule={fillRule} />
                             </svg>
                         </button>
                     ))}
