@@ -10,49 +10,12 @@ interface ChampionSelectGridProps {
 type RoleFilter = Participant["mainRole"];
 type SortDirection = "asc" | "desc";
 
-/**
- * SVG inline en vez de clases de Font Awesome: fa-khanda existe en el set
- * free, pero fa-bow-arrow y fa-staff-snake no (se confirmo contra el buscador
- * oficial de fontawesome.com, que cae a resultados de "arrow" por defecto
- * cuando el query no matchea nada) — se renderizaban como glyphs vacios con
- * ancho inconsistente entre navegadores, generando el espaciado irregular
- * entre iconos. Los SVG propios no dependen de que el CDN cargue a tiempo
- * ni de adivinar nombres de icono, y tienen un viewBox fijo asi que el
- * gap entre ellos es siempre parejo.
- */
-const ROLE_ICON_PATHS: Record<RoleFilter, string> = {
-  Top: "M12 2 4 6v6c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6l-8-4Z M9 11l3 3 5-5",
-  Jungle: "M12 2c-3 3-5 6-5 9a5 5 0 0 0 10 0c0-3-2-6-5-9Z M8 17c0 2.5 1.8 4.5 4 4.5s4-2 4-4.5",
-  Mid: "M4 20 15 9 M13 4l7 7-2.5 2.5L13 9l-2-2 2.5-3ZM4 20l3-1 1-3",
-  ADC: "M4 20 20 4 M14 4h6v6 M9 15l-4 4",
-  Support: "M12 3v18 M6 7c2 2 4 2 6 0s4-2 6 0 M6 13c2 2 4 2 6 0s4-2 6 0"
-};
-
-function RoleIcon({ role, active }: { role: RoleFilter; active: boolean }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="18"
-      height="18"
-      fill="none"
-      stroke={active ? "#0bd4d4" : "currentColor"}
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="flex-shrink-0"
-      style={active ? { filter: "drop-shadow(0 0 6px rgba(11,212,212,0.6))" } : undefined}
-    >
-      <path d={ROLE_ICON_PATHS[role]} />
-    </svg>
-  );
-}
-
-const ROLE_FILTERS: Array<{ role: RoleFilter; label: string }> = [
-  { role: "Top", label: "Top" },
-  { role: "Jungle", label: "Jungle" },
-  { role: "Mid", label: "Mid" },
-  { role: "ADC", label: "ADC" },
-  { role: "Support", label: "Support" }
+const ROLE_FILTERS: Array<{ role: RoleFilter; icon: string; label: string }> = [
+  { role: "Top", icon: "fa-khanda", label: "Top" },
+  { role: "Jungle", icon: "fa-shield-halved", label: "Jungle" },
+  { role: "Mid", icon: "fa-wand-magic-sparkles", label: "Mid" },
+  { role: "ADC", icon: "fa-bow-arrow", label: "ADC" },
+  { role: "Support", icon: "fa-staff-snake", label: "Support" }
 ];
 
 function fallbackPhoto(p: Participant): string {
@@ -136,19 +99,16 @@ export default function ChampionSelectGrid({
         <div className={`champ-grid-container w-full transition-opacity duration-400 ${isLockedIn ? 'opacity-0 pointer-events-none absolute' : 'opacity-100 relative'}`}>
             
             <div className="controls-bar w-full max-w-2xl flex flex-wrap justify-between items-center gap-3 mb-2 px-2 sm:px-[20px] pb-[10px] border-b border-[#c8aa6e]/30">
-                <div className="role-filters flex flex-nowrap items-center gap-2.5 sm:gap-[15px] text-[#a09b8c] order-2 sm:order-1 flex-shrink-0">
-                    {ROLE_FILTERS.map(({ role, label }) => (
-                        <button
+                <div className="role-filters flex flex-nowrap items-center gap-2.5 sm:gap-[15px] text-[#a09b8c] text-base sm:text-base order-2 sm:order-1 flex-shrink-0">
+                    {ROLE_FILTERS.map(({ role, icon, label }) => (
+                        <i
                             key={role}
-                            type="button"
-                            className={`flex items-center justify-center cursor-pointer transition-colors flex-shrink-0 bg-transparent border-0 p-0.5 ${roleFilter === role ? 'text-[#0bd4d4]' : 'hover:text-[#c8aa6e]'}`}
+                            className={`fa-solid ${icon} w-[18px] text-center cursor-pointer transition-colors flex-shrink-0 ${roleFilter === role ? 'text-[#0bd4d4] drop-shadow-[0_0_6px_rgba(11,212,212,0.6)]' : 'hover:text-[#c8aa6e]'}`}
                             title={label}
+                            role="button"
                             aria-pressed={roleFilter === role}
-                            aria-label={label}
                             onClick={() => setRoleFilter((current) => (current === role ? null : role))}
-                        >
-                            <RoleIcon role={role} active={roleFilter === role} />
-                        </button>
+                        ></i>
                     ))}
                 </div>
                 
