@@ -92,10 +92,18 @@ export const server = {
         refresh_token: refreshToken
       });
       if (error) {
+        console.log(`[debug] setSession error: ${JSON.stringify(error)}`);
         throw new ActionError({ code: "UNAUTHORIZED", message: "Link invalido o expirado." });
       }
 
+      const {
+        data: { user: rawUser },
+        error: getUserError
+      } = await supabase.auth.getUser();
+      console.log(`[debug] getUser after setSession: user=${JSON.stringify(rawUser?.id)} email=${rawUser?.email} error=${JSON.stringify(getUserError)}`);
+
       const session = await getPanelSession(context.request, context.cookies);
+      console.log(`[debug] getPanelSession result: ${JSON.stringify(session)}`);
       if (!session) {
         await supabase.auth.signOut();
         throw new ActionError({
