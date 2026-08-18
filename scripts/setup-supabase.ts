@@ -489,12 +489,19 @@ async function main() {
     PUBLIC_SUPABASE_ANON_KEY: anonKey
   };
 
-  writeEnvFile(
-    rootEnvPath,
-    { ...publicVars, SUPABASE_SERVICE_ROLE_KEY: serviceRoleKey },
-    "root .env"
-  );
-  writeEnvFile(webEnvPath, publicVars, "apps/web/.env");
+  // apps/web/.env necesita las mismas server-only vars que el root .env:
+  // Astro SSR (bun run dev / el build) corre con cwd en apps/web/, asi
+  // que import.meta.env ahi solo ve apps/web/.env, no el .env de la raiz.
+  // Sin esto, checkEmailExists/saveOwnParticipant/saveParticipant/
+  // deleteParticipant/fetchRiotRank/verifyPassphrase fallan en local con
+  // "Supabase no configurado" o "RIOT_API_KEY no configurada" aunque el
+  // root .env este completo.
+  const serverOnlyVars: Record<string, string> = { SUPABASE_SERVICE_ROLE_KEY: serviceRoleKey };
+  if (process.env.RIOT_API_KEY) serverOnlyVars.RIOT_API_KEY = process.env.RIOT_API_KEY;
+  if (process.env.PANEL_PASSPHRASE) serverOnlyVars.PANEL_PASSPHRASE = process.env.PANEL_PASSPHRASE;
+
+  writeEnvFile(rootEnvPath, { ...publicVars, ...serverOnlyVars }, "root .env");
+  writeEnvFile(webEnvPath, { ...publicVars, ...serverOnlyVars }, "apps/web/.env");
 
   console.log("4/6 Sembrando participantes desde participants.yml...");
   await seedParticipantsFromYaml(projectRef, accessToken);
