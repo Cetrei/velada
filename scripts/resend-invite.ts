@@ -108,6 +108,12 @@ async function generateLink(
   redirectTo: string | undefined
 ): Promise<{ link: string; type: "invite" | "magiclink" }> {
   const requestLink = async (type: "invite" | "magiclink") => {
+    const requestBody = {
+      type,
+      email,
+      ...(redirectTo ? { options: { redirect_to: redirectTo } } : {})
+    };
+    console.log(`  [debug] request body: ${JSON.stringify(requestBody)}`);
     const response = await fetch(`${endpoint}/auth/v1/admin/generate_link`, {
       method: "POST",
       headers: {
@@ -115,11 +121,7 @@ async function generateLink(
         Authorization: `Bearer ${serviceRoleKey}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({
-        type,
-        email,
-        ...(redirectTo ? { options: { redirect_to: redirectTo } } : {})
-      })
+      body: JSON.stringify(requestBody)
     });
     return response;
   };
@@ -128,6 +130,7 @@ async function generateLink(
 
   if (inviteResponse.ok) {
     const data = (await inviteResponse.json()) as GenerateLinkResponse;
+    console.log(`  [debug] invite response body: ${JSON.stringify(data)}`);
     const link = data.action_link ?? data.properties?.action_link;
     if (!link) {
       throw new Error(`Supabase no devolvio action_link para ${email}. Respuesta: ${JSON.stringify(data)}`);
@@ -153,6 +156,7 @@ async function generateLink(
   }
 
   const magicLinkData = (await magicLinkResponse.json()) as GenerateLinkResponse;
+  console.log(`  [debug] magiclink response body: ${JSON.stringify(magicLinkData)}`);
   const magicLink = magicLinkData.action_link ?? magicLinkData.properties?.action_link;
   if (!magicLink) {
     throw new Error(
@@ -183,6 +187,7 @@ async function main() {
   }
 
   const redirectTo = siteUrl ? `${siteUrl.replace(/\/$/, "")}/panel-login` : undefined;
+  console.log(`  [debug] siteUrl=${JSON.stringify(siteUrl)} redirectTo=${JSON.stringify(redirectTo)}`);
 
   console.log(`Generando link de invitacion para ${email}...`);
   const [endpoint, serviceRoleKey] = await Promise.all([
