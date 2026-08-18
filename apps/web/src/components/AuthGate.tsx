@@ -38,7 +38,9 @@ export default function AuthGate() {
     setStatus(null);
     setIsBusy(true);
     try {
-      const { data, error } = await actions.checkEmailExists({ email });
+      const form = new FormData();
+      form.set("email", email);
+      const { data, error } = await actions.checkEmailExists(form);
       if (error) {
         setStatus({ type: "error", text: errorMessage(error) });
         return;
@@ -55,7 +57,10 @@ export default function AuthGate() {
     setStatus(null);
     setIsBusy(true);
     try {
-      const { error } = await actions.loginParticipant({ email, password });
+      const form = new FormData();
+      form.set("email", email);
+      form.set("password", password);
+      const { error } = await actions.loginParticipant(form);
       if (error) {
         setStatus({ type: "error", text: errorMessage(error) });
         return;
@@ -77,7 +82,10 @@ export default function AuthGate() {
     setStatus(null);
     setIsBusy(true);
     try {
-      const { error } = await actions.registerParticipant({ email, password });
+      const form = new FormData();
+      form.set("email", email);
+      form.set("password", password);
+      const { error } = await actions.registerParticipant(form);
       if (error) {
         setStatus({ type: "error", text: errorMessage(error) });
         return;

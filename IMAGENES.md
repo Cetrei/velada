@@ -57,9 +57,35 @@ Supabase configurado y participantes reales cargados desde `/inscripcion`,
 el sitio ignora `participants.yml` por completo y usa lo que esté en la
 base de datos.
 
+## 3. Iconos de rango (Iron, Bronze, ..., Challenger)
+
+A diferencia de las fotos de peleadores, estos SÍ hay que ponerlos a mano —
+no se suben desde ningún formulario. `packages/core/rankIcon.ts` arma la
+ruta a partir del tier detectado en `lolRank` (ej. "Diamond III" ->
+`/images/ranks/diamond.png`).
+
+1. Descargá los iconos de
+   https://leagueoflegends.fandom.com/wiki/Rank_(League_of_Legends) (o de
+   cualquier fuente oficial de Riot).
+2. Guardalos en `apps/web/public/images/ranks/` con estos nombres exactos
+   (minusculas, sin espacios, `.png`): `iron.png`, `bronze.png`,
+   `silver.png`, `gold.png`, `platinum.png`, `emerald.png`, `diamond.png`,
+   `master.png`, `grandmaster.png`, `challenger.png`, y `unranked.png`
+   (para "Sin clasificar" o cualquier texto no reconocido).
+
+Si un archivo falta, el `<img>` simplemente no se muestra (hay fallback
+`onerror`/`onError` en todos los componentes que lo usan) — no rompe el
+build ni la página. Se usan en la card del roster (`FighterCard.astro`), la
+ficha de detalle (`/peleadores/[id]`), la lista de `/peleadores`
+(`RosterExplorer.tsx`) y el panel admin (`ParticipantManager.tsx`). El grid
+de selección del landing (`ChampionSelectGrid.tsx`) y el splash del
+personaje seleccionado ahí NO llevan este icono — muestran el rango como
+texto plano a propósito.
+
 ## Resumen rápido
 
 | Caso | Dónde | Cómo se nombra |
 |---|---|---|
 | Fotos reales de los amigos | Subida por formulario en `/inscripcion` o `/gestion-roster-x9f2` | Automático, no importa |
 | Datos de prueba/demo local | `apps/web/public/images/participants/` | Igual al `id:` del YAML, ej. `p1.webp` |
+| Iconos de rango | `apps/web/public/images/ranks/` | Fijo: `diamond.png`, `master.png`, etc. |

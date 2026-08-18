@@ -622,5 +622,49 @@ export const server = {
       requirePanelAuth(await getPanelSession(context.request, context.cookies));
       return fetchRiotRank(lolUsername, lolServer);
     }
+  }),
+
+  /**
+   * Live-check for the Riot ID + server as the fighter types it in
+   * /inscripcion, driving the green check / yellow spinner / red X
+   * indicator next to the field before they submit. Requires a
+   * participant session (not full panel auth) so it stays usable by
+   * fighters self-registering, but isn't a fully anonymous endpoint that
+   * could burn through the Riot API rate limit. Never throws for the
+   * expected "still typing" or "typo" states (not_found / invalid) — only
+   * real infra failures (missing key, Riot API down) throw, matching
+   * fetchRiotRank's own error semantics.
+   */
+  checkRiotProfile: defineAction({
+    accept: "form",
+    input: z.object({
+      lolUsername: z.string().min(1),
+      lolServer: z.string().min(1)
+    }),
+    handler: async ({ lolUsername, lolServer }, context) => {
+      requirePanelAuth(await getParticipantSession(context.request, context.cookies));
+
+      const serverKey = lolServer.toUpperCase();
+      if (!RIOT_PLATFORM_BY_SERVER[serverKey]) {
+        return { status: "invalid" as const, reason: "server" as const };
+      }
+      const [gameName, tagLine] = lolUsername.split("#");
+      if (!gameName || !tagLine) {
+        return { status: "invalid" as const, reason: "format" as const };
+      }
+
+      try {
+        const { rank } = await fetchRiotRank(lolUsername, lolServer);
+        return { status: "found" as const, rank };
+      } catch (err) {
+        if (err instanceof ActionError && err.code === "NOT_FOUND") {
+          return { status: "not_found" as const };
+        }
+        if (err instanceof ActionError && err.code === "BAD_REQUEST") {
+          return { status: "invalid" as const, reason: "format" as const };
+        }
+        throw err;
+      }
+    }
   })
 };

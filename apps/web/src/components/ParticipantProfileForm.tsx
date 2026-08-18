@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { actions } from "astro:actions";
 import type { Participant, ParticipantStat } from "@velada/core";
 import { PAGES, PARTICIPANT_MANAGER } from "@velada/core";
+
+type RiotCheckStatus = "idle" | "checking" | "found" | "not_found" | "invalid" | "error";
 
 interface ParticipantProfileFormProps {
   existingParticipant: Participant | null;
@@ -76,6 +78,51 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
   const [isBusy, setIsBusy] = useState(false);
   const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
   const [currentRank, setCurrentRank] = useState(existingParticipant?.lolRank ?? null);
+  const [riotCheck, setRiotCheck] = useState<{ status: RiotCheckStatus; rank?: string }>({ status: "idle" });
+  const riotCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const riotCheckRequestId = useRef(0);
+
+  // Debounced live check: pings checkRiotProfile ~600ms after the fighter
+  // stops typing a Riot ID / server so the check/spinner/x icon updates
+  // before they submit, instead of only finding out the profile doesn't
+  // exist after clicking submit.
+  useEffect(() => {
+    if (riotCheckTimer.current) clearTimeout(riotCheckTimer.current);
+
+    const username = form.lolUsername.trim();
+    if (!username || !form.lolServer) {
+      setRiotCheck({ status: "idle" });
+      return;
+    }
+
+    setRiotCheck({ status: "checking" });
+    const requestId = ++riotCheckRequestId.current;
+
+    riotCheckTimer.current = setTimeout(async () => {
+      try {
+        const form2 = new FormData();
+        form2.set("lolUsername", username);
+        form2.set("lolServer", form.lolServer);
+        const { data, error } = await actions.checkRiotProfile(form2);
+        if (requestId !== riotCheckRequestId.current) return;
+        if (error) {
+          setRiotCheck({ status: "error" });
+          return;
+        }
+        if (data.status === "found") {
+          setRiotCheck({ status: "found", rank: data.rank });
+        } else {
+          setRiotCheck({ status: data.status });
+        }
+      } catch {
+        if (requestId === riotCheckRequestId.current) setRiotCheck({ status: "error" });
+      }
+    }, 600);
+
+    return () => {
+      if (riotCheckTimer.current) clearTimeout(riotCheckTimer.current);
+    };
+  }, [form.lolUsername, form.lolServer]);
 
   function updateField<K extends keyof typeof EMPTY_FORM>(key: K, value: (typeof EMPTY_FORM)[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -266,12 +313,18 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
         <h3 className="text-sm uppercase text-slate-400 mb-3">{PARTICIPANT_MANAGER.lolSectionTitle}</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label={PARTICIPANT_MANAGER.fields.lolUsername} invalid={invalidFields.has("lolUsername")}>
-            <input
-              value={form.lolUsername}
-              onChange={(e) => updateField("lolUsername", e.target.value)}
-              className={`input ${invalidFields.has("lolUsername") ? "input-invalid" : ""}`}
-              placeholder={PARTICIPANT_MANAGER.placeholders.lolUsername}
-            />
+            <div className="relative">
+              <input
+                value={form.lolUsername}
+                onChange={(e) => updateField("lolUsername", e.target.value)}
+                className={`input pr-10 ${invalidFields.has("lolUsername") ? "input-invalid" : ""}`}
+                placeholder={PARTICIPANT_MANAGER.placeholders.lolUsername}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center" aria-hidden="true">
+                <RiotCheckIcon status={riotCheck.status} />
+              </span>
+            </div>
+            <RiotCheckHint status={riotCheck.status} rank={riotCheck.rank} />
           </Field>
           <Field label={PARTICIPANT_MANAGER.fields.lolServer}>
             <select
@@ -371,6 +424,7 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
 
       <style>{`
         .input {
+          box-sizing: border-box;
           width: 100%;
           background: #0A1428;
           border: 1px solid rgba(200, 170, 110, 0.2);
@@ -387,6 +441,17 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
         }
         .input-invalid:focus {
           border-color: rgba(248, 113, 113, 0.7);
+        }
+        .riot-check-spinner {
+          width: 16px;
+          height: 16px;
+          border-radius: 50%;
+          border: 2px solid rgba(234, 179, 8, 0.3);
+          border-top-color: #eab308;
+          animation: riotCheckSpin 0.7s linear infinite;
+        }
+        @keyframes riotCheckSpin {
+          to { transform: rotate(360deg); }
         }
       `}</style>
     </form>
@@ -410,4 +475,69 @@ function Field({
       {children}
     </label>
   );
+}
+
+/**
+ * Green check / yellow spinner / red X next to the Riot ID field, driven by
+ * the debounced checkRiotProfile call in the parent. "error" (Riot API or
+ * network failure, distinct from a legitimate not-found) reuses the same
+ * red X as not_found — the field-level hint text below is what tells them
+ * apart, since either way the fighter can't do anything but retry.
+ */
+function RiotCheckIcon({ status }: { status: RiotCheckStatus }) {
+  if (status === "idle") return null;
+  if (status === "checking") return <span className="riot-check-spinner" role="status" aria-label="Verificando..." />;
+  if (status === "found") {
+    return (
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="#4ade80"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        role="status"
+        aria-label="Perfil encontrado"
+      >
+        <path d="M20 6 9 17l-5-5" />
+      </svg>
+    );
+  }
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="#f87171"
+      strokeWidth="3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      role="status"
+      aria-label="Perfil no encontrado"
+    >
+      <path d="M18 6 6 18M6 6l12 12" />
+    </svg>
+  );
+}
+
+function RiotCheckHint({ status, rank }: { status: RiotCheckStatus; rank?: string }) {
+  if (status === "idle") return null;
+  const text =
+    status === "checking"
+      ? "Buscando el perfil en Riot..."
+      : status === "found"
+        ? `Perfil encontrado${rank ? ` — ${rank}` : ""}`
+        : status === "not_found"
+          ? "No encontramos ese Riot ID en ese servidor."
+          : status === "invalid"
+            ? 'Formato invalido. Usa "NombreDeInvocador#TAG".'
+            : "No se pudo verificar ahora. Se reintentará al guardar.";
+  const color =
+    status === "found" ? "text-green-400" : status === "checking" ? "text-slate-500" : "text-red-400";
+  return <p className={`text-xs mt-1.5 ${color}`}>{text}</p>;
 }

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { actions } from "astro:actions";
 import type { Participant, ParticipantStat } from "@velada/core";
-import { PARTICIPANT_MANAGER } from "@velada/core";
+import { PARTICIPANT_MANAGER, rankIconPath } from "@velada/core";
 
 interface ParticipantManagerProps {
   initialParticipants: Participant[];
@@ -470,11 +470,22 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
               key={p.id}
               className="flex items-center justify-between bg-lol-darkBg border border-lol-border/50 rounded px-4 py-3"
             >
-              <div>
-                <span className="text-white font-bold">{p.name}</span>{" "}
-                <span className="text-slate-500 text-sm">
-                  "{p.nickname}" &middot; {p.mainRole} &middot; {p.lolRank}
-                </span>
+              <div className="flex items-center gap-2 min-w-0">
+                <img
+                  src={rankIconPath(p.lolRank)}
+                  alt=""
+                  className="w-6 h-6 object-contain flex-shrink-0"
+                  loading="lazy"
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                  }}
+                />
+                <div className="min-w-0">
+                  <span className="text-white font-bold">{p.name}</span>{" "}
+                  <span className="text-slate-500 text-sm">
+                    "{p.nickname}" &middot; {p.mainRole} &middot; {p.lolRank}
+                  </span>
+                </div>
               </div>
               <div className="flex gap-3 text-sm">
                 <button

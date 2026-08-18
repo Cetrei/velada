@@ -237,6 +237,68 @@ era el de arriba, no whitelist).
   bloque de texto (justify-end, tamanos reducidos) se dejaron igual porque
   el usuario confirmo que esas ya estaban bien.
 
+## Sesion 2026-08-18: fix inscripcion rota + UI del ChampionSelectGrid + check de Riot en vivo + iconos de rango
+- **Bug critico (inscripcion imposible)**: `AuthGate.tsx` llamaba a
+  `actions.checkEmailExists`, `loginParticipant` y `registerParticipant`
+  con objetos JS planos (`{ email }`), pero esas tres actions estan
+  definidas con `accept: "form"` en `actions/index.ts` — Astro Actions
+  rechaza JSON en ese caso con el error exacto que aparecia en pantalla
+  ("This action only accepts FormData"). Fix: las tres llamadas ahora arman
+  un `FormData` antes de invocar la action, igual que ya hacia
+  `saveOwnParticipant`. `login` (form nativo) y `establishMagicLinkSession`
+  (sin `accept: "form"`, JSON esta bien) no tenian este bug.
+- `ChampionSelectGrid.tsx` (grid de seleccion del landing, `#roster`):
+  - "Ordenar por Nombre" era texto decorativo sin `onClick`. Ahora es un
+    boton real con estado `sortDirection` ("asc"/"desc") que ordena
+    `filteredParticipants` por `nickname` y alterna el icono de chevron.
+  - `.search-input` no tenia `box-sizing: border-box`, asi que el padding
+    de Tailwind (`pl-8`) se sumaba al padding del CSS plano y desalineaba
+    el icono de lupa / el texto. Reescrito con box-sizing explicito, altura
+    fija, y colores mas legibles.
+  - Boton "Ver ficha completa" se cortaba a "FICHA COMPL": tenia
+    `white-space: nowrap` + `overflow: hidden` + `text-overflow: ellipsis`
+    compitiendo por espacio con el boton FIJAR (`width: 220px` fijo) en un
+    grid de 3 columnas. Se quito el ellipsis/overflow, se bajo el tamano de
+    fuente en mobile con un breakpoint propio (`@media (min-width: 480px)`).
+  - `.skin-thumb` (48-56px) mostraba el alt text ("skin thumbnail") partido
+    cuando la imagen no cargaba a tiempo. Se agrando a 64-72px, se le puso
+    `background-color` de fondo, y `font-size: 0; color: transparent` en el
+    `img` para que un alt largo nunca se vea como texto suelto en un
+    cuadrito chico.
+- **Check de Riot ID en vivo en /inscripcion**: nueva action
+  `checkRiotProfile` en `actions/index.ts` (requiere `getParticipantSession`,
+  no panel auth — pensada para que la llame cualquier fighter autenticado
+  sin abrir un endpoint anonimo que agote el rate limit de la Riot API).
+  Nunca tira error para los casos esperados ("todavia escribiendo" /
+  "typo"): devuelve `{ status: "found" | "not_found" | "invalid" }`, solo
+  lanza `ActionError` si la Riot API o la config del servidor fallan de
+  verdad. `ParticipantProfileForm.tsx` la llama con debounce de 600ms
+  (`useEffect` + `setTimeout`, con un `requestId` en `useRef` para
+  descartar respuestas fuera de orden si el usuario sigue escribiendo) y
+  muestra un check verde / spinner amarillo / X roja junto al campo
+  `lolUsername`, mas un hint de texto debajo.
+- **Iconos de rango**: nuevo `packages/core/rankIcon.ts` (`rankTierOf`,
+  `rankIconPath`) que mapea el string libre de `lolRank` (ej.
+  "Diamond III", generado por `fetchRiotRank`, nunca escrito a mano por el
+  usuario) al path `/images/ranks/{tier}.png`, con fallback a
+  `unranked.png`. Los PNGs NO estan incluidos — hay que descargarlos de
+  https://leagueoflegends.fandom.com/wiki/Rank_(League_of_Legends) y
+  ponerlos en `apps/web/public/images/ranks/` (11 archivos, nombres
+  exactos documentados en el README de esa carpeta y en `IMAGENES.md`).
+  Todos los `<img>` que lo usan tienen fallback `onerror`/`onError` que
+  oculta el icono si el archivo no existe, asi que no rompe nada mientras
+  tanto. Aplicado en: `FighterCard.astro` (cards del roster),
+  `peleadores/[id].astro` (ficha completa), `RosterExplorer.tsx` (lista de
+  `/peleadores`), `ParticipantManager.tsx` (vista de solo lectura del
+  roster en el panel admin — el input de edicion de `lolRank` ahi sigue
+  siendo texto libre, es la fuente del dato). `ChampionSelectGrid.tsx`
+  (grid del landing y su splash de personaje seleccionado) se dejo sin
+  icono a proposito, por pedido explicito.
+- Pendiente: el usuario tiene que poner los 11 PNGs de rango y correr
+  `bun install` + `bun run dev` para verificar visualmente todos los fixes
+  de esta sesion (nuevamente sin acceso a bash sobre el proyecto real, todo
+  fue edicion via filesystem MCP).
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.

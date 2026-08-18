@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Participant } from "@velada/core";
-import { PAGES } from "@velada/core";
+import { PAGES, rankIconPath } from "@velada/core";
 import Dropdown from "./Dropdown";
 
 interface RosterExplorerProps {
@@ -146,7 +146,18 @@ export default function RosterExplorer({ participants, votesById }: RosterExplor
               <span className="hidden sm:inline-block px-2 py-1 bg-lol-darkBg border border-lol-border text-slate-300 text-[11px] uppercase font-bold rounded-sm">
                 {p.mainRole}
               </span>
-              <span className="hidden md:inline-block text-slate-400 text-xs w-24 text-right">{p.lolRank}</span>
+              <span className="hidden md:inline-flex items-center justify-end gap-1.5 text-slate-400 text-xs w-24 text-right">
+                <img
+                  src={rankIconPath(p.lolRank)}
+                  alt=""
+                  className="w-4 h-4 object-contain"
+                  loading="lazy"
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                  }}
+                />
+                {p.lolRank}
+              </span>
               <span className="text-lol-gold text-xs font-bold w-16 text-right">
                 {(votesById[p.id] ?? 0).toLocaleString("es")} 🗳
               </span>

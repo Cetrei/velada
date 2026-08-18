@@ -2,7 +2,7 @@
 import Layout from "../../layouts/Layout.astro";
 import { loadParticipants } from "../../lib/loadParticipants";
 import { fetchMatches, fetchPredictionTallies } from "../../lib/matches";
-import { PAGES } from "@velada/core";
+import { PAGES, rankIconPath } from "@velada/core";
 
 const { id } = Astro.params;
 
@@ -108,7 +108,16 @@ const fallbackPhoto = `https://placehold.co/800x1000/0A1428/C8AA6E?text=${encode
             </div>
             <div>
               <p class="text-slate-500 text-xs uppercase tracking-wide mb-1">Rango</p>
-              <p class="text-white font-bold">{participant.lolRank}</p>
+              <p class="flex items-center gap-2 text-white font-bold">
+                <img
+                  src={rankIconPath(participant.lolRank)}
+                  alt=""
+                  class="w-6 h-6 object-contain"
+                  loading="lazy"
+                  onerror="this.style.display='none'"
+                />
+                {participant.lolRank}
+              </p>
             </div>
             <div>
               <p class="text-slate-500 text-xs uppercase tracking-wide mb-1">Campeón favorito</p>

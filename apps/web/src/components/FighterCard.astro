@@ -1,6 +1,6 @@
 ---
 import type { Participant } from "@velada/core";
-import { FIGHTER_CARD } from "@velada/core";
+import { FIGHTER_CARD, rankIconPath } from "@velada/core";
 
 interface Props {
   participant: Participant;
@@ -43,7 +43,16 @@ const statBars = participant.stats ?? [];
 
     <div class="flex justify-between items-center border-t border-lol-border/50 pt-4 mt-4">
       <span class="text-slate-400 text-xs uppercase">{FIGHTER_CARD.rankLabel}</span>
-      <span class="text-white font-bold text-sm">{participant.lolRank}</span>
+      <span class="flex items-center gap-1.5 text-white font-bold text-sm">
+        <img
+          src={rankIconPath(participant.lolRank)}
+          alt=""
+          class="w-5 h-5 object-contain"
+          loading="lazy"
+          onerror="this.style.display='none'"
+        />
+        {participant.lolRank}
+      </span>
     </div>
 
     {

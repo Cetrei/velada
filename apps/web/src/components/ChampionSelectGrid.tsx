@@ -8,6 +8,7 @@ interface ChampionSelectGridProps {
 }
 
 type RoleFilter = Participant["mainRole"];
+type SortDirection = "asc" | "desc";
 
 const ROLE_FILTERS: Array<{ role: RoleFilter; icon: string; label: string }> = [
   { role: "Top", icon: "fa-khanda", label: "Top" },
@@ -30,19 +31,25 @@ export default function ChampionSelectGrid({
   const [isLockedIn, setIsLockedIn] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
 
   // Resolviendo el participante seleccionado y su rival usando tu lógica
   const selected = participants.find((p) => p.id === selectedId) ?? null;
   const rival = selected ? rivalByParticipantId[selected.id] : undefined;
 
-  // Filtrado por nombre/apodo y por rol principal
-  const filteredParticipants = participants.filter((p) => {
-    const q = searchQuery.trim().toLowerCase();
-    const matchesQuery =
-      q.length === 0 || p.name.toLowerCase().includes(q) || p.nickname.toLowerCase().includes(q);
-    const matchesRole = !roleFilter || p.mainRole === roleFilter;
-    return matchesQuery && matchesRole;
-  });
+  // Filtrado por nombre/apodo y por rol principal, luego orden alfabetico segun sortDirection
+  const filteredParticipants = participants
+    .filter((p) => {
+      const q = searchQuery.trim().toLowerCase();
+      const matchesQuery =
+        q.length === 0 || p.name.toLowerCase().includes(q) || p.nickname.toLowerCase().includes(q);
+      const matchesRole = !roleFilter || p.mainRole === roleFilter;
+      return matchesQuery && matchesRole;
+    })
+    .sort((a, b) => {
+      const cmp = a.nickname.localeCompare(b.nickname);
+      return sortDirection === "asc" ? cmp : -cmp;
+    });
 
   return (
     <div className="relative w-full bg-[#010a13] text-[#f0e6d2] flex flex-col items-center overflow-hidden lol-main-bg py-2 sm:py-3 px-3 sm:px-6">
@@ -105,12 +112,18 @@ export default function ChampionSelectGrid({
                     ))}
                 </div>
                 
-                <div className="flex items-center gap-3 sm:gap-4 order-1 sm:order-2 w-full sm:w-auto justify-between sm:justify-end">
-                    <div className="hidden sm:block text-xs text-[#a09b8c] cursor-pointer hover:text-[#c8aa6e] whitespace-nowrap">
-                        Ordenar por Nombre <i className="fa-solid fa-chevron-down ml-1"></i>
-                    </div>
-                    <div className="relative flex-1 sm:flex-none">
-                        <i className="fa-solid fa-search absolute left-2.5 top-1/2 transform -translate-y-1/2 text-[#5c5c5c] text-xs pointer-events-none"></i>
+                <div className="flex items-center gap-3 sm:gap-4 order-1 sm:order-2 w-full sm:w-auto justify-between sm:justify-end flex-wrap">
+                    <button
+                        type="button"
+                        onClick={() => setSortDirection((current) => (current === "asc" ? "desc" : "asc"))}
+                        className="hidden sm:flex items-center text-xs text-[#a09b8c] cursor-pointer hover:text-[#c8aa6e] whitespace-nowrap transition-colors bg-transparent border-0 p-0"
+                        aria-label={`Ordenar por nombre, ${sortDirection === "asc" ? "ascendente" : "descendente"}`}
+                    >
+                        Ordenar por Nombre
+                        <i className={`fa-solid fa-chevron-${sortDirection === "asc" ? "down" : "up"} ml-1 text-[0.65rem]`}></i>
+                    </button>
+                    <div className="search-input-wrap relative flex-1 sm:flex-none">
+                        <i className="fa-solid fa-search absolute left-2.5 top-1/2 transform -translate-y-1/2 text-[#5c5c5c] text-xs pointer-events-none z-10"></i>
                         <input 
                             type="text" 
                             className="search-input pl-8 w-full sm:w-[150px]" 
@@ -259,20 +272,30 @@ export default function ChampionSelectGrid({
             font-family: 'Beaufort for LOL', serif;
         }
 
+        .search-input-wrap {
+            display: flex;
+            align-items: center;
+        }
+
         .search-input {
-            background-color: transparent;
+            box-sizing: border-box;
+            background-color: rgba(0, 0, 0, 0.2);
             border: 1px solid #3c3c41;
-            color: #a09b8c;
-            padding: 5px 10px;
+            color: #f0e6d2;
+            padding: 6px 10px 6px 30px;
             font-family: 'Spiegel', sans-serif;
             font-size: 0.8rem;
-            width: 150px;
+            line-height: 1.2;
+            height: 30px;
             outline: none;
-            transition: border-color 0.2s;
+            transition: border-color 0.2s, background-color 0.2s;
+        }
+        .search-input::placeholder {
+            color: #5c5c5c;
         }
         .search-input:focus {
-            border-color: #5c5c5c;
-            color: #a09b8c;
+            border-color: #c8aa6e;
+            background-color: rgba(0, 0, 0, 0.4);
             box-shadow: 0 0 5px rgba(0,0,0,0.5);
         }
 
@@ -493,22 +516,32 @@ export default function ChampionSelectGrid({
         }
 
         .skin-thumb {
-            width: 48px;
-            height: 48px;
+            width: 64px;
+            height: 64px;
             border: 1px solid #3c3c41;
             position: relative;
             cursor: pointer;
             filter: grayscale(0.5);
+            background-color: #1e2328;
+            overflow: hidden;
+            flex-shrink: 0;
         }
         
         .skin-thumb.active {
             border-color: #c8aa6e;
-            width: 56px;
-            height: 56px;
+            width: 72px;
+            height: 72px;
             filter: grayscale(0);
         }
 
-        .skin-thumb img { width: 100%; height: 100%; object-fit: cover; }
+        .skin-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            font-size: 0;
+            color: transparent;
+        }
 
         .action-bar {
             display: grid;
@@ -526,6 +559,7 @@ export default function ChampionSelectGrid({
             display: flex;
             align-items: center;
             min-width: 0;
+            overflow: visible;
         }
 
         .lock-in-container {
@@ -638,20 +672,25 @@ export default function ChampionSelectGrid({
             border: 1px solid #0bd4d4;
             color: #0bd4d4;
             font-family: 'Beaufort for LOL', serif;
-            font-size: 0.85rem;
+            font-size: 0.7rem;
             font-weight: 700;
-            letter-spacing: 1px;
-            padding: 10px 18px;
+            letter-spacing: 0.5px;
+            padding: 10px 14px;
             cursor: pointer;
             text-transform: uppercase;
             transition: all 0.3s ease;
             clip-path: polygon(10% 0, 100% 0, 100% 70%, 90% 100%, 0 100%, 0 30%);
             white-space: nowrap;
-            max-width: 100%;
-            overflow: hidden;
-            text-overflow: ellipsis;
             z-index: 10;
             text-decoration: none;
+        }
+
+        @media (min-width: 480px) {
+            .ver-ficha-btn {
+                font-size: 0.85rem;
+                letter-spacing: 1px;
+                padding: 10px 18px;
+            }
         }
 
         .ver-ficha-btn:hover {
