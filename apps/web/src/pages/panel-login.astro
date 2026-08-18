@@ -29,6 +29,10 @@ const copy = PAGES.panelLogin;
         <div class="h-1 w-16 bg-lol-gold mx-auto mt-4"></div>
       </div>
 
+      <div id="magic-link-status" class="hidden text-sm p-3 rounded mb-6 bg-lol-cardBg border border-lol-border text-slate-300">
+        Verificando tu link de acceso...
+      </div>
+
       {
         result?.error && (
           <div class="text-sm p-3 rounded mb-6 bg-red-900/30 text-red-400 border border-red-800">
@@ -38,6 +42,7 @@ const copy = PAGES.panelLogin;
       }
 
       <form
+        id="login-form"
         method="POST"
         action={actions.login}
         class="bg-lol-cardBg border border-lol-border p-6 rounded-xl space-y-4"
@@ -74,3 +79,68 @@ const copy = PAGES.panelLogin;
     </div>
   </section>
 </Layout>
+
+<script>
+  // Supabase's invite/magic-link action_link redirects here with the
+  // session tokens in the URL fragment (#access_token=...&refresh_token=...
+  // &type=magiclink), never as cookies — that redirect is a plain browser
+  // navigation Supabase issues, with no server involved. This runs
+  // client-side, hands the tokens to the establishMagicLinkSession action so
+  // the server can call supabase.auth.setSession() and write real session
+  // cookies, then reloads so the server-rendered redirect to the panel
+  // kicks in.
+  async function handleMagicLinkFragment() {
+    const hash = window.location.hash;
+    if (!hash || hash.length < 2) return;
+
+    const params = new URLSearchParams(hash.slice(1));
+    const accessToken = params.get("access_token");
+    const refreshToken = params.get("refresh_token");
+    const hashError = params.get("error_description") ?? params.get("error");
+
+    // Clear the fragment immediately so tokens don't linger in the URL bar,
+    // browser history, or get accidentally shared/screenshotted.
+    history.replaceState(null, "", window.location.pathname + window.location.search);
+
+    if (hashError) {
+      const statusEl = document.getElementById("magic-link-status");
+      if (statusEl) {
+        statusEl.textContent = `Link invalido o expirado: ${hashError}. Pide que te generen uno nuevo.`;
+        statusEl.classList.remove("hidden");
+        statusEl.classList.add("bg-red-900/30", "text-red-400", "border-red-800");
+      }
+      return;
+    }
+
+    if (!accessToken || !refreshToken) return;
+
+    const statusEl = document.getElementById("magic-link-status");
+    const formEl = document.getElementById("login-form");
+    if (statusEl) statusEl.classList.remove("hidden");
+    if (formEl) formEl.classList.add("hidden");
+
+    try {
+      const { actions } = await import("astro:actions");
+      const { error } = await actions.establishMagicLinkSession({ accessToken, refreshToken });
+
+      if (error) {
+        if (statusEl) {
+          statusEl.textContent = error.message ?? "No se pudo iniciar sesion con ese link.";
+          statusEl.classList.add("bg-red-900/30", "text-red-400", "border-red-800");
+        }
+        if (formEl) formEl.classList.remove("hidden");
+        return;
+      }
+
+      window.location.reload();
+    } catch {
+      if (statusEl) {
+        statusEl.textContent = "No se pudo iniciar sesion con ese link. Intenta de nuevo.";
+        statusEl.classList.add("bg-red-900/30", "text-red-400", "border-red-800");
+      }
+      if (formEl) formEl.classList.remove("hidden");
+    }
+  }
+
+  handleMagicLinkFragment();
+</script>

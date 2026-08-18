@@ -66,6 +66,48 @@ export const server = {
     }
   }),
 
+  /**
+   * Completes a magic link / invite login. Supabase's action_link (from
+   * admin.generateLink) redirects the browser to redirect_to with the
+   * session tokens in the URL fragment (#access_token=...&refresh_token=...)
+   * instead of cookies, because that redirect is a plain browser navigation
+   * with no server involved. The client-side script in panel-login.astro
+   * reads that fragment and calls this action, which runs
+   * supabase.auth.setSession() on the server so @supabase/ssr writes the
+   * actual session cookies getPanelSession() reads on every other page.
+   */
+  establishMagicLinkSession: defineAction({
+    input: z.object({
+      accessToken: z.string().min(1),
+      refreshToken: z.string().min(1)
+    }),
+    handler: async ({ accessToken, refreshToken }, context) => {
+      const supabase = createSupabaseServerClient(context.request, context.cookies);
+      if (!supabase) {
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: "Supabase no configurado." });
+      }
+
+      const { error } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken
+      });
+      if (error) {
+        throw new ActionError({ code: "UNAUTHORIZED", message: "Link invalido o expirado." });
+      }
+
+      const session = await getPanelSession(context.request, context.cookies);
+      if (!session) {
+        await supabase.auth.signOut();
+        throw new ActionError({
+          code: "FORBIDDEN",
+          message: "Tu cuenta no tiene acceso al panel."
+        });
+      }
+
+      return { success: true };
+    }
+  }),
+
   logout: defineAction({
     handler: async (_input, context) => {
       const supabase = createSupabaseServerClient(context.request, context.cookies);

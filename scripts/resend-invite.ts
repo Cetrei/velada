@@ -1,15 +1,17 @@
 /**
- * Regenera el link de invitacion para un admin que ya fue invitado
- * previamente (ej. el link original quedo apuntando a una URL vieja/rota,
- * o expiro antes de que lo usaran).
+ * Regenera el link de acceso para un admin ya invitado previamente (ej. el
+ * link original quedo apuntando a una URL vieja/rota, o expiro antes de que
+ * lo usaran). Tambien funciona si el email nunca fue invitado.
  *
- * A diferencia de reinvitar via /auth/v1/invite (que falla con 422 para
- * usuarios existentes y ademas cuenta contra el rate limit de emails de
- * Supabase), esto usa el endpoint admin/generate_link, que:
- *  - No dispara el envio automatico de email de Supabase.
- *  - Devuelve el action_link directamente en la consola, para que lo
- *    mandes tu mismo por WhatsApp/Discord/lo que uses.
- *  - Usa SITE_URL del .env para armar el redirect_to a /panel-login.
+ * A diferencia de /auth/v1/invite o generate_link con type "invite" (que
+ * fallan con 422 email_exists para cualquier usuario que ya este en
+ * auth.users, incluyendo admins invitados que nunca aceptaron), este script
+ * intenta primero "invite" (para emails nuevos) y si Supabase responde
+ * email_exists cae automaticamente a type "magiclink" (funciona sobre
+ * usuarios existentes, confirmados o no). Ninguno de los dos tipos dispara
+ * el envio automatico de email de Supabase cuando se usa generate_link en
+ * vez de signInWithOtp/invite normal - el link se devuelve directo en la
+ * consola para que lo mandes tu mismo por WhatsApp/Discord/lo que uses.
  *
  * Uso:
  *   bun run scripts/resend-invite.ts amigo@email.com
@@ -81,39 +83,84 @@ interface GenerateLinkResponse {
   properties?: { action_link?: string };
 }
 
-async function generateInviteLink(
+interface GenerateLinkErrorBody {
+  error_code?: string;
+  code?: number;
+  msg?: string;
+}
+
+/**
+ * Generates a link for an existing or new user, without triggering
+ * Supabase's automatic email send.
+ *
+ * type "invite" only works for users that do NOT exist yet (it creates
+ * them) - Supabase rejects it with 422 email_exists for anyone already in
+ * auth.users, which includes admins invited before but who never accepted.
+ * For those, "magiclink" is the right type: it works on existing users
+ * (confirmed or not) and still returns action_link directly instead of
+ * emailing it. So: try invite first (covers brand-new admins), and on
+ * email_exists fall back to magiclink (covers already-invited admins).
+ */
+async function generateLink(
   endpoint: string,
   serviceRoleKey: string,
   email: string,
   redirectTo: string | undefined
-): Promise<string> {
-  const response = await fetch(`${endpoint}/auth/v1/admin/generate_link`, {
-    method: "POST",
-    headers: {
-      apikey: serviceRoleKey,
-      Authorization: `Bearer ${serviceRoleKey}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      type: "invite",
-      email,
-      ...(redirectTo ? { options: { redirect_to: redirectTo } } : {})
-    })
-  });
+): Promise<{ link: string; type: "invite" | "magiclink" }> {
+  const requestLink = async (type: "invite" | "magiclink") => {
+    const response = await fetch(`${endpoint}/auth/v1/admin/generate_link`, {
+      method: "POST",
+      headers: {
+        apikey: serviceRoleKey,
+        Authorization: `Bearer ${serviceRoleKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        type,
+        email,
+        ...(redirectTo ? { options: { redirect_to: redirectTo } } : {})
+      })
+    });
+    return response;
+  };
 
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Fallo al generar el link para ${email} (${response.status}): ${body}`);
+  const inviteResponse = await requestLink("invite");
+
+  if (inviteResponse.ok) {
+    const data = (await inviteResponse.json()) as GenerateLinkResponse;
+    const link = data.action_link ?? data.properties?.action_link;
+    if (!link) {
+      throw new Error(`Supabase no devolvio action_link para ${email}. Respuesta: ${JSON.stringify(data)}`);
+    }
+    return { link, type: "invite" };
   }
 
-  const data = (await response.json()) as GenerateLinkResponse;
-  const link = data.action_link ?? data.properties?.action_link;
+  const inviteErrorBody = (await inviteResponse.json().catch(() => null)) as GenerateLinkErrorBody | null;
+  const isExistingUser = inviteResponse.status === 422 && inviteErrorBody?.error_code === "email_exists";
 
-  if (!link) {
-    throw new Error(`Supabase no devolvio action_link para ${email}. Respuesta: ${JSON.stringify(data)}`);
+  if (!isExistingUser) {
+    throw new Error(
+      `Fallo al generar el link para ${email} (${inviteResponse.status}): ${JSON.stringify(inviteErrorBody)}`
+    );
   }
 
-  return link;
+  console.log(`  ${email} ya tiene cuenta (invitado previamente), generando magic link en su lugar...`);
+  const magicLinkResponse = await requestLink("magiclink");
+
+  if (!magicLinkResponse.ok) {
+    const body = await magicLinkResponse.text();
+    throw new Error(`Fallo al generar magic link para ${email} (${magicLinkResponse.status}): ${body}`);
+  }
+
+  const magicLinkData = (await magicLinkResponse.json()) as GenerateLinkResponse;
+  const magicLink = magicLinkData.action_link ?? magicLinkData.properties?.action_link;
+  if (!magicLink) {
+    throw new Error(
+      `Supabase no devolvio action_link (magiclink) para ${email}. Respuesta: ${JSON.stringify(magicLinkData)}`
+    );
+  }
+
+  return { link: magicLink, type: "magiclink" };
 }
 
 async function main() {
@@ -143,11 +190,11 @@ async function main() {
     fetchServiceRoleKey(projectRef, accessToken)
   ]);
 
-  const link = await generateInviteLink(endpoint, serviceRoleKey, email, redirectTo);
+  const { link, type } = await generateLink(endpoint, serviceRoleKey, email, redirectTo);
 
-  console.log("\nListo. Este link es de un solo uso, mandaselo directamente a la persona:\n");
+  console.log(`\nListo (link tipo "${type}"). Este link es de un solo uso, mandaselo directamente a la persona:\n`);
   console.log(link);
-  console.log("\nNo pasa por el sistema de emails de Supabase, asi que no cuenta contra el rate limit.");
+  console.log("\nNo paso por el sistema de emails de Supabase, asi que no cuenta contra el rate limit.");
 }
 
 main().catch((error) => {
