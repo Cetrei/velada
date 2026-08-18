@@ -1,0 +1,172 @@
+# Datos de ejemplo (demo). Reemplazar con la lista real de participantes.
+# Si este archivo queda vacio o con formato invalido, el sitio usa un fallback mock.
+
+- id: "p1"
+  name: "Carlos"
+  nickname: "El Toro de la Toplane"
+  photo: "/images/participants/p1.webp"
+  age: 24
+  weight: "78 kg"
+  height: "178 cm"
+  lolRank: "Diamond II"
+  mainRole: "Top"
+  favChampion: "Darius"
+  description: "Especialista en All-In nivel 2. Promete KO en la primera ronda."
+  stats:
+    strength: 85
+    speed: 70
+    stamina: 90
+    toxicLevel: 60
+
+- id: "p2"
+  name: "Mateo"
+  nickname: "Koreano del Sur"
+  photo: "/images/participants/p2.webp"
+  age: 22
+  weight: "65 kg"
+  height: "172 cm"
+  lolRank: "Challenger"
+  mainRole: "Mid"
+  favChampion: "Zed"
+  description: "Manos de oro y esquivo perfecto. Si se acerca te limpia la vida."
+  stats:
+    strength: 65
+    speed: 95
+    stamina: 75
+    toxicLevel: 40
+
+- id: "p3"
+  name: "David"
+  nickname: "Rey del Smite"
+  photo: "/images/participants/p3.webp"
+  age: 25
+  weight: "82 kg"
+  height: "180 cm"
+  lolRank: "Master"
+  mainRole: "Jungle"
+  favChampion: "Lee Sin"
+  description: "Vive en el bosque enemigo desde el minuto 0."
+  stats:
+    strength: 80
+    speed: 85
+    stamina: 80
+    toxicLevel: 55
+
+- id: "p4"
+  name: "Sofia"
+  nickname: "La Reina"
+  photo: "/images/participants/p4.webp"
+  age: 23
+  weight: "58 kg"
+  height: "165 cm"
+  lolRank: "Grandmaster"
+  mainRole: "ADC"
+  favChampion: "Jinx"
+  description: "Carry o nada. Sin peros."
+  stats:
+    strength: 60
+    speed: 90
+    stamina: 65
+    toxicLevel: 35
+
+- id: "p5"
+  name: "Lucas"
+  nickname: "Escudo"
+  photo: "/images/participants/p5.webp"
+  age: 26
+  weight: "75 kg"
+  height: "176 cm"
+  lolRank: "Diamond I"
+  mainRole: "Support"
+  favChampion: "Thresh"
+  description: "El que engancha, el que salva, el que aguanta."
+  stats:
+    strength: 70
+    speed: 60
+    stamina: 95
+    toxicLevel: 20
+
+- id: "p6"
+  name: "Ana"
+  nickname: "Magia Negra"
+  photo: "/images/participants/p6.webp"
+  age: 21
+  weight: "56 kg"
+  height: "162 cm"
+  lolRank: "Master"
+  mainRole: "Mid"
+  favChampion: "Syndra"
+  description: "Combos de una tecla que borran equipos enteros."
+  stats:
+    strength: 55
+    speed: 80
+    stamina: 70
+    toxicLevel: 45
+
+- id: "p7"
+  name: "Pedro"
+  nickname: "Muro de Piedra"
+  photo: "/images/participants/p7.webp"
+  age: 27
+  weight: "90 kg"
+  height: "185 cm"
+  lolRank: "Diamond III"
+  mainRole: "Top"
+  favChampion: "Ornn"
+  description: "Tanque puro. Nunca muere, siempre estorba."
+  stats:
+    strength: 90
+    speed: 40
+    stamina: 100
+    toxicLevel: 15
+
+- id: "p8"
+  name: "Valeria"
+  nickname: "Cazadora Fantasma"
+  photo: "/images/participants/p8.webp"
+  age: 24
+  weight: "60 kg"
+  height: "168 cm"
+  lolRank: "Grandmaster"
+  mainRole: "Jungle"
+  favChampion: "Kha'Zix"
+  description: "Aparece de la nada, desaparece contigo."
+  stats:
+    strength: 75
+    speed: 92
+    stamina: 78
+    toxicLevel: 50
+
+- id: "p9"
+  name: "Diego"
+  nickname: "Trueno Silencioso"
+  photo: "/images/participants/p9.webp"
+  age: 25
+  weight: "72 kg"
+  height: "174 cm"
+  lolRank: "Challenger"
+  mainRole: "ADC"
+  favChampion: "Kai'Sa"
+  description: "El DPS mas alto del server, literal."
+  stats:
+    strength: 68
+    speed: 88
+    stamina: 72
+    toxicLevel: 30
+
+- id: "p10"
+  name: "Camila"
+  nickname: "Guardiana de Luz"
+  photo: "/images/participants/p10.webp"
+  age: 22
+  weight: "55 kg"
+  height: "160 cm"
+  lolRank: "Master"
+  mainRole: "Support"
+  favChampion: "Lulu"
+  description: "Tu carry favorito la ama, tu enemigo la teme."
+  stats:
+    strength: 50
+    speed: 75
+    stamina: 85
+    toxicLevel: 25

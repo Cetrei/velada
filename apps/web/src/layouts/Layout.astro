@@ -1,0 +1,75 @@
+---
+import "../styles/global.css";
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description = "La Velada del Año - Especial LoL" } = Astro.props;
+
+const navLinks = [
+  { href: "/", label: "Inicio" },
+  { href: "/peleadores", label: "Peleadores" },
+  { href: "/sorteo", label: "Sorteo" }
+];
+---
+
+<!doctype html>
+<html lang="es" class="scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Oswald:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="antialiased min-h-screen flex flex-col font-sans">
+    <nav class="fixed top-0 w-full z-50 bg-lol-darkBg/80 backdrop-blur-md border-b border-lol-border">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
+        <a href="/" class="flex items-center gap-3">
+          <div class="w-8 h-8 bg-lol-gold rotate-45 flex items-center justify-center">
+            <div class="w-6 h-6 bg-lol-darkBg flex items-center justify-center">
+              <span class="text-lol-gold font-display font-bold -rotate-45 block">VL</span>
+            </div>
+          </div>
+          <span class="font-display font-bold text-xl text-white tracking-widest uppercase">
+            La Velada LoL
+          </span>
+        </a>
+        <div class="hidden md:flex items-center space-x-8">
+          {
+            navLinks.map((link) => (
+              <a
+                href={link.href}
+                class="text-sm font-medium text-slate-300 hover:text-lol-gold transition-colors"
+              >
+                {link.label}
+              </a>
+            ))
+          }
+          <a
+            href="/sorteo"
+            class="px-5 py-2 bg-lol-gold/10 border border-lol-gold text-lol-gold hover:bg-lol-gold hover:text-lol-darkBg transition-all font-bold text-sm tracking-wide uppercase clip-edges"
+          >
+            Ver en Vivo
+          </a>
+        </div>
+      </div>
+    </nav>
+
+    <main class="flex-1">
+      <slot />
+    </main>
+
+    <footer class="bg-[#02040a] border-t border-lol-border py-8 text-center text-slate-500 text-sm">
+      <p>© {new Date().getFullYear()} La Velada LoL. Edición Amigos.</p>
+    </footer>
+  </body>
+</html>
