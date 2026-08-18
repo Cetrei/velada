@@ -6,6 +6,7 @@ import AdminControl from "../components/AdminControl";
 import { loadParticipants } from "../lib/loadParticipants";
 import { fetchEventState } from "../lib/eventState";
 import { getPanelSession } from "../lib/panelSession";
+import { PAGES } from "@velada/core";
 
 const session = await getPanelSession(Astro.request, Astro.cookies);
 if (!session) {
@@ -14,18 +15,19 @@ if (!session) {
 
 const participants = loadParticipants();
 const eventState = await fetchEventState();
+const copy = PAGES.admin;
 ---
 
-<Layout title="Panel Admin - La Velada LoL">
+<Layout title={copy.tabTitle}>
   <section class="pt-32 pb-24 bg-lol-darkBg min-h-screen">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="text-center mb-16">
         <h1 class="font-display text-4xl md:text-5xl font-bold text-white uppercase tracking-wider">
-          Panel del Host
+          {copy.title}
         </h1>
         <div class="h-1 w-24 bg-lol-gold mx-auto mt-6"></div>
         <p class="text-slate-400 mt-6 max-w-xl mx-auto">
-          Control de fase del evento y emisión del sorteo en vivo.
+          {copy.subtitle}
         </p>
       </div>
 

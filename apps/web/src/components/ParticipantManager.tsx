@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { actions } from "astro:actions";
-import type { Participant } from "@velada/core";
+import type { Participant, ParticipantStat } from "@velada/core";
+import { PARTICIPANT_MANAGER } from "@velada/core";
 
 interface ParticipantManagerProps {
   initialParticipants: Participant[];
@@ -24,11 +25,14 @@ const EMPTY_FORM = {
   description: ""
 };
 
+const EMPTY_STAT: ParticipantStat = { label: "", value: 50 };
+
 type StatusMessage = { type: "success" | "error"; text: string } | null;
 
 export default function ParticipantManager({ initialParticipants }: ParticipantManagerProps) {
   const [participants, setParticipants] = useState(initialParticipants);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [stats, setStats] = useState<ParticipantStat[]>([]);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [status, setStatus] = useState<StatusMessage>(null);
   const [isBusy, setIsBusy] = useState(false);
@@ -37,8 +41,21 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
 
   function resetForm() {
     setForm(EMPTY_FORM);
+    setStats([]);
     setPhotoFile(null);
     setEditingId(null);
+  }
+
+  function addStat() {
+    setStats((prev) => [...prev, { ...EMPTY_STAT }]);
+  }
+
+  function updateStat(index: number, patch: Partial<ParticipantStat>) {
+    setStats((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)));
+  }
+
+  function removeStat(index: number) {
+    setStats((prev) => prev.filter((_, i) => i !== index));
   }
 
   function loadIntoForm(p: Participant) {
@@ -56,6 +73,7 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
       favChampion: p.favChampion,
       description: p.description ?? ""
     });
+    setStats(p.stats ?? []);
     setPhotoFile(null);
     setEditingId(p.id);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -63,7 +81,7 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
 
   async function handleLookupRank() {
     if (!form.lolUsername || !form.lolServer) {
-      setStatus({ type: "error", text: "Completa usuario de LoL y servidor primero." });
+      setStatus({ type: "error", text: PARTICIPANT_MANAGER.errorLookupMissingFields });
       return;
     }
 
@@ -81,13 +99,13 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
     }
 
     setForm((prev) => ({ ...prev, lolRank: `${result.rank} (${result.lp} LP)` }));
-    setStatus({ type: "success", text: "Elo actualizado desde Riot API." });
+    setStatus({ type: "success", text: PARTICIPANT_MANAGER.successRankUpdated });
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.id || !form.name || !form.nickname || !form.lolRank || !form.favChampion) {
-      setStatus({ type: "error", text: "Completa los campos obligatorios." });
+      setStatus({ type: "error", text: PARTICIPANT_MANAGER.errorRequiredFields });
       return;
     }
 
@@ -105,6 +123,8 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
     data.set("mainRole", form.mainRole);
     data.set("favChampion", form.favChampion);
     if (form.description) data.set("description", form.description);
+    const validStats = stats.filter((s) => s.label.trim().length > 0);
+    if (validStats.length > 0) data.set("stats", JSON.stringify(validStats));
     if (photoFile) data.set("photo", photoFile);
 
     const { data: result, error } = await actions.saveParticipant(data);
@@ -115,7 +135,7 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
       return;
     }
 
-    setStatus({ type: "success", text: `${form.name} guardado correctamente.` });
+    setStatus({ type: "success", text: PARTICIPANT_MANAGER.successSaved(form.name) });
 
     setParticipants((prev) => {
       const next = prev.filter((p) => p.id !== result.id);
@@ -133,7 +153,8 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
           lolServer: form.lolServer || undefined,
           mainRole: form.mainRole,
           favChampion: form.favChampion,
-          description: form.description || undefined
+          description: form.description || undefined,
+          stats: validStats.length > 0 ? validStats : undefined
         }
       ];
     });
@@ -142,7 +163,7 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("¿Borrar este participante?")) return;
+    if (!confirm(PARTICIPANT_MANAGER.confirmDelete)) return;
 
     setIsBusy(true);
     const data = new FormData();
@@ -156,7 +177,7 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
     }
 
     setParticipants((prev) => prev.filter((p) => p.id !== id));
-    setStatus({ type: "success", text: "Participante eliminado." });
+    setStatus({ type: "success", text: PARTICIPANT_MANAGER.successDeleted });
     if (editingId === id) resetForm();
   }
 
@@ -179,34 +200,34 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
         className="bg-lol-cardBg border border-lol-border p-6 rounded-xl space-y-4"
       >
         <h2 className="font-display text-xl font-bold text-white uppercase mb-2">
-          {editingId ? `Editando: ${editingId}` : "Nuevo participante"}
+          {editingId ? PARTICIPANT_MANAGER.editingParticipant(editingId) : PARTICIPANT_MANAGER.newParticipant}
         </h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label="ID unico *">
+          <Field label={PARTICIPANT_MANAGER.fields.id}>
             <input
               value={form.id}
               disabled={!!editingId}
               onChange={(e) => setForm({ ...form, id: e.target.value })}
               className="input"
-              placeholder="p11"
+              placeholder={PARTICIPANT_MANAGER.placeholders.id}
             />
           </Field>
-          <Field label="Nombre *">
+          <Field label={PARTICIPANT_MANAGER.fields.name}>
             <input
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               className="input"
             />
           </Field>
-          <Field label="Apodo *">
+          <Field label={PARTICIPANT_MANAGER.fields.nickname}>
             <input
               value={form.nickname}
               onChange={(e) => setForm({ ...form, nickname: e.target.value })}
               className="input"
             />
           </Field>
-          <Field label="Rol principal *">
+          <Field label={PARTICIPANT_MANAGER.fields.mainRole}>
             <select
               value={form.mainRole}
               onChange={(e) => setForm({ ...form, mainRole: e.target.value as Participant["mainRole"] })}
@@ -219,14 +240,14 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
               ))}
             </select>
           </Field>
-          <Field label="Campeon favorito *">
+          <Field label={PARTICIPANT_MANAGER.fields.favChampion}>
             <input
               value={form.favChampion}
               onChange={(e) => setForm({ ...form, favChampion: e.target.value })}
               className="input"
             />
           </Field>
-          <Field label="Edad">
+          <Field label={PARTICIPANT_MANAGER.fields.age}>
             <input
               type="number"
               value={form.age}
@@ -234,36 +255,36 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
               className="input"
             />
           </Field>
-          <Field label="Peso">
+          <Field label={PARTICIPANT_MANAGER.fields.weight}>
             <input
               value={form.weight}
               onChange={(e) => setForm({ ...form, weight: e.target.value })}
               className="input"
-              placeholder="75 kg"
+              placeholder={PARTICIPANT_MANAGER.placeholders.weight}
             />
           </Field>
-          <Field label="Altura">
+          <Field label={PARTICIPANT_MANAGER.fields.height}>
             <input
               value={form.height}
               onChange={(e) => setForm({ ...form, height: e.target.value })}
               className="input"
-              placeholder="178 cm"
+              placeholder={PARTICIPANT_MANAGER.placeholders.height}
             />
           </Field>
         </div>
 
         <div className="border-t border-lol-border/50 pt-4">
-          <h3 className="text-sm uppercase text-slate-400 mb-3">League of Legends</h3>
+          <h3 className="text-sm uppercase text-slate-400 mb-3">{PARTICIPANT_MANAGER.lolSectionTitle}</h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Field label="Usuario (Riot ID)">
+            <Field label={PARTICIPANT_MANAGER.fields.lolUsername}>
               <input
                 value={form.lolUsername}
                 onChange={(e) => setForm({ ...form, lolUsername: e.target.value })}
                 className="input"
-                placeholder="Nombre#TAG"
+                placeholder={PARTICIPANT_MANAGER.placeholders.lolUsername}
               />
             </Field>
-            <Field label="Servidor">
+            <Field label={PARTICIPANT_MANAGER.fields.lolServer}>
               <select
                 value={form.lolServer}
                 onChange={(e) => setForm({ ...form, lolServer: e.target.value })}
@@ -276,13 +297,13 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
                 ))}
               </select>
             </Field>
-            <Field label="Rango *">
+            <Field label={PARTICIPANT_MANAGER.fields.lolRank}>
               <div className="flex gap-2">
                 <input
                   value={form.lolRank}
                   onChange={(e) => setForm({ ...form, lolRank: e.target.value })}
                   className="input"
-                  placeholder="Diamond II"
+                  placeholder={PARTICIPANT_MANAGER.placeholders.lolRank}
                 />
                 <button
                   type="button"
@@ -290,14 +311,14 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
                   onClick={handleLookupRank}
                   className="px-3 bg-lol-blue/10 border border-lol-blue text-lol-blue text-xs uppercase font-bold whitespace-nowrap disabled:opacity-50"
                 >
-                  {isLookingUpRank ? "..." : "Consultar"}
+                  {isLookingUpRank ? PARTICIPANT_MANAGER.lookupCtaBusy : PARTICIPANT_MANAGER.lookupCta}
                 </button>
               </div>
             </Field>
           </div>
         </div>
 
-        <Field label="Descripcion">
+        <Field label={PARTICIPANT_MANAGER.fields.description}>
           <textarea
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
@@ -305,7 +326,50 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
           />
         </Field>
 
-        <Field label="Foto (desde archivos o camara del celular)">
+        <div className="border-t border-lol-border/50 pt-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm uppercase text-slate-400">{PARTICIPANT_MANAGER.statsTitle}</h3>
+            <button
+              type="button"
+              onClick={addStat}
+              className="text-lol-gold hover:underline font-bold uppercase text-xs"
+            >
+              {PARTICIPANT_MANAGER.addStatCta}
+            </button>
+          </div>
+          {stats.length === 0 && (
+            <p className="text-slate-500 text-xs">{PARTICIPANT_MANAGER.statsEmptyHint}</p>
+          )}
+          <div className="space-y-2">
+            {stats.map((stat, index) => (
+              <div key={index} className="flex gap-2 items-center">
+                <input
+                  value={stat.label}
+                  onChange={(e) => updateStat(index, { label: e.target.value })}
+                  className="input flex-1"
+                  placeholder={PARTICIPANT_MANAGER.placeholders.statLabel}
+                />
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={stat.value}
+                  onChange={(e) => updateStat(index, { value: Number(e.target.value) })}
+                  className="input w-24"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeStat(index)}
+                  className="text-red-400 hover:underline font-bold uppercase text-xs whitespace-nowrap"
+                >
+                  {PARTICIPANT_MANAGER.removeStatCta}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <Field label={PARTICIPANT_MANAGER.fields.photo}>
           <input
             type="file"
             accept="image/*"
@@ -321,7 +385,7 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
             disabled={isBusy}
             className="flex-1 py-3 px-6 bg-lol-gold text-black font-bold uppercase tracking-wide hover:bg-yellow-400 disabled:opacity-50"
           >
-            {editingId ? "Guardar cambios" : "Agregar participante"}
+            {editingId ? PARTICIPANT_MANAGER.submitEditCta : PARTICIPANT_MANAGER.submitNewCta}
           </button>
           {editingId && (
             <button
@@ -329,7 +393,7 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
               onClick={resetForm}
               className="py-3 px-6 border border-lol-border text-slate-300 uppercase text-sm font-bold"
             >
-              Cancelar
+              {PARTICIPANT_MANAGER.cancelCta}
             </button>
           )}
         </div>
@@ -337,7 +401,7 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
 
       <div className="bg-lol-cardBg border border-lol-border p-6 rounded-xl">
         <h3 className="font-display text-xl font-bold text-white uppercase mb-4">
-          Roster actual ({participants.length})
+          {PARTICIPANT_MANAGER.rosterTitle(participants.length)}
         </h3>
         <div className="space-y-2">
           {participants.map((p) => (
@@ -356,14 +420,14 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
                   onClick={() => loadIntoForm(p)}
                   className="text-lol-blue hover:underline font-bold uppercase text-xs"
                 >
-                  Editar
+                  {PARTICIPANT_MANAGER.editCta}
                 </button>
                 <button
                   onClick={() => handleDelete(p.id)}
                   disabled={isBusy}
                   className="text-red-400 hover:underline font-bold uppercase text-xs disabled:opacity-50"
                 >
-                  Borrar
+                  {PARTICIPANT_MANAGER.deleteCta}
                 </button>
               </div>
             </div>

@@ -1,11 +1,11 @@
 import { z } from "zod";
 
-export const ParticipantStatsSchema = z.object({
-  strength: z.number().min(0).max(100),
-  speed: z.number().min(0).max(100),
-  stamina: z.number().min(0).max(100),
-  toxicLevel: z.number().min(0).max(100)
+export const ParticipantStatSchema = z.object({
+  label: z.string().min(1),
+  value: z.number().min(0).max(100)
 });
+
+export const ParticipantStatsSchema = z.array(ParticipantStatSchema);
 
 export const ParticipantSchema = z.object({
   id: z.string(),
@@ -60,6 +60,7 @@ export const SpinStartPayloadSchema = z.object({
 });
 
 export type Participant = z.infer<typeof ParticipantSchema>;
+export type ParticipantStat = z.infer<typeof ParticipantStatSchema>;
 export type ParticipantStats = z.infer<typeof ParticipantStatsSchema>;
 export type EventPhase = z.infer<typeof EventPhaseSchema>;
 export type EventState = z.infer<typeof EventStateSchema>;

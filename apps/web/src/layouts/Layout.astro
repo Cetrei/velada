@@ -1,18 +1,15 @@
 ---
 import "../styles/global.css";
+import { SITE, NAV } from "@velada/core";
 
 interface Props {
   title: string;
   description?: string;
 }
 
-const { title, description = "La Velada del Año - Especial LoL" } = Astro.props;
+const { title, description = SITE.defaultDescription } = Astro.props;
 
-const navLinks = [
-  { href: "/", label: "Inicio" },
-  { href: "/peleadores", label: "Peleadores" },
-  { href: "/sorteo", label: "Sorteo" }
-];
+const navLinks = NAV.links;
 ---
 
 <!doctype html>
@@ -36,11 +33,11 @@ const navLinks = [
         <a href="/" class="flex items-center gap-3">
           <div class="w-8 h-8 bg-lol-gold rotate-45 flex items-center justify-center">
             <div class="w-6 h-6 bg-lol-darkBg flex items-center justify-center">
-              <span class="text-lol-gold font-display font-bold -rotate-45 block">VL</span>
+              <span class="text-lol-gold font-display font-bold -rotate-45 block">{SITE.logoText}</span>
             </div>
           </div>
           <span class="font-display font-bold text-xl text-white tracking-widest uppercase">
-            La Velada LoL
+            {SITE.name}
           </span>
         </a>
         <div class="hidden md:flex items-center space-x-8">
@@ -58,7 +55,7 @@ const navLinks = [
             href="/sorteo"
             class="px-5 py-2 bg-lol-gold/10 border border-lol-gold text-lol-gold hover:bg-lol-gold hover:text-lol-darkBg transition-all font-bold text-sm tracking-wide uppercase clip-edges"
           >
-            Ver en Vivo
+            {NAV.liveCta}
           </a>
         </div>
       </div>
@@ -69,7 +66,7 @@ const navLinks = [
     </main>
 
     <footer class="bg-[#02040a] border-t border-lol-border py-8 text-center text-slate-500 text-sm">
-      <p>© {new Date().getFullYear()} La Velada LoL. Edición Amigos.</p>
+      <p>{SITE.footer(new Date().getFullYear())}</p>
     </footer>
   </body>
 </html>

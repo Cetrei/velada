@@ -1,5 +1,9 @@
 # Datos de ejemplo (demo). Reemplazar con la lista real de participantes.
 # Si este archivo queda vacio o con formato invalido, el sitio usa un fallback mock.
+#
+# `stats` es una lista libre de { label, value } (0-100). Cada participante
+# puede tener labels distintas y en cualquier cantidad; se renderiza tal
+# cual venga, no hay campos fijos.
 
 - id: "p1"
   name: "Carlos"
@@ -13,10 +17,14 @@
   favChampion: "Darius"
   description: "Especialista en All-In nivel 2. Promete KO en la primera ronda."
   stats:
-    strength: 85
-    speed: 70
-    stamina: 90
-    toxicLevel: 60
+    - label: "Mental"
+      value: 85
+    - label: "Toxicidad"
+      value: 60
+    - label: "Micro"
+      value: 70
+    - label: "Macro"
+      value: 90
 
 - id: "p2"
   name: "Mateo"
@@ -30,10 +38,14 @@
   favChampion: "Zed"
   description: "Manos de oro y esquivo perfecto. Si se acerca te limpia la vida."
   stats:
-    strength: 65
-    speed: 95
-    stamina: 75
-    toxicLevel: 40
+    - label: "Mental"
+      value: 65
+    - label: "Toxicidad"
+      value: 40
+    - label: "Micro"
+      value: 95
+    - label: "Macro"
+      value: 75
 
 - id: "p3"
   name: "David"
@@ -47,10 +59,14 @@
   favChampion: "Lee Sin"
   description: "Vive en el bosque enemigo desde el minuto 0."
   stats:
-    strength: 80
-    speed: 85
-    stamina: 80
-    toxicLevel: 55
+    - label: "Mental"
+      value: 80
+    - label: "Toxicidad"
+      value: 55
+    - label: "Micro"
+      value: 85
+    - label: "Macro"
+      value: 80
 
 - id: "p4"
   name: "Sofia"
@@ -64,10 +80,14 @@
   favChampion: "Jinx"
   description: "Carry o nada. Sin peros."
   stats:
-    strength: 60
-    speed: 90
-    stamina: 65
-    toxicLevel: 35
+    - label: "Mental"
+      value: 60
+    - label: "Toxicidad"
+      value: 35
+    - label: "Micro"
+      value: 90
+    - label: "Macro"
+      value: 65
 
 - id: "p5"
   name: "Lucas"
@@ -81,10 +101,14 @@
   favChampion: "Thresh"
   description: "El que engancha, el que salva, el que aguanta."
   stats:
-    strength: 70
-    speed: 60
-    stamina: 95
-    toxicLevel: 20
+    - label: "Mental"
+      value: 70
+    - label: "Toxicidad"
+      value: 20
+    - label: "Micro"
+      value: 60
+    - label: "Macro"
+      value: 95
 
 - id: "p6"
   name: "Ana"
@@ -98,10 +122,14 @@
   favChampion: "Syndra"
   description: "Combos de una tecla que borran equipos enteros."
   stats:
-    strength: 55
-    speed: 80
-    stamina: 70
-    toxicLevel: 45
+    - label: "Mental"
+      value: 55
+    - label: "Toxicidad"
+      value: 45
+    - label: "Micro"
+      value: 80
+    - label: "Macro"
+      value: 70
 
 - id: "p7"
   name: "Pedro"
@@ -115,10 +143,14 @@
   favChampion: "Ornn"
   description: "Tanque puro. Nunca muere, siempre estorba."
   stats:
-    strength: 90
-    speed: 40
-    stamina: 100
-    toxicLevel: 15
+    - label: "Mental"
+      value: 90
+    - label: "Toxicidad"
+      value: 15
+    - label: "Micro"
+      value: 40
+    - label: "Macro"
+      value: 100
 
 - id: "p8"
   name: "Valeria"
@@ -132,10 +164,14 @@
   favChampion: "Kha'Zix"
   description: "Aparece de la nada, desaparece contigo."
   stats:
-    strength: 75
-    speed: 92
-    stamina: 78
-    toxicLevel: 50
+    - label: "Mental"
+      value: 75
+    - label: "Toxicidad"
+      value: 50
+    - label: "Micro"
+      value: 92
+    - label: "Macro"
+      value: 78
 
 - id: "p9"
   name: "Diego"
@@ -149,10 +185,14 @@
   favChampion: "Kai'Sa"
   description: "El DPS mas alto del server, literal."
   stats:
-    strength: 68
-    speed: 88
-    stamina: 72
-    toxicLevel: 30
+    - label: "Mental"
+      value: 68
+    - label: "Toxicidad"
+      value: 30
+    - label: "Micro"
+      value: 88
+    - label: "Macro"
+      value: 72
 
 - id: "p10"
   name: "Camila"
@@ -166,7 +206,11 @@
   favChampion: "Lulu"
   description: "Tu carry favorito la ama, tu enemigo la teme."
   stats:
-    strength: 50
-    speed: 75
-    stamina: 85
-    toxicLevel: 25
+    - label: "Mental"
+      value: 50
+    - label: "Toxicidad"
+      value: 25
+    - label: "Micro"
+      value: 75
+    - label: "Macro"
+      value: 85

@@ -10,7 +10,12 @@ const MOCK_PARTICIPANTS: Participant[] = [
     mainRole: "Top",
     favChampion: "Darius",
     description: "Participante de ejemplo, reemplaza el YAML con datos reales.",
-    stats: { strength: 85, speed: 70, stamina: 90, toxicLevel: 60 }
+    stats: [
+      { label: "Mental", value: 85 },
+      { label: "Toxicidad", value: 60 },
+      { label: "Micro", value: 70 },
+      { label: "Macro", value: 90 }
+    ]
   },
   {
     id: "mock-2",
@@ -20,7 +25,12 @@ const MOCK_PARTICIPANTS: Participant[] = [
     mainRole: "Mid",
     favChampion: "Zed",
     description: "Participante de ejemplo, reemplaza el YAML con datos reales.",
-    stats: { strength: 65, speed: 95, stamina: 75, toxicLevel: 40 }
+    stats: [
+      { label: "Mental", value: 65 },
+      { label: "Toxicidad", value: 40 },
+      { label: "Micro", value: 95 },
+      { label: "Macro", value: 75 }
+    ]
   },
   {
     id: "mock-3",
@@ -30,7 +40,12 @@ const MOCK_PARTICIPANTS: Participant[] = [
     mainRole: "Jungle",
     favChampion: "Lee Sin",
     description: "Participante de ejemplo, reemplaza el YAML con datos reales.",
-    stats: { strength: 80, speed: 85, stamina: 80, toxicLevel: 55 }
+    stats: [
+      { label: "Mental", value: 80 },
+      { label: "Toxicidad", value: 55 },
+      { label: "Micro", value: 85 },
+      { label: "Macro", value: 80 }
+    ]
   },
   {
     id: "mock-4",
@@ -40,7 +55,12 @@ const MOCK_PARTICIPANTS: Participant[] = [
     mainRole: "ADC",
     favChampion: "Jinx",
     description: "Participante de ejemplo, reemplaza el YAML con datos reales.",
-    stats: { strength: 60, speed: 90, stamina: 65, toxicLevel: 35 }
+    stats: [
+      { label: "Mental", value: 60 },
+      { label: "Toxicidad", value: 35 },
+      { label: "Micro", value: 90 },
+      { label: "Macro", value: 65 }
+    ]
   }
 ];
 

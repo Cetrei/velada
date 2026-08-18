@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { EventPhase, Participant, SpinStartPayload } from "@velada/core";
+import { ADMIN_CONTROL } from "@velada/core";
 import { getSupabaseClient, ROULETTE_CHANNEL, SPIN_START_EVENT } from "../lib/supabase";
 
 interface AdminControlProps {
@@ -107,7 +108,7 @@ export default function AdminControl({
         <div className="flex items-center gap-2 mb-4">
           <span className={`w-2 h-2 rounded-full ${isConnected ? "bg-green-500" : "bg-red-500"}`} />
           <span className="text-sm text-slate-400">
-            {isConnected ? "Conectado a Supabase" : "Sin conexión a Supabase"}
+            {isConnected ? ADMIN_CONTROL.connected : ADMIN_CONTROL.disconnected}
           </span>
         </div>
 
@@ -123,7 +124,7 @@ export default function AdminControl({
           </div>
         )}
 
-        <h3 className="font-display text-xl font-bold text-white uppercase mb-4">Fase del evento</h3>
+        <h3 className="font-display text-xl font-bold text-white uppercase mb-4">{ADMIN_CONTROL.phaseTitle}</h3>
         <div className="flex flex-wrap gap-2 mb-6">
           {PHASES.map((p) => (
             <button
@@ -141,13 +142,13 @@ export default function AdminControl({
           ))}
         </div>
 
-        <h3 className="font-display text-xl font-bold text-white uppercase mb-4">Control del sorteo</h3>
+        <h3 className="font-display text-xl font-bold text-white uppercase mb-4">{ADMIN_CONTROL.raffleControlTitle}</h3>
         <button
           disabled={isBusy}
           onClick={() => updateEventState(!rouletteUnlocked, phase)}
           className="w-full py-3 px-6 bg-lol-blue/10 border border-lol-blue text-lol-blue hover:bg-lol-blue hover:text-black font-bold uppercase tracking-wide transition-all disabled:opacity-50 mb-4"
         >
-          {rouletteUnlocked ? "Bloquear sorteo" : "Desbloquear sorteo"}
+          {rouletteUnlocked ? ADMIN_CONTROL.lockRaffle : ADMIN_CONTROL.unlockRaffle}
         </button>
 
         <button
@@ -155,13 +156,13 @@ export default function AdminControl({
           onClick={triggerRandomMatch}
           className="w-full py-4 px-6 bg-gradient-to-r from-lol-gold to-yellow-600 hover:from-yellow-500 hover:to-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed text-black font-display font-bold text-lg uppercase tracking-wide"
         >
-          Emitir sorteo aleatorio en vivo
+          {ADMIN_CONTROL.emitRandomMatch}
         </button>
       </div>
 
       <div className="bg-lol-cardBg border border-lol-border p-6 rounded-xl">
         <h3 className="font-display text-xl font-bold text-white uppercase mb-4">
-          Participantes cargados ({participants.length})
+          {ADMIN_CONTROL.loadedFighters(participants.length)}
         </h3>
         <ul className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm text-slate-300">
           {participants.map((p) => (
