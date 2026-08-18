@@ -11,12 +11,15 @@ const GITHUB_ACTIONS_SECRETS = [
 
 // Estas NO van como GitHub Actions secret (no se usan en build time) - van
 // directo al Worker desplegado via `wrangler secret put`, porque
-// createSupabaseAdminClient() y el lookup de Riot las leen en runtime
-// (import.meta.env dentro del handler de una Action), no al compilar. Si
-// faltan, cualquier Action que use el admin client (saveParticipant,
-// deleteParticipant, subida de fotos) falla en producción con
-// "Supabase admin no configurado." aunque el build haya sido exitoso.
-const WORKER_RUNTIME_SECRETS = ["SUPABASE_SERVICE_ROLE_KEY", "RIOT_API_KEY"] as const;
+// createSupabaseAdminClient(), el lookup de Riot, y el login/passphrase de
+// admin (isAdminEmail, verifyPassphrase) las leen en runtime via
+// getServerEnv/locals.runtime.env dentro del handler de una Action, no al
+// compilar. Si faltan, cualquier Action que use el admin client
+// (saveParticipant, deleteParticipant, subida de fotos) falla en
+// producción con "Supabase admin no configurado.", y sin ADMIN_EMAILS/
+// PANEL_PASSPHRASE el login de admin y el gate del panel fallan tambien,
+// aunque el build haya sido exitoso.
+const WORKER_RUNTIME_SECRETS = ["SUPABASE_SERVICE_ROLE_KEY", "RIOT_API_KEY", "PANEL_PASSPHRASE", "ADMIN_EMAILS"] as const;
 
 function parseEnvFile(path: string): Record<string, string> {
   const raw = readFileSync(path, "utf-8");
@@ -126,13 +129,15 @@ function main(): void {
   console.log(
     "\nListo. El workflow .github/workflows/deploy.yml ya puede leer estos" +
       " secrets en el proximo push a main o release, y el Worker ya tiene" +
-      " SUPABASE_SERVICE_ROLE_KEY / RIOT_API_KEY disponibles en runtime."
+      " SUPABASE_SERVICE_ROLE_KEY / RIOT_API_KEY / PANEL_PASSPHRASE / ADMIN_EMAILS" +
+      " disponibles en runtime."
   );
   console.log(
     "Nota: PUBLIC_SUPABASE_URL y PUBLIC_SUPABASE_ANON_KEY se inyectan en" +
       " build time (Astro las incrusta al compilar), por eso van como" +
-      " GitHub secret. SUPABASE_SERVICE_ROLE_KEY y RIOT_API_KEY se leen en" +
-      " runtime dentro de las Astro Actions, por eso van directo al Worker" +
+      " GitHub secret. El resto (SUPABASE_SERVICE_ROLE_KEY, RIOT_API_KEY," +
+      " PANEL_PASSPHRASE, ADMIN_EMAILS) se lee en runtime dentro de las" +
+      " Astro Actions via locals.runtime.env, por eso van directo al Worker" +
       " con `wrangler secret put` en vez de a GitHub Actions."
   );
 }

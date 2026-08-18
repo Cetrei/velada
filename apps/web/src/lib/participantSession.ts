@@ -1,44 +1,4 @@
-import type { AstroCookies, APIContext } from "astro";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { createSupabaseServerClient } from "./supabaseServer";
-
-export interface ParticipantSession {
-  userId: string;
-  email: string;
-}
-
-/**
- * Resolves the current self-registered participant session: just requires a
- * logged-in Supabase Auth user, no admins/passphrase gate (that's
- * getPanelSession, for the separate admin login). Used by /inscripcion so
- * any registered fighter can create/edit their own profile.
- *
- * Same existingClient parameter and rationale as getPanelSession: right
- * after signUp()/signInWithPassword() in the same request, a freshly
- * created client can't see cookies that only exist in the outgoing
- * response yet.
- */
-export async function getParticipantSession(
-  request: Request,
-  cookies: AstroCookies,
-  existingClient?: SupabaseClient,
-  locals?: Pick<APIContext, "locals">["locals"]
-): Promise<ParticipantSession | null> {
-  let supabase = existingClient;
-  if (!supabase) {
-    const [freshClient, msg] = createSupabaseServerClient(request, cookies, locals);
-    if (!freshClient) {
-      console.warn("No se pudo crear el cliente de Supabase:", msg);
-      return null;
-    }
-    supabase = freshClient;
-  }
-
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-
-  if (!user || !user.email) return null;
-
-  return { userId: user.id, email: user.email };
-}
+// DEPRECATED: reemplazado por lib/session.ts (getSession) tras la
+// migracion fuera de Supabase Auth (sesion 2026-08-18). Ver AGENT.md.
+// Vaciado en vez de borrado porque el filesystem MCP no expone delete;
+// borrar este archivo a mano cuando se pueda.

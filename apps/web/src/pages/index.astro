@@ -31,7 +31,7 @@ const { predictions, matches, home } = PAGES;
 ---
 
 <Layout title={home.tabTitle}>
-  <div class="snap-y snap-mandatory overflow-y-auto h-screen scroll-smooth" style="scroll-padding-top: 4rem;">
+  <div class="snap-y snap-proximity overflow-y-auto h-screen scroll-smooth" style="scroll-padding-top: 4rem;">
     <HeroBanner participants={participants} hero={home.hero}>
       <Countdown client:load targetIso={eventState.startTime} />
     </HeroBanner>

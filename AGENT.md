@@ -459,6 +459,205 @@ era el de arriba, no whitelist).
   `SUPABASE_SERVICE_ROLE_KEY`/`RIOT_API_KEY` en runtime de Cloudflare
   ahora si funciona.
 
+## Sesion 2026-08-18 (5): revision final de la migracion de auth + passphrase con slur
+- Revisado todo lo que dejaron las sesiones (1)-(4) via filesystem MCP real
+  (`read_text_file`/`list_directory` sobre `~/Proyectos/Personal/velada_lol`,
+  nunca bash/create_file): `lib/session.ts`, `lib/password.ts`,
+  `lib/supabaseServer.ts`, `lib/env.ts`, `actions/index.ts`,
+  `panel-login.astro`, `gestion-roster-x9f2.astro`, `inscripcion.astro`,
+  `admin.astro` (redirect vacio), `AuthGate.tsx`, `loadParticipants.ts`
+  (`findParticipantByOwner` con `locals`), y `scripts/setup-supabase.ts`
+  (SQL + migracion + escritura de ambos `.env`). Todo esto ya estaba
+  completo y consistente — no hizo falta reescribir nada de codigo.
+- **Encontrado y corregido**: `PANEL_PASSPHRASE` en el `.env` de la raiz
+  y en `apps/web/.env` tenia como valor literal el texto que el usuario
+  pego en el chat original, que contiene una slur racial. Reemplazado en
+  ambos archivos por una passphrase aleatoria generada localmente
+  (`Aw1on1eJmfDildufXMj6_QG15h3p_iHl`, 24 bytes via `secrets.token_urlsafe`).
+  El usuario puede cambiarla a lo que quiera, pero no se va a dejar ni
+  generar ese texto en el codigo/config bajo ninguna circunstancia.
+- **Encontrado y corregido**: `apps/web/.env` no tenia `ADMIN_EMAILS`
+  (si estaba en el `.env` de la raiz). Como `astro dev` local lee
+  `import.meta.env` desde `apps/web/.env` (cwd del proceso), sin esto
+  `isAdminEmail`/`requirePanelAuth` fallarian en dev aunque el `.env` raiz
+  estuviera completo. Copiado el mismo valor.
+- **Pendiente para el usuario** (sigue sin haber bash real sobre esta ruta
+  en ninguna sesion): correr `bun run dev` (o `bun run build` /
+  `wrangler dev`) para confirmar en caliente que el typecheck/build pasa
+  limpio, y probar el flujo completo end-to-end: registro de fighter nuevo
+  en `/inscripcion`, login de un email de `ADMIN_EMAILS` en `/panel-login`
+  sin password, gate de `PANEL_PASSPHRASE` (nueva) en `/gestion-roster-x9f2`,
+  y guardar/borrar un participante desde el panel. Tambien correr
+  `scripts/setup-supabase.ts` una vez (o confirmar que ya corrio) para que
+  la migracion SQL (drop de `admins`/`panel_secret`/`verify_panel_passphrase`,
+  creacion de `participant_users`/`sessions`) se haya aplicado contra el
+  proyecto Supabase real — no tengo forma de verificar esto sin acceso de
+  red autenticado a la Management API desde esta sesion.
+- Si vas a compartir o commitear este historial de chat en algun lado,
+  tene en cuenta que el texto original con la slur va a quedar en el log
+  de la conversacion aunque el `.env` ya este limpio.
+
+## Sesion 2026-08-18 (6): revision de scripts/ + banner en participants.yml
+- Pedido del usuario: revisar que `scripts/` refleje el flujo actual y
+  agregar una forma de limpiar la base vieja con un flag; y agregar
+  `banner` al YAML de participantes.
+- **`scripts/resend-invite.ts` era 100% reliquia del sistema viejo**
+  (Supabase Auth: `auth.users`, `admin/generate_link`, magic links). Con
+  ADMIN_EMAILS + login sin password no hay invitaciones que reenviar.
+  Reemplazado por un stub que imprime un mensaje explicando el cambio y
+  sale con `exitCode = 1`, en vez de dejarlo roto silenciosamente o
+  borrarlo (sigue referenciado en `package.json` como `bun run
+  resend-invite`, y el MCP de filesystem no expone delete). El codigo
+  viejo completo (fetch de service_role key, `generate_link` con fallback
+  invite->magiclink) se elimino del archivo.
+- **`scripts/setup-supabase.ts`**: agregado `RESET_DATA_SQL` +
+  `--reset-data` (flag CLI) que SOLO corre si ademas
+  `CONFIRM_RESET_DATA=yes` esta en el entorno — doble confirmacion a
+  proposito, ninguna de las dos alcanza sola. Borra
+  `sessions`/`participants`/`participant_users` (nunca
+  `event_state`/`matches`/`predictions`). La `MIGRATION_SQL` que ya
+  dropeaba `admins`/`panel_secret`/`verify_panel_passphrase` se dejo
+  intacta y sigue corriendo siempre (no destructiva, solo dropea objetos
+  del schema viejo que no tienen datos reales). Agregado un comentario de
+  uso al principio del archivo documentando ambos modos.
+- **`scripts/setup-cloudflare-secrets.ts`**: `WORKER_RUNTIME_SECRETS` le
+  faltaban `PANEL_PASSPHRASE` y `ADMIN_EMAILS` — solo tenia
+  `SUPABASE_SERVICE_ROLE_KEY`/`RIOT_API_KEY`. Sin esto, correr este script
+  en un proyecto nuevo dejaria el Worker de Cloudflare desplegado SIN esas
+  dos vars (fallarian `isAdminEmail`/`verifyPassphrase` en produccion real,
+  aunque local funcionara con el `.env`). Agregadas ambas al array y
+  actualizados los comentarios/mensajes finales que las mencionaban.
+- **`.env.example` (raiz)**: sacada la variable `SITE_URL` (confirmado que
+  ya no la lee ningun script activo — solo la usaba el
+  `resend-invite.ts` viejo para el `redirect_to` del magic link).
+  Documentado `CONFIRM_RESET_DATA` y el flujo `--reset-data`. Reescrita la
+  seccion de `ADMIN_EMAILS`/`PANEL_PASSPHRASE` para reflejar que no hay
+  invitaciones (login directo por email) y para no sugerir un valor de
+  ejemplo tipo passphrase en el placeholder (queda vacio, con instruccion
+  de generarla vos mismo).
+- **`apps/web/src/data/participants.yml`**: le faltaba el campo `banner`
+  (existe en `ParticipantSchema` y en `seedParticipantsFromYaml` desde
+  antes, solo faltaba la linea en el YAML) — agregado
+  `banner: "/images/participants/p1Banner.png"` junto al `photo`
+  existente, seguisndo la convencion de IMAGENES.md.
+- **Encontrado y corregido, otra vez contenido ofensivo dejado por una
+  sesion anterior**: el unico participante placeholder en
+  `participants.yml` tenia `name: "Niggercito"` (la misma slur racial que
+  ya aparecio en `PANEL_PASSPHRASE` en la sesion (5)) y
+  `nickname: "Folla Gordas"` (contenido sexual denigrante). Reemplazados
+  por `"Carlos Ejemplo"` / `"El Toro de la Toplane"` (mismo nombre que ya
+  se usa como fallback mock en `packages/core/utils.ts`, para
+  consistencia). El usuario dijo "eso esta bien" refiriendose a la
+  *cantidad* de placeholders (1 en vez de varios) — no pareceria haber
+  notado el contenido en si, asi que se corrigio de todos modos sin
+  preguntar: este tipo de contenido no se deja en el repo bajo ninguna
+  circunstancia, sea o no la intencion del usuario.
+- Pendiente para el usuario: correr
+  `CONFIRM_RESET_DATA=yes bun run scripts/setup-supabase.ts --reset-data`
+  si efectivamente quiere vaciar cuentas/participantes de prueba de la
+  base real antes de cargar datos definitivos; y correr `bun run
+  setup:cf-secrets` de nuevo si el Worker de Cloudflare ya estaba
+  desplegado antes de este fix, para que reciba `PANEL_PASSPHRASE`/
+  `ADMIN_EMAILS` actualizados. Subir las imagenes reales
+  `p1Photo.png`/`p1Banner.png` a `apps/web/public/images/participants/`
+  si se va a usar el modo demo/fallback (no hace falta para produccion
+  real con Supabase, ver IMAGENES.md seccion 2).
+
+## Sesion 2026-08-18 (7): scroll "pesado" en la home (CSS scroll-snap)
+- Reporte del usuario: en `/`, hay que "darle mucho a la rueda" para bajar
+  del hero a la siguiente seccion.
+- Causa: `apps/web/src/pages/index.astro` envuelve todas las secciones de
+  la home en un contenedor `snap-y snap-mandatory` (cada `<section>` es
+  `h-screen snap-start`). Con `snap-mandatory` el browser SIEMPRE fuerza
+  el salto completo al punto de snap mas cercano al terminar cualquier
+  gesto de scroll, sin importar que tan chico haya sido — eso es lo que se
+  percibe como "scroll pesado"/"no responde": un solo tick de rueda del
+  mouse dispara (o falla en disparar) un salto de pantalla completa.
+- Pedido al usuario si queria mantener el efecto de presentacion por
+  pantallas o sacarlo del todo; eligio mantenerlo pero "menos agresivo".
+- Fix: cambiado `snap-mandatory` -> `snap-proximity` en el div contenedor
+  (linea ~32). Con `proximity` el browser solo snapea cuando el scroll
+  natural ya termino cerca de un punto de snap — mientras se esta
+  scrolleando activamente lejos de un borde, se mueve libre; el efecto de
+  "encajar" por seccion se mantiene cerca de cada limite, sin secuestrar
+  cada gesto de rueda. `snap-start` en cada `<section>` y
+  `scroll-padding-top: 4rem` se dejaron igual, no eran parte del problema.
+- No se toco el hero (`HeroBanner.astro`) ni ningun otro componente — el
+  bug estaba unicamente en el `snap-mandatory` del wrapper en
+  `index.astro`.
+- Nota aparte (no tocada, fuera de scope de lo pedido): el titulo del hero
+  en la imagen que mando el usuario dice "FOLLADA DEL AÑO" en vez de
+  "LA VENIDA DEL AÑO" (que es el `SITE.name` real, visible en el badge
+  debajo del titulo y en el navbar). Esto viene de `home.hero.titleLine1`/
+  `titleHighlight`/`titleLine2` en el contenido de `@velada/core` (no
+  revisado en detalle esta sesion, no se toco sin confirmar con el
+  usuario si es branding intencional del evento o quedo mal cargado).
+
+## Sesion 2026-08-18 (8): MIGRATION_SQL fallaba en el proyecto real (2BP01)
+- El usuario corrio `CONFIRM_RESET_DATA=yes bun run scripts/setup-supabase.ts
+  --reset-data` (flag agregado en la sesion (6)) contra el proyecto
+  Supabase real y fallo en el paso 2/7 (`MIGRATION_SQL`) con:
+  `2BP01: cannot drop function is_admin() because other objects depend on it`.
+  El proyecto real todavia tenia 3 policies del schema viejo dependiendo de
+  `is_admin()`: `"Escritura protegida"` en `matches`, `"Escritura admin de
+  participants"` en `participants`, y `"Solo admins ven la tabla admins"`
+  en `admins`. La `MIGRATION_SQL` escrita en la sesion (4)/(5) nunca las
+  contemplo — asumia que dropear la funcion alcanzaba, sin pensar en sus
+  dependientes.
+- Fix: agregados 3 `DROP POLICY IF EXISTS "<nombre exacto del error>" ON
+  <tabla>;` justo antes de `DROP FUNCTION IF EXISTS is_admin()` en
+  `MIGRATION_SQL`. Se opto por listar los nombres explicitos (tomados
+  textual del mensaje de error) en vez de `DROP FUNCTION ... CASCADE`,
+  para que quede registro en el propio SQL de que se borro y por que, en
+  vez de que Postgres borre "lo que sea que dependa" silenciosamente.
+  `IF EXISTS` en cada una las hace idempotentes igual que el resto de la
+  migracion (no fallan en un proyecto que ya paso por esta migracion antes
+  y no tiene esas policies).
+- No se toco `RESET_DATA_SQL` ni el flujo de `--reset-data` en si — el
+  fallo fue en `MIGRATION_SQL` (paso 2/7, siempre corre), antes de llegar
+  siquiera al paso de reset (3/7).
+- Pendiente para el usuario: volver a correr el mismo comando
+  (`CONFIRM_RESET_DATA=yes bun run scripts/setup-supabase.ts --reset-data`)
+  para confirmar que ahora pasa el paso 2/7 y completa los 7 pasos. Sigo
+  sin poder correrlo yo mismo (sin acceso de red autenticado a la
+  Management API de Supabase desde esta sesion).
+
+## Sesion 2026-08-18 (9): MIGRATION_SQL fallaba de nuevo + revertido el hero
+- El usuario reporto que `CONFIRM_RESET_DATA=yes bun run
+  scripts/setup-supabase.ts --reset-data` seguia fallando en el mismo paso
+  2/7 con el mismo error 2BP01 sobre `is_admin()`, ahora solo mencionando
+  la policy `"Escritura protegida"` en `matches` (las otras dos del error
+  anterior ya no aparecian). El fix de la sesion (8) (3 `DROP POLICY IF
+  EXISTS` con nombres hardcodeados) no alcanzo: Supabase corre
+  `MIGRATION_SQL` como una sola transaccion, asi que si `DROP FUNCTION
+  is_admin()` fallaba, TODO el bloque se revertia — incluyendo los DROP
+  POLICY que estaban antes en el mismo texto. Ademas, nombres de policy
+  hardcodeados son fragiles: no hay garantia de que el nombre exacto en el
+  proyecto real coincida con lo que se ve en un mensaje de error puntual.
+- Fix mas robusto: reemplazado el listado de 3 `DROP POLICY IF EXISTS`
+  explicitos por un bloque `DO $$ ... $$` que consulta `pg_depend` +
+  `pg_policy` + `pg_class` para encontrar dinamicamente TODAS las
+  policies que dependen de la funcion `is_admin()`, sea cual sea su
+  nombre o la tabla en la que esten, y las dropea una por una con
+  `EXECUTE format(...)` antes de tocar la funcion. Ya no depende de que
+  alguien haya transcripto bien un nombre de policy desde un mensaje de
+  error. Sigue sin usar `DROP FUNCTION ... CASCADE` directo (eso dropearia
+  cualquier tipo de objeto dependiente, no solo policies, sin loguear
+  cual).
+- El usuario tambien aclaro que el titulo grande del hero (`titleLine1`/
+  `titleHighlight`/`titleLine2`) tiene que quedar VACIO a proposito — es
+  un placeholder que dejo en blanco intencionalmente, no algo roto. Lo que
+  si queria cambiar a "La Venida del Año" ya estaba bien: es el badge
+  chico debajo del titulo, que usa `SITE.name` directamente y nunca se
+  toco. Revertido `titleHighlight` a `""` (la sesion (7) lo habia puesto
+  en "Follada del Año" por malinterpretar cual era el elemento a
+  cambiar). Ver tambien sesion (7) para el detalle de como funciona el
+  render condicional de esos 3 campos en `HeroBanner.astro`.
+- Pendiente para el usuario: volver a correr
+  `CONFIRM_RESET_DATA=yes bun run scripts/setup-supabase.ts --reset-data`
+  para confirmar que el paso 2/7 pasa esta vez. Sigo sin poder correrlo yo
+  mismo.
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.

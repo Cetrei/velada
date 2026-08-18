@@ -1,8 +1,35 @@
-import { writeFileSync, appendFileSync, existsSync, readFileSync } from "node:fs";
+/**
+ * Uso:
+ *   bun run scripts/setup-supabase.ts
+ *     Crea/actualiza el schema (SETUP_SQL), corre la migracion de limpieza
+ *     del schema viejo (MIGRATION_SQL, siempre segura, solo dropea objetos
+ *     ya no usados), escribe .env / apps/web/.env, y siembra
+ *     participants.yml. Idempotente, seguro de correr repetidas veces.
+ *
+ *   CONFIRM_RESET_DATA=yes bun run scripts/setup-supabase.ts --reset-data
+ *     Ademas de lo anterior, BORRA todas las filas de participant_users,
+ *     sessions y participants (RESET_DATA_SQL) antes de re-sembrar desde
+ *     el YAML. Pensado para limpiar cuentas/participantes de prueba
+ *     creados mientras se armaba el sistema de auth nuevo. Requiere el
+ *     flag Y la env var juntos a proposito, para que no se dispare por
+ *     accidente. NO borra event_state/matches/predictions.
+ */
+import { writeFileSync, existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const MANAGEMENT_API_BASE = "https://api.supabase.com/v1";
 
+/**
+ * Auth is fully custom now (own participant_users + sessions tables, see
+ * apps/web/src/lib/session.ts + lib/password.ts) — Supabase Auth
+ * (auth.users, magic links, RLS via auth.uid()) is NOT used anywhere in
+ * this schema anymore. Every table has RLS disabled: the service-role
+ * client is the only thing that ever touches these tables, and permission
+ * checks (own-profile-only, admin-only) happen by hand in
+ * apps/web/src/actions/index.ts, not via policies. "Admin" is derived at
+ * request time from ADMIN_EMAILS (env) matched against
+ * participant_users.email, not a DB row.
+ */
 const SETUP_SQL = `
 CREATE TABLE IF NOT EXISTS event_state (
   id TEXT PRIMARY KEY DEFAULT 'main',
@@ -45,9 +72,30 @@ CREATE TABLE IF NOT EXISTS predictions (
   PRIMARY KEY (match_id, voter_id)
 );
 
+-- Reemplaza Supabase Auth (auth.users): cuentas propias de fighters/admins,
+-- password_hash es PBKDF2 via Web Crypto (ver apps/web/src/lib/password.ts),
+-- nunca texto plano ni bcrypt (no disponible en el runtime de Workers).
+CREATE TABLE IF NOT EXISTS participant_users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Reemplaza las cookies de sesion de @supabase/ssr: id opaco random en la
+-- cookie (velada_session), esta fila es la unica fuente de verdad de si
+-- ese id sigue siendo una sesion valida. Sin RLS -> siempre via admin
+-- client, expires_at se filtra a mano en lib/session.ts (getSession).
+CREATE TABLE IF NOT EXISTS sessions (
+  id UUID PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES participant_users(id) ON DELETE CASCADE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS participants (
   id TEXT PRIMARY KEY,
-  owner_user_id UUID UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
+  owner_user_id UUID UNIQUE REFERENCES participant_users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   nickname TEXT NOT NULL,
   photo TEXT,
@@ -72,32 +120,12 @@ CREATE TABLE IF NOT EXISTS participants (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-ALTER TABLE participants ADD COLUMN IF NOT EXISTS owner_user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'participants_owner_user_id_key'
-  ) THEN
-    ALTER TABLE participants ADD CONSTRAINT participants_owner_user_id_key UNIQUE (owner_user_id);
-  END IF;
-END $$;
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS country TEXT;
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS country_flag TEXT;
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS instagram_handle TEXT;
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS instagram_followers TEXT;
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS x_handle TEXT;
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS x_followers TEXT;
-
-CREATE TABLE IF NOT EXISTS admins (
-  user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS panel_secret (
-  id TEXT PRIMARY KEY DEFAULT 'main',
-  passphrase_hash TEXT NOT NULL,
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
 
 DO $$
 BEGIN
@@ -123,41 +151,19 @@ BEGIN
   END IF;
 END $$;
 
-ALTER TABLE event_state ENABLE ROW LEVEL SECURITY;
-ALTER TABLE matches ENABLE ROW LEVEL SECURITY;
-ALTER TABLE participants ENABLE ROW LEVEL SECURITY;
-ALTER TABLE admins ENABLE ROW LEVEL SECURITY;
-ALTER TABLE panel_secret ENABLE ROW LEVEL SECURITY;
+-- RLS deshabilitado en todo: sin Supabase Auth no hay auth.uid() con el
+-- que escribir policies con sentido. La tabla predictions es la unica
+-- excepcion real (el cliente anon vota directo desde el browser via
+-- getSupabaseClient), asi que se queda con RLS + policies publicas de
+-- antes. Todo lo demas (event_state, matches, participants,
+-- participant_users, sessions) solo se toca desde el service-role client
+-- en las Astro Actions, que ya hace sus propios checks de permisos.
+ALTER TABLE event_state DISABLE ROW LEVEL SECURITY;
+ALTER TABLE matches DISABLE ROW LEVEL SECURITY;
+ALTER TABLE participants DISABLE ROW LEVEL SECURITY;
+ALTER TABLE participant_users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE sessions DISABLE ROW LEVEL SECURITY;
 ALTER TABLE predictions ENABLE ROW LEVEL SECURITY;
-
-CREATE OR REPLACE FUNCTION is_admin() RETURNS BOOLEAN AS $$
-  SELECT EXISTS (SELECT 1 FROM admins WHERE user_id = auth.uid());
-$$ LANGUAGE sql SECURITY DEFINER STABLE;
-
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
-CREATE OR REPLACE FUNCTION verify_panel_passphrase(input TEXT) RETURNS BOOLEAN AS $$
-  SELECT passphrase_hash = crypt(input, passphrase_hash)
-  FROM panel_secret WHERE id = 'main';
-$$ LANGUAGE sql SECURITY DEFINER STABLE;
-
-REVOKE ALL ON FUNCTION verify_panel_passphrase(TEXT) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION verify_panel_passphrase(TEXT) TO authenticated;
-
-DROP POLICY IF EXISTS "Lectura publica de event_state" ON event_state;
-CREATE POLICY "Lectura publica de event_state" ON event_state FOR SELECT USING (true);
-
-DROP POLICY IF EXISTS "Lectura publica de matches" ON matches;
-CREATE POLICY "Lectura publica de matches" ON matches FOR SELECT USING (true);
-
-DROP POLICY IF EXISTS "Lectura publica de participants" ON participants;
-CREATE POLICY "Lectura publica de participants" ON participants FOR SELECT USING (true);
-
-DROP POLICY IF EXISTS "Escritura protegida event_state" ON event_state;
-CREATE POLICY "Escritura protegida event_state" ON event_state FOR ALL USING (auth.role() = 'service_role');
-
-DROP POLICY IF EXISTS "Escritura protegida matches" ON matches;
-CREATE POLICY "Escritura protegida matches" ON matches FOR ALL USING (is_admin() OR auth.role() = 'service_role');
 
 DROP POLICY IF EXISTS "Lectura publica de predictions" ON predictions;
 CREATE POLICY "Lectura publica de predictions" ON predictions FOR SELECT USING (true);
@@ -168,12 +174,6 @@ CREATE POLICY "Voto publico anonimo" ON predictions FOR INSERT WITH CHECK (true)
 DROP POLICY IF EXISTS "Cambio de voto publico anonimo" ON predictions;
 CREATE POLICY "Cambio de voto publico anonimo" ON predictions FOR UPDATE USING (true) WITH CHECK (true);
 
-DROP POLICY IF EXISTS "Escritura admin de participants" ON participants;
-CREATE POLICY "Escritura admin de participants" ON participants FOR ALL USING (is_admin() OR auth.role() = 'service_role');
-
-DROP POLICY IF EXISTS "Solo admins ven la tabla admins" ON admins;
-CREATE POLICY "Solo admins ven la tabla admins" ON admins FOR SELECT USING (is_admin() OR auth.role() = 'service_role');
-
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('participant-photos', 'participant-photos', true)
 ON CONFLICT (id) DO NOTHING;
@@ -182,23 +182,116 @@ DROP POLICY IF EXISTS "Lectura publica de fotos" ON storage.objects;
 CREATE POLICY "Lectura publica de fotos" ON storage.objects FOR SELECT
   USING (bucket_id = 'participant-photos');
 
+-- La escritura de fotos ya solo pasa por el service-role client (Astro
+-- Actions), asi que no necesita una policy de escritura separada: el
+-- service role bypassea RLS de storage.objects igual que en cualquier
+-- otra tabla.
 DROP POLICY IF EXISTS "Escritura admin de fotos" ON storage.objects;
-CREATE POLICY "Escritura admin de fotos" ON storage.objects FOR ALL
-  USING (bucket_id = 'participant-photos' AND (is_admin() OR auth.role() = 'service_role'));
 
 INSERT INTO event_state (id, start_time, roulette_unlocked, current_phase, registrations_open, voting_enabled, event_started)
 VALUES ('main', NOW() + INTERVAL '7 days', FALSE, 'COUNTDOWN', TRUE, FALSE, FALSE)
 ON CONFLICT (id) DO NOTHING;
 `;
 
-function buildPanelSecretSql(passphrase: string): string {
-  const escaped = passphrase.replace(/'/g, "''");
-  return `
-INSERT INTO panel_secret (id, passphrase_hash)
-VALUES ('main', crypt('${escaped}', gen_salt('bf')))
-ON CONFLICT (id) DO UPDATE SET passphrase_hash = EXCLUDED.passphrase_hash, updated_at = NOW();
+/**
+ * One-time migration for projects that ran the OLD (Supabase Auth based)
+ * version of this script before: drops the now-unused admins/panel_secret
+ * tables and the verify_panel_passphrase RPC, and detaches
+ * participants.owner_user_id from auth.users so it can be repointed at
+ * participant_users. Safe to run repeatedly (everything is IF EXISTS).
+ * Existing participants rows keep their id/data; owner_user_id just goes
+ * NULL for anyone who had a Supabase Auth-linked profile, since there's no
+ * way to carry over an auth.users row into participant_users (no password
+ * to migrate) — those fighters need to re-register once with the same
+ * email to reclaim their profile via saveOwnParticipant's upsert-by-email
+ * flow... actually re-linking is by owner_user_id, so in practice this
+ * means: re-registering creates a NEW profile unless done manually. Fine
+ * for this project (confirmed with the user: no real users yet).
+ */
+const MIGRATION_SQL = `
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'participants_owner_user_id_fkey') THEN
+    ALTER TABLE participants DROP CONSTRAINT participants_owner_user_id_fkey;
+  END IF;
+END $$;
+
+-- Dropea dinamicamente TODAS las policies que dependan de is_admin(),
+-- sea cual sea su nombre o tabla exacta. Un DROP POLICY IF EXISTS con
+-- nombres hardcodeados es fragil (fallo en produccion: el error solo
+-- listaba "Escritura protegida" en matches, pero versiones previas de
+-- este schema pudieron haber creado policies con otros nombres) asi que
+-- en vez de adivinar nombres, se consulta pg_policy + pg_depend por
+-- cualquier policy cuya qual/with_check dependa de la funcion is_admin,
+-- y se dropea cada una encontrada antes de tocar la funcion. Reemplaza el
+-- listado explicito de antes; sigue sin usar DROP FUNCTION ... CASCADE
+-- directo, que dropearia silenciosamente cualquier tipo de objeto
+-- dependiente sin loguear cual.
+DO $$
+DECLARE
+  dep RECORD;
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'is_admin') THEN
+    FOR dep IN
+      SELECT DISTINCT pol.polname AS policy_name, cls.relname AS table_name
+      FROM pg_depend d
+      JOIN pg_proc p ON p.oid = d.refobjid AND p.proname = 'is_admin'
+      JOIN pg_policy pol ON pol.oid = d.objid AND d.classid = 'pg_policy'::regclass
+      JOIN pg_class cls ON cls.oid = pol.polrelid
+    LOOP
+      EXECUTE format('DROP POLICY IF EXISTS %I ON %I', dep.policy_name, dep.table_name);
+    END LOOP;
+  END IF;
+END $$;
+
+DROP FUNCTION IF EXISTS verify_panel_passphrase(TEXT);
+DROP FUNCTION IF EXISTS is_admin();
+DROP TABLE IF EXISTS panel_secret;
+DROP TABLE IF EXISTS admins;
+
+UPDATE participants SET owner_user_id = NULL
+WHERE owner_user_id IS NOT NULL
+  AND owner_user_id NOT IN (SELECT id FROM participant_users);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'participants_owner_user_id_fkey'
+  ) THEN
+    ALTER TABLE participants
+      ADD CONSTRAINT participants_owner_user_id_fkey
+      FOREIGN KEY (owner_user_id) REFERENCES participant_users(id) ON DELETE CASCADE;
+  END IF;
+END $$;
 `;
-}
+
+/**
+ * Opt-in hard reset of DATA (not schema) for the NEW auth tables, for when
+ * you want to wipe test accounts/sessions/participants created while
+ * building against the current schema — separate from MIGRATION_SQL, which
+ * only ever cleans up the OLD pre-migration schema (drops admins/
+ * panel_secret) and runs unconditionally every time since that's just
+ * removing dead objects, never live data.
+ *
+ * This one deletes real rows, so it's gated behind two independent
+ * confirmations (see main()): the --reset-data CLI flag AND
+ * CONFIRM_RESET_DATA=yes in the environment. Either alone is not enough —
+ * a stray flag in a copy-pasted command shouldn't be able to wipe a
+ * production roster by itself.
+ *
+ * sessions cascades from participant_users (ON DELETE CASCADE), so
+ * deleting participant_users alone would already drop sessions — it's
+ * listed explicitly anyway so the order and intent are obvious from
+ * reading the SQL, not from remembering an FK's ON DELETE behavior.
+ * participants.owner_user_id also cascades from participant_users, so
+ * wiping participant_users deletes every participants row too — that's
+ * the point of a full reset, not a bug.
+ */
+const RESET_DATA_SQL = `
+DELETE FROM sessions;
+DELETE FROM participants;
+DELETE FROM participant_users;
+`;
 
 interface SupabaseApiKeyEntry {
   api_key: string;
@@ -308,88 +401,6 @@ async function fetchProjectEndpoint(projectRef: string, accessToken: string): Pr
   return data.endpoint ?? `https://${data.ref}.supabase.co`;
 }
 
-class RateLimitError extends Error {}
-
-interface SupabaseInviteResponse {
-  id: string;
-  email?: string;
-}
-
-/**
- * Invites a user by email via Supabase Auth Admin API and marks them as
- * admin. Idempotent: if the user already exists, looks them up instead of
- * failing, and the admins insert uses ON CONFLICT DO NOTHING.
- * If siteUrl is set, passes redirect_to=<siteUrl>/panel-login so the invite
- * email lands on the deployed app instead of Supabase's default Site URL
- * (which defaults to localhost and 404s in production).
- */
-async function inviteAdmin(
-  endpoint: string,
-  serviceRoleKey: string,
-  projectRef: string,
-  accessToken: string,
-  email: string,
-  siteUrl: string | undefined
-): Promise<void> {
-  const redirectTo = siteUrl ? `${siteUrl.replace(/\/$/, "")}/panel-login` : undefined;
-
-  const inviteResponse = await fetch(
-    `${endpoint}/auth/v1/invite${redirectTo ? `?redirect_to=${encodeURIComponent(redirectTo)}` : ""}`,
-    {
-      method: "POST",
-      headers: {
-        apikey: serviceRoleKey,
-        Authorization: `Bearer ${serviceRoleKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ email })
-    }
-  );
-
-  let userId: string;
-
-  if (inviteResponse.ok) {
-    const data = (await inviteResponse.json()) as SupabaseInviteResponse;
-    userId = data.id;
-  } else if (inviteResponse.status === 422) {
-    console.log(`  ${email} ya tiene cuenta, buscando su user_id existente...`);
-    const listResponse = await fetch(
-      `${endpoint}/auth/v1/admin/users?email=${encodeURIComponent(email)}`,
-      {
-        headers: {
-          apikey: serviceRoleKey,
-          Authorization: `Bearer ${serviceRoleKey}`
-        }
-      }
-    );
-    if (!listResponse.ok) {
-      throw new Error(`No se pudo buscar el usuario existente ${email}: ${await listResponse.text()}`);
-    }
-    const listData = (await listResponse.json()) as { users: SupabaseInviteResponse[] };
-    const existing = listData.users.find((u) => u.email === email);
-    if (!existing) {
-      throw new Error(`${email} devolvio 422 pero no se encontro en la lista de usuarios`);
-    }
-    userId = existing.id;
-  } else if (inviteResponse.status === 429) {
-    throw new RateLimitError(
-      `Rate limit de emails alcanzado al invitar a ${email}. ` +
-        `Supabase Auth (SMTP por defecto) permite muy pocos correos por hora. ` +
-        `Espera unos minutos y vuelve a correr "bun run setup:db": los admins ya invitados ` +
-        `se detectan como existentes (422) y no se reenvia el correo.`
-    );
-  } else {
-    throw new Error(`Fallo al invitar a ${email} (${inviteResponse.status}): ${await inviteResponse.text()}`);
-  }
-
-  await runQuery(
-    projectRef,
-    accessToken,
-    `INSERT INTO admins (user_id) VALUES ('${userId}') ON CONFLICT (user_id) DO NOTHING;`
-  );
-  console.log(`  ✓ ${email} marcado como admin`);
-}
-
 function sqlString(value: string | undefined | null): string {
   if (value === undefined || value === null) return "NULL";
   return `'${value.replace(/'/g, "''")}'`;
@@ -466,21 +477,47 @@ ON CONFLICT (id) DO NOTHING;
 }
 
 async function main() {
-  console.log("Configurando Supabase (tablas, RLS, Realtime, Storage)...");
+  console.log("Configurando Supabase (tablas, Realtime, Storage)...");
 
   const accessToken = requireEnv("SUPABASE_ACCESS_TOKEN");
   const projectRef = normalizeProjectRef(requireEnv("SUPABASE_PROJECT_REF"));
 
-  console.log("1/6 Ejecutando DDL (tablas, RLS, publicaciones realtime, bucket)...");
+  // Doble confirmacion a proposito: el flag CLI solo (copiado sin pensar de
+  // otro comando) o la env var sola (dejada en un .env compartido) no
+  // alcanzan por separado para borrar cuentas/participantes reales.
+  const wantsReset = process.argv.includes("--reset-data");
+  const confirmedReset = process.env.CONFIRM_RESET_DATA === "yes";
+  const willReset = wantsReset && confirmedReset;
+  if (wantsReset && !confirmedReset) {
+    throw new Error(
+      "--reset-data pedido pero falta la confirmacion. Corre con " +
+        "CONFIRM_RESET_DATA=yes bun run scripts/setup-supabase.ts --reset-data " +
+        "(las dos cosas a la vez, a proposito, para que no se dispare por accidente)."
+    );
+  }
+
+  const totalSteps = willReset ? 7 : 6;
+  let step = 1;
+
+  console.log(`${step++}/${totalSteps} Ejecutando DDL (tablas, publicaciones realtime, bucket)...`);
   await runQuery(projectRef, accessToken, SETUP_SQL);
 
-  console.log("2/6 Obteniendo API keys y endpoint del proyecto...");
+  console.log(`${step++}/${totalSteps} Migrando proyectos que tenian el schema viejo (Supabase Auth)...`);
+  await runQuery(projectRef, accessToken, MIGRATION_SQL);
+
+  if (willReset) {
+    console.log(`${step++}/${totalSteps} --reset-data confirmado: borrando participant_users/sessions/participants...`);
+    await runQuery(projectRef, accessToken, RESET_DATA_SQL);
+    console.log("  Listo. Las tablas de auth/participantes quedaron vacias.");
+  }
+
+  console.log(`${step++}/${totalSteps} Obteniendo API keys y endpoint del proyecto...`);
   const [{ anonKey, serviceRoleKey }, endpoint] = await Promise.all([
     fetchApiKeys(projectRef, accessToken),
     fetchProjectEndpoint(projectRef, accessToken)
   ]);
 
-  console.log("3/6 Escribiendo variables de entorno...");
+  console.log(`${step++}/${totalSteps} Escribiendo variables de entorno...`);
   const rootEnvPath = resolve(import.meta.dirname, "..", ".env");
   const webEnvPath = resolve(import.meta.dirname, "..", "apps", "web", ".env");
 
@@ -499,63 +536,37 @@ async function main() {
   const serverOnlyVars: Record<string, string> = { SUPABASE_SERVICE_ROLE_KEY: serviceRoleKey };
   if (process.env.RIOT_API_KEY) serverOnlyVars.RIOT_API_KEY = process.env.RIOT_API_KEY;
   if (process.env.PANEL_PASSPHRASE) serverOnlyVars.PANEL_PASSPHRASE = process.env.PANEL_PASSPHRASE;
+  if (process.env.ADMIN_EMAILS) serverOnlyVars.ADMIN_EMAILS = process.env.ADMIN_EMAILS;
 
   writeEnvFile(rootEnvPath, { ...publicVars, ...serverOnlyVars }, "root .env");
   writeEnvFile(webEnvPath, { ...publicVars, ...serverOnlyVars }, "apps/web/.env");
 
-  console.log("4/6 Sembrando participantes desde participants.yml...");
+  console.log(`${step++}/${totalSteps} Sembrando participantes desde participants.yml...`);
   await seedParticipantsFromYaml(projectRef, accessToken);
 
-  console.log("5/6 Invitando admins (ADMIN_EMAILS en .env, separados por coma)...");
-  const adminEmailsRaw = process.env.ADMIN_EMAILS;
-  const siteUrl = process.env.SITE_URL;
-  if (!siteUrl) {
+  if (!process.env.ADMIN_EMAILS) {
     console.log(
-      "  SITE_URL no definido: el correo de invitacion usara el Site URL configurado" +
-        " en el dashboard de Supabase (Authentication > URL Configuration), no /panel-login." +
-        " Agrega SITE_URL=https://tu-dominio al .env para fijar el destino explicitamente."
+      "\nADMIN_EMAILS no definido en .env. Agrega ADMIN_EMAILS=tu@email.com,amigo@email.com" +
+        " (sin invitacion ni email: estos emails simplemente pueden loguearse sin contrasena" +
+        " en /panel-login, la lista se lee en runtime desde el Worker) y volve a correr este script."
     );
   }
-  if (!adminEmailsRaw) {
+  if (!process.env.PANEL_PASSPHRASE) {
     console.log(
-      "  ADMIN_EMAILS no definido, se omite. Agrega ADMIN_EMAILS=tu@email.com,amigo@email.com" +
-        " al .env y vuelve a correr este script para invitar admins al panel."
+      "PANEL_PASSPHRASE no definido en .env. Agregalo (una frase larga y unica, no la compartas" +
+        " en chats ni la pegues en ningun lado publico) para que el panel pida esa clave" +
+        " despues del login de un admin."
     );
-  } else {
-    const emails = adminEmailsRaw
-      .split(",")
-      .map((e) => e.trim())
-      .filter(Boolean);
-    for (const email of emails) {
-      try {
-        await inviteAdmin(endpoint, serviceRoleKey, projectRef, accessToken, email, siteUrl);
-      } catch (error) {
-        if (error instanceof RateLimitError) {
-          console.warn(`  ⚠ ${error.message}`);
-          console.warn(
-            `  Deteniendo invitaciones por rate limit; el resto de emails pendientes no se intentaron. ` +
-              `Vuelve a correr "bun run setup:db" mas tarde para invitar a los que falten.`
-          );
-          break;
-        }
-        throw error;
-      }
-    }
+  }
+  if (!willReset) {
+    console.log(
+      "\nTip: si necesitas vaciar cuentas/participantes de prueba de las tablas nuevas" +
+        " (participant_users, sessions, participants), corre este mismo script con" +
+        " CONFIRM_RESET_DATA=yes bun run scripts/setup-supabase.ts --reset-data"
+    );
   }
 
-  console.log("6/6 Configurando la clave del panel (PANEL_PASSPHRASE en .env)...");
-  const panelPassphrase = process.env.PANEL_PASSPHRASE;
-  if (!panelPassphrase) {
-    console.log(
-      "  PANEL_PASSPHRASE no definido, se omite. Agrega PANEL_PASSPHRASE=una-frase-larga" +
-        " al .env y vuelve a correr este script para (re)configurar la clave del panel."
-    );
-  } else {
-    await runQuery(projectRef, accessToken, buildPanelSecretSql(panelPassphrase));
-    console.log("  Clave del panel configurada.");
-  }
-
-  console.log("Listo. Supabase configurado y variables de entorno generadas.");
+  console.log("\nListo. Supabase configurado y variables de entorno generadas.");
 }
 
 main().catch((error) => {

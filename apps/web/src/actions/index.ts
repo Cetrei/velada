@@ -1,11 +1,12 @@
 import { defineAction, ActionError } from "astro:actions";
 import { z } from "astro:schema";
-import { createSupabaseServerClient, createSupabaseAdminClient } from "../lib/supabaseServer";
-import { getPanelSession, markPassphraseVerified } from "../lib/panelSession";
-import { getParticipantSession } from "../lib/participantSession";
-import { fetchEventState } from "../lib/eventState";
+import { createSupabaseAdminClient } from "../lib/supabaseServer";
+import { getSession, createSession, destroySession, markPassphraseVerified, isAdminEmail } from "../lib/session";
+import { hashPassword, verifyPassword } from "../lib/password";
 import { getServerEnv } from "../lib/env";
+import { fetchEventState } from "../lib/eventState";
 import { ParticipantStatsSchema } from "@velada/core";
+import type { AppSession } from "../lib/session";
 
 const RIOT_PLATFORM_BY_SERVER: Record<string, string> = {
   LAN: "la1",
@@ -31,7 +32,7 @@ const RIOT_REGION_BY_SERVER: Record<string, string> = {
   OCE: "sea"
 };
 
-function requirePanelAuth<T>(session: T | null): T {
+function requireSession(session: AppSession | null): AppSession {
   if (!session) {
     throw new ActionError({ code: "UNAUTHORIZED", message: "No autenticado." });
   }
@@ -39,54 +40,21 @@ function requirePanelAuth<T>(session: T | null): T {
 }
 
 /**
- * Robust sign-out: clears the session both server-side (Supabase) and via
- * explicit cookie deletion, instead of trusting supabase.auth.signOut()
- * alone to round-trip through the @supabase/ssr cookie adapter.
- *
- * Two things were making logout "stick" (session reappears right after
- * clicking cerrar sesion, no error shown anywhere):
- *
- * 1. signOut()'s default scope is "global", which calls Supabase's revoke
- *    endpoint over the network before the SDK tells the cookie adapter to
- *    clear anything. If that call is slow or fails (flaky network, cold
- *    Cloudflare Worker), the local cookies never get cleared even though
- *    no error surfaces to the caller. scope: "local" clears the local
- *    session immediately without waiting on that round-trip.
- * 2. @supabase/ssr stores the session as a SINGLE cookie normally, but
- *    splits it into <base>.0, <base>.1, ... chunks when the JWT is long
- *    enough. If anything upstream only clears the base name, the .0/.1
- *    chunks survive and supabase.auth.getUser() on the next request
- *    reassembles a valid session from them - logout "didn't work" from the
- *    user's POV even though the action ran and returned success. This
- *    sweeps every sb-*-auth-token* cookie (base + numbered chunks) as a
- *    belt-and-suspenders on top of whatever the SDK already cleared.
+ * Panel auth = logged in + email listed in ADMIN_EMAILS + passphrase gate
+ * already passed this session. Replaces the old getPanelSession +
+ * `admins` table lookup: admin-ness is now derived purely from
+ * ADMIN_EMAILS (env), not a DB row, since there's no Supabase Auth user id
+ * to key a table on anymore.
  */
-async function signOutAndClearCookies(
-  supabase: NonNullable<ReturnType<typeof createSupabaseServerClient>[0]>,
-  request: Request,
-  cookies: Parameters<typeof createSupabaseServerClient>[1]
-): Promise<void> {
-  try {
-    await supabase.auth.signOut({ scope: "local" });
-  } catch (err) {
-    console.error("[signOutAndClearCookies] supabase.auth.signOut fallo, limpiando cookies igual:", err);
+function requirePanelAuth(session: AppSession | null): AppSession {
+  const s = requireSession(session);
+  if (!s.isAdmin) {
+    throw new ActionError({ code: "FORBIDDEN", message: "Tu cuenta no tiene acceso al panel." });
   }
-
-  // Reads cookie NAMES straight off the incoming request header instead of
-  // iterating context.cookies (whose iterator shape isn't stable across
-  // Astro versions) - same parsing supabaseServer.ts already trusts for
-  // reading the session.
-  const rawCookieHeader = request.headers.get("Cookie") ?? "";
-  const cookieNames = rawCookieHeader
-    .split(";")
-    .map((pair) => pair.split("=")[0]?.trim())
-    .filter((name): name is string => !!name);
-
-  for (const name of cookieNames) {
-    if (name.startsWith("sb-") && name.includes("-auth-token")) {
-      cookies.delete(name, { path: "/" });
-    }
+  if (!s.passphraseVerified) {
+    throw new ActionError({ code: "FORBIDDEN", message: "Falta verificar la clave del panel." });
   }
+  return s;
 }
 
 /**
@@ -206,89 +174,81 @@ const ownParticipantFields = {
 };
 
 export const server = {
+  /**
+   * Unified login for BOTH fighters and admins. Admin emails (ADMIN_EMAILS
+   * env) skip the password check entirely — they authenticate with just
+   * their email, then still have to clear the separate PANEL_PASSPHRASE
+   * gate (verifyPassphrase) before actually reaching the panel. A row in
+   * `participant_users` is created on the fly for a first-time admin login
+   * (no self-registration flow needed for them, unlike fighters).
+   */
   login: defineAction({
     accept: "form",
     input: z.object({
       email: z.string().email(),
-      password: z.string().min(6)
+      password: z.string().min(6).optional()
     }),
     handler: async ({ email, password }, context) => {
-      const [supabase, msg] = createSupabaseServerClient(context.request, context.cookies, context.locals);
-      if (!supabase) {
+      const [admin, msg] = createSupabaseAdminClient(context.locals);
+      if (!admin) {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
       }
 
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
-        throw new ActionError({ code: "UNAUTHORIZED", message: "Credenciales invalidas." });
+      const normalizedEmail = email.trim().toLowerCase();
+      const admitAsAdmin = isAdminEmail(context, normalizedEmail);
+
+      const { data: existing } = await admin
+        .from("participant_users")
+        .select("id, password_hash")
+        .eq("email", normalizedEmail)
+        .maybeSingle();
+
+      let userId: string;
+
+      if (admitAsAdmin) {
+        // Admins never need a password of their own; if they don't have a
+        // row yet (first login), create one with a random unusable hash so
+        // the column stays NOT NULL without granting a real password.
+        if (existing) {
+          userId = existing.id;
+        } else {
+          const placeholderHash = await hashPassword(crypto.randomUUID());
+          const { data: created, error } = await admin
+            .from("participant_users")
+            .insert({ email: normalizedEmail, password_hash: placeholderHash })
+            .select("id")
+            .single();
+          if (error || !created) {
+            throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: error?.message ?? "No se pudo crear la cuenta." });
+          }
+          userId = created.id;
+        }
+      } else {
+        if (!existing) {
+          throw new ActionError({ code: "UNAUTHORIZED", message: "Credenciales invalidas." });
+        }
+        if (!password) {
+          throw new ActionError({ code: "BAD_REQUEST", message: "Falta la contrasena." });
+        }
+        const valid = await verifyPassword(password, existing.password_hash);
+        if (!valid) {
+          throw new ActionError({ code: "UNAUTHORIZED", message: "Credenciales invalidas." });
+        }
+        userId = existing.id;
       }
 
-      const session = await getPanelSession(context.request, context.cookies, supabase);
-      if (!session) {
-        await supabase.auth.signOut();
-        throw new ActionError({
-          code: "FORBIDDEN",
-          message: "Tu cuenta no tiene acceso al panel."
-        });
+      const sessionId = await createSession(context.cookies, context.locals, userId);
+      if (!sessionId) {
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: "No se pudo crear la sesion." });
       }
 
-      return { success: true };
-    }
-  }),
-
-  /**
-   * Completes a magic link / invite login. Supabase's action_link (from
-   * admin.generateLink) redirects the browser to redirect_to with the
-   * session tokens in the URL fragment (#access_token=...&refresh_token=...)
-   * instead of cookies, because that redirect is a plain browser navigation
-   * with no server involved. The client-side script in panel-login.astro
-   * reads that fragment and calls this action, which runs
-   * supabase.auth.setSession() on the server so @supabase/ssr writes the
-   * actual session cookies getPanelSession() reads on every other page.
-   *
-   * Passes `supabase` itself into getPanelSession instead of letting it
-   * create a fresh client - see the comment on getPanelSession for why a
-   * fresh client fails right after setSession() in the same request.
-   */
-  establishMagicLinkSession: defineAction({
-    input: z.object({
-      accessToken: z.string().min(1),
-      refreshToken: z.string().min(1)
-    }),
-    handler: async ({ accessToken, refreshToken }, context) => {
-      const [supabase, msg] = createSupabaseServerClient(context.request, context.cookies, context.locals);
-      if (!supabase) {
-        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
-      }
-
-      const { error } = await supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken
-      });
-      if (error) {
-        throw new ActionError({ code: "UNAUTHORIZED", message: "Link invalido o expirado." });
-      }
-
-      const session = await getPanelSession(context.request, context.cookies, supabase);
-      if (!session) {
-        await supabase.auth.signOut();
-        throw new ActionError({
-          code: "FORBIDDEN",
-          message: "Tu cuenta no tiene acceso al panel."
-        });
-      }
-
-      return { success: true };
+      return { success: true, isAdmin: admitAsAdmin };
     }
   }),
 
   logout: defineAction({
     handler: async (_input, context) => {
-      const [supabase, msg] = createSupabaseServerClient(context.request, context.cookies, context.locals);
-      if (!supabase) throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
-
-      await signOutAndClearCookies(supabase, context.request, context.cookies);
-      context.cookies.delete("velada_panel_unlocked", { path: "/" });
+      await destroySession(context.cookies, context.locals);
       return { success: true };
     }
   }),
@@ -297,14 +257,17 @@ export const server = {
     accept: "form",
     input: z.object({ passphrase: z.string().min(1) }),
     handler: async ({ passphrase }, context) => {
-      const session = requirePanelAuth(await getPanelSession(context.request, context.cookies, undefined, context.locals));
-      const [supabase, msg] = createSupabaseServerClient(context.request, context.cookies, context.locals);
-      if (!supabase) {
-        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
+      const session = requireSession(await getSession(context.cookies, context));
+      if (!session.isAdmin) {
+        throw new ActionError({ code: "FORBIDDEN", message: "Tu cuenta no tiene acceso al panel." });
       }
 
-      const { data, error } = await supabase.rpc("verify_panel_passphrase", { input: passphrase });
-      if (error || !data) {
+      const expected = getServerEnv(context, "PANEL_PASSPHRASE");
+      if (!expected) {
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: "PANEL_PASSPHRASE no configurada en el servidor." });
+      }
+
+      if (passphrase !== expected) {
         throw new ActionError({ code: "FORBIDDEN", message: "Clave incorrecta." });
       }
 
@@ -318,43 +281,35 @@ export const server = {
    * an email, tells the client whether an account already exists so the UI
    * can ask for "tu contrasena" (login) vs "crea una contrasena" (register)
    * without a separate tabs/toggle the user has to pick themselves.
-   * Uses the admin REST endpoint directly (same one scripts/setup-supabase.ts
-   * uses for invites) because the supabase-js admin client has no
-   * getUserByEmail helper, only paginated listUsers().
+   * Also flags isAdmin (ADMIN_EMAILS) so AuthGate can skip the
+   * password field entirely for host accounts, even on their very first
+   * login (before they have a participant_users row at all).
    */
   checkEmailExists: defineAction({
     accept: "form",
     input: z.object({ email: z.string().email() }),
     handler: async ({ email }, context) => {
-      const url = getServerEnv(context, "PUBLIC_SUPABASE_URL");
-      const serviceRoleKey = getServerEnv(context, "SUPABASE_SERVICE_ROLE_KEY");
-      if (!url || !serviceRoleKey) {
-        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: "Supabase no configurado." });
+      const [admin, msg] = createSupabaseAdminClient(context.locals);
+      if (!admin) {
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
       }
 
-      const response = await fetch(`${url}/auth/v1/admin/users?email=${encodeURIComponent(email)}`, {
-        headers: {
-          apikey: serviceRoleKey,
-          Authorization: `Bearer ${serviceRoleKey}`
-        }
-      });
+      const normalizedEmail = email.trim().toLowerCase();
+      const { data } = await admin
+        .from("participant_users")
+        .select("id")
+        .eq("email", normalizedEmail)
+        .maybeSingle();
 
-      if (!response.ok) {
-        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: "No se pudo verificar el email." });
-      }
-
-      const data = (await response.json()) as { users: Array<{ email?: string }> };
-      const exists = data.users.some((u) => u.email?.toLowerCase() === email.toLowerCase());
-      return { exists };
+      return { exists: !!data, isAdmin: isAdminEmail(context, normalizedEmail) };
     }
   }),
 
   /**
-   * Self-registration for fighters: plain Supabase Auth signUp, no invite
-   * needed (unlike the admin flow in panel-login). Logs the user in
-   * immediately after creating the account (no separate login step) so
-   * /inscripcion can go straight from "crea tu contrasena" to the profile
-   * form in one submit.
+   * Self-registration for fighters: creates a row in participant_users
+   * with a PBKDF2 password hash, then logs them in immediately (no
+   * separate login step) so /inscripcion can go straight from "crea tu
+   * contrasena" to the profile form in one submit.
    */
   registerParticipant: defineAction({
     accept: "form",
@@ -368,19 +323,36 @@ export const server = {
         throw new ActionError({ code: "FORBIDDEN", message: "Las inscripciones estan cerradas." });
       }
 
-      const [supabase, msg] = createSupabaseServerClient(context.request, context.cookies, context.locals);
-      if (!supabase) {
+      const [admin, msg] = createSupabaseAdminClient(context.locals);
+      if (!admin) {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
       }
 
-      const { error: signUpError } = await supabase.auth.signUp({ email, password });
-      if (signUpError) {
-        throw new ActionError({ code: "BAD_REQUEST", message: signUpError.message });
+      const normalizedEmail = email.trim().toLowerCase();
+      const { data: existing } = await admin
+        .from("participant_users")
+        .select("id")
+        .eq("email", normalizedEmail)
+        .maybeSingle();
+
+      if (existing) {
+        throw new ActionError({ code: "BAD_REQUEST", message: "Ese email ya tiene una cuenta." });
       }
 
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-      if (signInError) {
-        throw new ActionError({ code: "UNAUTHORIZED", message: signInError.message });
+      const passwordHash = await hashPassword(password);
+      const { data: created, error } = await admin
+        .from("participant_users")
+        .insert({ email: normalizedEmail, password_hash: passwordHash })
+        .select("id")
+        .single();
+
+      if (error || !created) {
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: error?.message ?? "No se pudo crear la cuenta." });
+      }
+
+      const sessionId = await createSession(context.cookies, context.locals, created.id);
+      if (!sessionId) {
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: "No se pudo crear la sesion." });
       }
 
       return { success: true };
@@ -394,14 +366,24 @@ export const server = {
       password: z.string().min(6)
     }),
     handler: async ({ email, password }, context) => {
-      const [supabase, msg] = createSupabaseServerClient(context.request, context.cookies, context.locals);
-      if (!supabase) {
+      const [admin, msg] = createSupabaseAdminClient(context.locals);
+      if (!admin) {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
       }
 
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
+      const { data: existing } = await admin
+        .from("participant_users")
+        .select("id, password_hash")
+        .eq("email", email.trim().toLowerCase())
+        .maybeSingle();
+
+      if (!existing || !(await verifyPassword(password, existing.password_hash))) {
         throw new ActionError({ code: "UNAUTHORIZED", message: "Credenciales invalidas." });
+      }
+
+      const sessionId = await createSession(context.cookies, context.locals, existing.id);
+      if (!sessionId) {
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: "No se pudo crear la sesion." });
       }
 
       return { success: true };
@@ -410,16 +392,7 @@ export const server = {
 
   logoutParticipant: defineAction({
     handler: async (_input, context) => {
-      const [supabase, msg] = createSupabaseServerClient(context.request, context.cookies, context.locals);
-      if (!supabase) {
-        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
-      }
-      await signOutAndClearCookies(supabase, context.request, context.cookies);
-      // Tambien limpia el gate del panel: sin esto, un admin que cierra
-      // sesion desde /inscripcion se queda con velada_panel_unlocked=true
-      // de una sesion Supabase vieja, y el proximo login por cualquier via
-      // salta directo al panel sin pedir la passphrase de nuevo.
-      context.cookies.delete("velada_panel_unlocked", { path: "/" });
+      await destroySession(context.cookies, context.locals);
       return { success: true };
     }
   }),
@@ -435,7 +408,7 @@ export const server = {
     accept: "form",
     input: z.object(ownParticipantFields),
     handler: async (input, context) => {
-      const session = requirePanelAuth(await getParticipantSession(context.request, context.cookies, undefined, context.locals));
+      const session = requireSession(await getSession(context.cookies, context));
       const [admin, msg] = createSupabaseAdminClient(context.locals);
       if (!admin) {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
@@ -559,7 +532,7 @@ export const server = {
       banner: z.instanceof(File).optional()
     }),
     handler: async (input, context) => {
-      requirePanelAuth(await getPanelSession(context.request, context.cookies, undefined, context.locals));
+      requirePanelAuth(await getSession(context.cookies, context));
       const [admin, msg] = createSupabaseAdminClient(context.locals);
       if (!admin) {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
@@ -650,7 +623,7 @@ export const server = {
     accept: "form",
     input: z.object({ id: z.string().min(1) }),
     handler: async ({ id }, context) => {
-      requirePanelAuth(await getPanelSession(context.request, context.cookies, undefined, context.locals));
+      requirePanelAuth(await getSession(context.cookies, context));
       const [admin, msg] = createSupabaseAdminClient(context.locals);
       if (!admin) {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
@@ -692,7 +665,7 @@ export const server = {
       lolServer: z.string().min(1)
     }),
     handler: async ({ lolUsername, lolServer }, context) => {
-      requirePanelAuth(await getPanelSession(context.request, context.cookies, undefined, context.locals));
+      requirePanelAuth(await getSession(context.cookies, context));
       return fetchRiotRank(lolUsername, lolServer, context.locals);
     }
   }),
@@ -700,13 +673,13 @@ export const server = {
   /**
    * Live-check for the Riot ID + server as the fighter types it in
    * /inscripcion, driving the green check / yellow spinner / red X
-   * indicator next to the field before they submit. Requires a
-   * participant session (not full panel auth) so it stays usable by
-   * fighters self-registering, but isn't a fully anonymous endpoint that
-   * could burn through the Riot API rate limit. Never throws for the
-   * expected "still typing" or "typo" states (not_found / invalid) — only
-   * real infra failures (missing key, Riot API down) throw, matching
-   * fetchRiotRank's own error semantics.
+   * indicator next to the field before they submit. Requires a logged-in
+   * session (not full panel auth) so it stays usable by fighters
+   * self-registering, but isn't a fully anonymous endpoint that could burn
+   * through the Riot API rate limit. Never throws for the expected "still
+   * typing" or "typo" states (not_found / invalid) — only real infra
+   * failures (missing key, Riot API down) throw, matching fetchRiotRank's
+   * own error semantics.
    */
   checkRiotProfile: defineAction({
     accept: "form",
@@ -715,7 +688,7 @@ export const server = {
       lolServer: z.string().min(1)
     }),
     handler: async ({ lolUsername, lolServer }, context) => {
-      requirePanelAuth(await getParticipantSession(context.request, context.cookies, undefined, context.locals));
+      requireSession(await getSession(context.cookies, context));
 
       const serverKey = lolServer.toUpperCase();
       if (!RIOT_PLATFORM_BY_SERVER[serverKey]) {

@@ -2,8 +2,7 @@
 export const prerender = false;
 
 import Layout from "../layouts/Layout.astro";
-import { getParticipantSession } from "../lib/participantSession";
-import { getPanelSession } from "../lib/panelSession";
+import { getSession } from "../lib/session";
 import { findParticipantByOwner } from "../lib/loadParticipants";
 import { fetchEventState } from "../lib/eventState";
 import { actions } from "astro:actions";
@@ -11,14 +10,14 @@ import ParticipantProfileForm from "../components/ParticipantProfileForm";
 import AuthGate from "../components/AuthGate";
 import { PAGES } from "@velada/core";
 
-const session = await getParticipantSession(Astro.request, Astro.cookies, undefined, Astro.locals);
+const session = await getSession(Astro.cookies, Astro);
 const existingParticipant = session ? await findParticipantByOwner(session.userId, Astro.locals) : null;
 const eventState = await fetchEventState();
 
-// Solo para mostrar el aviso "tambien sos admin" + el link al panel: no
-// exige passphrase, solo indica si esta cuenta esta en la tabla admins.
-const panelSession = session ? await getPanelSession(Astro.request, Astro.cookies, undefined, Astro.locals) : null;
-const isAlsoAdmin = panelSession !== null;
+// isAdmin ya viene resuelto en la sesion unificada (ADMIN_EMAILS), no hace
+// falta un segundo lookup separado como cuando panel y participantes eran
+// dos sistemas de auth distintos.
+const isAlsoAdmin = session?.isAdmin ?? false;
 
 /**
  * Closing registrations only blocks brand-new signups (no session yet, or a

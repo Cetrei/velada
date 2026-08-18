@@ -2,7 +2,7 @@ import { useState } from "react";
 import { actions } from "astro:actions";
 import { PAGES } from "@velada/core";
 
-type Step = "email" | "login" | "register";
+type Step = "email" | "login" | "register" | "admin";
 type StatusMessage = { type: "success" | "error"; text: string } | null;
 
 const copy = PAGES.inscripcion;
@@ -45,7 +45,35 @@ export default function AuthGate() {
         setStatus({ type: "error", text: errorMessage(error) });
         return;
       }
-      setStep(data.exists ? "login" : "register");
+      if (data.isAdmin) {
+        setStep("admin");
+      } else {
+        setStep(data.exists ? "login" : "register");
+      }
+    } catch (err) {
+      setStatus({ type: "error", text: errorMessage(err) });
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  /**
+   * Admin emails (ADMIN_EMAILS) skip the password entirely — the shared
+   * `login` action authenticates them by email alone. They still hit the
+   * separate PANEL_PASSPHRASE gate once inside /gestion-roster-x9f2.
+   */
+  async function handleAdminLogin() {
+    setStatus(null);
+    setIsBusy(true);
+    try {
+      const form = new FormData();
+      form.set("email", email);
+      const { error } = await actions.login(form);
+      if (error) {
+        setStatus({ type: "error", text: errorMessage(error) });
+        return;
+      }
+      window.location.reload();
     } catch (err) {
       setStatus({ type: "error", text: errorMessage(err) });
     } finally {
@@ -108,6 +136,7 @@ export default function AuthGate() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (step === "email") handleEmailContinue();
+    else if (step === "admin") handleAdminLogin();
     else if (step === "login") handleLogin();
     else handleRegister();
   }
@@ -138,6 +167,12 @@ export default function AuthGate() {
             autoFocus
           />
         </label>
+
+        {step === "admin" && (
+          <p className="text-xs text-slate-500">
+            Esta cuenta tiene acceso de host. Segui para entrar sin contrasena.
+          </p>
+        )}
 
         {step === "login" && (
           <label className="block">
@@ -185,7 +220,13 @@ export default function AuthGate() {
           disabled={isBusy}
           className="w-full py-3 px-6 bg-gradient-to-r from-lol-gold to-yellow-600 hover:from-yellow-500 hover:to-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed text-black font-display font-bold uppercase tracking-wide rounded"
         >
-          {step === "email" ? copy.continueCta : step === "login" ? copy.loginCta : copy.registerCta}
+          {step === "email"
+            ? copy.continueCta
+            : step === "admin"
+              ? copy.loginCta
+              : step === "login"
+                ? copy.loginCta
+                : copy.registerCta}
         </button>
 
         {step !== "email" && (

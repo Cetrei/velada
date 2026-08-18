@@ -3,13 +3,13 @@ export const prerender = false;
 
 import Layout from "../layouts/Layout.astro";
 import { actions, isInputError } from "astro:actions";
-import { getPanelSession } from "../lib/panelSession";
+import { getSession } from "../lib/session";
 import { loadParticipants } from "../lib/loadParticipants";
 import ParticipantManager from "../components/ParticipantManager";
 import { PAGES } from "@velada/core";
 
-const session = await getPanelSession(Astro.request, Astro.cookies, undefined, Astro.locals);
-if (!session) {
+const session = await getSession(Astro.cookies, Astro);
+if (!session || !session.isAdmin) {
   return Astro.redirect("/panel-login?error=forbidden");
 }
 
