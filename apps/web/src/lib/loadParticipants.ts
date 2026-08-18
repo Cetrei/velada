@@ -107,8 +107,11 @@ export async function loadParticipants(): Promise<Participant[]> {
  * here, but mainly to keep this lookup reliable regardless of RLS changes.
  */
 export async function findParticipantByOwner(ownerUserId: string): Promise<Participant | null> {
-  const admin = createSupabaseAdminClient();
-  if (!admin) return null;
+  const [admin, msg] = createSupabaseAdminClient();
+  if (!admin) {
+    console.warn("No se pudo crear el cliente de Supabase admin:", msg);
+    return null;
+  }
 
   const { data, error } = await admin
     .from("participants")

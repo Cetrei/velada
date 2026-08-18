@@ -23,8 +23,15 @@ export async function getParticipantSession(
   cookies: AstroCookies,
   existingClient?: SupabaseClient
 ): Promise<ParticipantSession | null> {
-  const supabase = existingClient ?? createSupabaseServerClient(request, cookies);
-  if (!supabase) return null;
+  if (!existingClient) {
+    console.warn("Cliente Supabase inexistente");
+    return null;
+  }
+  const [supabase, msg] = createSupabaseServerClient(request, cookies);
+  if (!supabase) {
+    console.warn("No se pudo crear el cliente de Supabase:", msg);
+    return null;
+  }
 
   const {
     data: { user }

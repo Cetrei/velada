@@ -145,9 +145,9 @@ export const server = {
       password: z.string().min(6)
     }),
     handler: async ({ email, password }, context) => {
-      const supabase = createSupabaseServerClient(context.request, context.cookies);
+      const [supabase, msg] = createSupabaseServerClient(context.request, context.cookies);
       if (!supabase) {
-        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: "Supabase no configurado." });
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
       }
 
       const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -188,9 +188,9 @@ export const server = {
       refreshToken: z.string().min(1)
     }),
     handler: async ({ accessToken, refreshToken }, context) => {
-      const supabase = createSupabaseServerClient(context.request, context.cookies);
+      const [supabase, msg] = createSupabaseServerClient(context.request, context.cookies);
       if (!supabase) {
-        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: "Supabase no configurado." });
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
       }
 
       const { error } = await supabase.auth.setSession({
@@ -216,8 +216,10 @@ export const server = {
 
   logout: defineAction({
     handler: async (_input, context) => {
-      const supabase = createSupabaseServerClient(context.request, context.cookies);
-      if (supabase) await supabase.auth.signOut();
+      const [supabase, msg] = createSupabaseServerClient(context.request, context.cookies);
+      if (!supabase) throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
+      
+      await supabase.auth.signOut();
       context.cookies.delete("velada_panel_unlocked", { path: "/" });
       return { success: true };
     }
@@ -228,9 +230,9 @@ export const server = {
     input: z.object({ passphrase: z.string().min(1) }),
     handler: async ({ passphrase }, context) => {
       const session = requirePanelAuth(await getPanelSession(context.request, context.cookies));
-      const supabase = createSupabaseServerClient(context.request, context.cookies);
+      const [supabase, msg] = createSupabaseServerClient(context.request, context.cookies);
       if (!supabase) {
-        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: "Supabase no configurado." });
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
       }
 
       const { data, error } = await supabase.rpc("verify_panel_passphrase", { input: passphrase });
@@ -298,9 +300,9 @@ export const server = {
         throw new ActionError({ code: "FORBIDDEN", message: "Las inscripciones estan cerradas." });
       }
 
-      const supabase = createSupabaseServerClient(context.request, context.cookies);
+      const [supabase, msg] = createSupabaseServerClient(context.request, context.cookies);
       if (!supabase) {
-        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: "Supabase no configurado." });
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
       }
 
       const { error: signUpError } = await supabase.auth.signUp({ email, password });
@@ -324,9 +326,9 @@ export const server = {
       password: z.string().min(6)
     }),
     handler: async ({ email, password }, context) => {
-      const supabase = createSupabaseServerClient(context.request, context.cookies);
+      const [supabase, msg] = createSupabaseServerClient(context.request, context.cookies);
       if (!supabase) {
-        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: "Supabase no configurado." });
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
       }
 
       const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -340,8 +342,11 @@ export const server = {
 
   logoutParticipant: defineAction({
     handler: async (_input, context) => {
-      const supabase = createSupabaseServerClient(context.request, context.cookies);
-      if (supabase) await supabase.auth.signOut();
+      const [supabase, msg] = createSupabaseServerClient(context.request, context.cookies);
+      if (!supabase) {
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
+      }
+      await supabase.auth.signOut();
       return { success: true };
     }
   }),
@@ -358,9 +363,9 @@ export const server = {
     input: z.object(ownParticipantFields),
     handler: async (input, context) => {
       const session = requirePanelAuth(await getParticipantSession(context.request, context.cookies));
-      const admin = createSupabaseAdminClient();
+      const [admin, msg] = createSupabaseAdminClient();
       if (!admin) {
-        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: "Supabase admin no configurado." });
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
       }
 
       const { rank } = await fetchRiotRank(input.lolUsername, input.lolServer);
@@ -482,9 +487,9 @@ export const server = {
     }),
     handler: async (input, context) => {
       requirePanelAuth(await getPanelSession(context.request, context.cookies));
-      const admin = createSupabaseAdminClient();
+      const [admin, msg] = createSupabaseAdminClient();
       if (!admin) {
-        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: "Supabase admin no configurado." });
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
       }
 
       let photoUrl: string | undefined;
@@ -573,9 +578,9 @@ export const server = {
     input: z.object({ id: z.string().min(1) }),
     handler: async ({ id }, context) => {
       requirePanelAuth(await getPanelSession(context.request, context.cookies));
-      const admin = createSupabaseAdminClient();
+      const [admin, msg] = createSupabaseAdminClient();
       if (!admin) {
-        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: "Supabase admin no configurado." });
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
       }
 
       try {
