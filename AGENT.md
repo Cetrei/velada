@@ -64,10 +64,50 @@ Se decidio (con el usuario, no unilateral) migrar a SSR completo
 - Correr `bun run setup:db` con `SUPABASE_ACCESS_TOKEN` y
   `SUPABASE_PROJECT_REF` reales para provisionar la base.
 - Borrar manualmente `apps/web/src/components/Roulette.tsx` (deprecated).
+- Borrar manualmente `scripts/check-admin.ts` (script de diagnostico
+  puntual usado para depurar el bug de sesion del magic link, ya resuelto;
+  el MCP de filesystem no expone delete).
 - Definir imagenes reales para `photo`/`banner` de cada participante (hoy
   cae a placeholder de placehold.co).
-- Evaluar si `admin.astro` necesita autenticacion real (hoy no tiene guard,
-  cualquiera con la URL puede controlar el evento).
+
+## Sistema de auth del panel (resuelto 2026-08-18)
+`/panel-login` soporta login por password (`signInWithPassword`) y por
+magic link. `admin.astro` fue renombrado/reemplazado por
+`gestion-roster-x9f2.astro` con guard real via `getPanelSession`
+(`apps/web/src/lib/panelSession.ts`): exige usuario autenticado en
+Supabase Auth + fila en la tabla `admins` + passphrase verificada
+(`PANEL_PASSPHRASE`, cookie `velada_panel_unlocked`).
+
+`scripts/resend-invite.ts` genera magic links para admins ya invitados sin
+gastar el rate limit de emails de Supabase. Dos bugs de Supabase Auth
+encontrados y resueltos ahi:
+- `generate_link` con `type: magiclink` sobre un usuario existente ignora
+  el `redirect_to` pasado y devuelve `action_link`/`redirect_to` apuntando
+  al Site URL raiz (bug conocido, supabase/auth#1738). El fix: no usar el
+  `action_link` de la respuesta, reconstruir la URL de verify a mano con
+  `hashed_token` + `redirect_to` propio, porque `/auth/v1/verify` si lee
+  `redirect_to` de la query string real de la request del browser.
+- `establishMagicLinkSession` (Astro Action en `actions/index.ts`) llama
+  `supabase.auth.setSession()` y despues necesita validar la sesion antes
+  de devolver éxito. Un `getPanelSession()` que crea su propio cliente
+  Supabase falla ahi con "Auth session missing": ese cliente nuevo lee
+  cookies del `request.headers` original, que no tiene las cookies recien
+  escritas por `setSession()` (esas solo existen en la response de salida,
+  no en la request entrante). Fix: `getPanelSession` ahora acepta un
+  cliente ya autenticado como tercer parametro opcional
+  (`existingClient`), y tanto `login` como `establishMagicLinkSession` le
+  pasan el mismo cliente que hizo `signInWithPassword`/`setSession` en vez
+  de dejarlo crear uno nuevo.
+
+Redirect URLs necesarias en Supabase Dashboard (Authentication > URL
+Configuration): el Site URL solo no alcanza, hace falta agregar
+`https://<dominio>/panel-login` explicitamente a la lista (wildcards tipo
+`/*` no lo resolvieron en las pruebas de esta sesion, aunque el bug real
+era el de arriba, no whitelist).
+
+- Evaluar si hace falta manejar `type=recovery` o expiracion de magic link
+  con mejor UX (hoy el script del cliente en `panel-login.astro` muestra
+  el error crudo de Supabase).
 
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones

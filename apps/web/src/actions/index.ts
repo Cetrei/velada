@@ -53,7 +53,7 @@ export const server = {
         throw new ActionError({ code: "UNAUTHORIZED", message: "Credenciales invalidas." });
       }
 
-      const session = await getPanelSession(context.request, context.cookies);
+      const session = await getPanelSession(context.request, context.cookies, supabase);
       if (!session) {
         await supabase.auth.signOut();
         throw new ActionError({
@@ -75,6 +75,10 @@ export const server = {
    * reads that fragment and calls this action, which runs
    * supabase.auth.setSession() on the server so @supabase/ssr writes the
    * actual session cookies getPanelSession() reads on every other page.
+   *
+   * Passes `supabase` itself into getPanelSession instead of letting it
+   * create a fresh client - see the comment on getPanelSession for why a
+   * fresh client fails right after setSession() in the same request.
    */
   establishMagicLinkSession: defineAction({
     input: z.object({
@@ -92,18 +96,10 @@ export const server = {
         refresh_token: refreshToken
       });
       if (error) {
-        console.log(`[debug] setSession error: ${JSON.stringify(error)}`);
         throw new ActionError({ code: "UNAUTHORIZED", message: "Link invalido o expirado." });
       }
 
-      const {
-        data: { user: rawUser },
-        error: getUserError
-      } = await supabase.auth.getUser();
-      console.log(`[debug] getUser after setSession: user=${JSON.stringify(rawUser?.id)} email=${rawUser?.email} error=${JSON.stringify(getUserError)}`);
-
-      const session = await getPanelSession(context.request, context.cookies);
-      console.log(`[debug] getPanelSession result: ${JSON.stringify(session)}`);
+      const session = await getPanelSession(context.request, context.cookies, supabase);
       if (!session) {
         await supabase.auth.signOut();
         throw new ActionError({
