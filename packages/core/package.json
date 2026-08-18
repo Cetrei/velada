@@ -1,0 +1,9 @@
+{
+  "name": "@velada/core",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "dependencies": {
+    "zod": "^3.22.4",
+    "yaml": "^2.3.4"
+  }
+}
