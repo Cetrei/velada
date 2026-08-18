@@ -23,45 +23,45 @@ export const NAV = {
 
 export const PAGES = {
   home: {
-    tabTitle: "La Velada LoL - Especial Amigos",
+    tabTitle: "La Venida del Año",
     hero: {
-      eyebrow: "El Evento de la Década",
+      eyebrow: "La corrida de la decada",
       titleLine1: "El",
-      titleHighlight: "Enfrentamiento",
+      titleHighlight: "Phonk",
       titleLine2: "Final",
       subtitle: (fighterCount: number) =>
-        `${fighterCount} combatientes, un solo servidor. La Grieta del Invocador está a punto de arder.`
+        `${fighterCount} pajeros, un solo sigma. La Grieta del Invocador está a punto temblar.`
     },
     overview: {
       title: "Los Peleadores",
       subtitle: (fighterCount: number) =>
-        `${fighterCount} combatientes confirmados. Aquí un adelanto del roster completo.`,
+        `${fighterCount} combatientes confirmados. Adelanto del roster completo.`,
       cta: "Ver el roster completo"
     },
     raffle: {
       title: "Sorteo Oficial",
       subtitleLive: "El sorteo ya está en vivo. Entra y descubre los cruces en tiempo real.",
       subtitleWaiting:
-        "La suerte decidirá los cruces. El sorteo se transmite en vivo para todos los espectadores.",
+        "La suerte decidira quien folla a quien. El sorteo se replica en vivo para todos.",
       ctaLive: "Entrar al sorteo en vivo",
       ctaWaiting: "Ver estado del sorteo"
     }
   },
 
   fighters: {
-    tabTitle: "Peleadores - La Velada LoL",
+    tabTitle: "Peleadores - La Venida en LoL",
     title: "Roster Completo",
     subtitle: (fighterCount: number) => `${fighterCount} combatientes listos para la Grieta del Invocador.`
   },
 
   raffle: {
-    tabTitle: "Sorteo en Vivo - La Velada LoL",
+    tabTitle: "Sorteo en Vivo - La Venida del Año",
     title: "Sorteo Oficial",
-    subtitle: "La suerte decidirá los cruces. En vivo para todo el mundo."
+    subtitle: "La suerte decidira quien folla a quien. En vivo para todo el mundo."
   },
 
   panelLogin: {
-    tabTitle: "Acceso al Panel - La Velada LoL",
+    tabTitle: "Acceso al Panel - La Venida del Año",
     title: "Acceso al Panel",
     emailLabel: "Email",
     passwordLabel: "Contraseña",
@@ -70,7 +70,7 @@ export const PAGES = {
   },
 
   panelPassphrase: {
-    tabTitle: "Gestion de Participantes - La Velada LoL",
+    tabTitle: "Gestion de Participantes - La Venida del Año",
     title: "Clave del panel",
     subtitle: (email: string) => `Sesion iniciada como ${email}. Ingresa la clave adicional del panel.`,
     label: "Clave",
@@ -84,9 +84,9 @@ export const PAGES = {
   },
 
   admin: {
-    tabTitle: "Panel Admin - La Velada LoL",
+    tabTitle: "Panel Admin - La Venida del Año",
     title: "Panel del Host",
-    subtitle: "Control de fase del evento y emisión del sorteo en vivo."
+    subtitle: "Control de fase del evento y emisión del sorteo."
   }
 };
 
