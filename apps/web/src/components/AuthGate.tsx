@@ -130,6 +130,10 @@ export default function AuthGate() {
    * Admin emails (ADMIN_EMAILS) skip the password entirely — the shared
    * `login` action authenticates them by email alone. They still hit the
    * separate PANEL_PASSPHRASE gate once inside /gestion-roster-x9f2.
+   * Redirects to the landing page on success, same as fighter login/
+   * register below — the nav's "Mi Perfil" link (or, for admins, the
+   * host-panel link shown from /mi-perfil) is how they get to editing
+   * from there, not an automatic redirect out of /inscripcion.
    */
   async function handleAdminLogin() {
     setStatus(null);
@@ -142,7 +146,7 @@ export default function AuthGate() {
         setStatus({ type: "error", text: errorMessage(error) });
         return;
       }
-      window.location.reload();
+      window.location.href = "/";
     } catch (err) {
       setStatus({ type: "error", text: errorMessage(err) });
     } finally {
@@ -162,7 +166,7 @@ export default function AuthGate() {
         setStatus({ type: "error", text: errorMessage(error) });
         return;
       }
-      window.location.reload();
+      window.location.href = "/";
     } catch (err) {
       setStatus({ type: "error", text: errorMessage(err) });
     } finally {
@@ -191,7 +195,13 @@ export default function AuthGate() {
         setStatus({ type: "error", text: errorMessage(error) });
         return;
       }
-      window.location.reload();
+      // Una cuenta recien creada todavia no tiene ficha de peleador
+      // (saveOwnParticipant nunca corrio) — se manda a /mi-perfil
+      // directo en vez de al landing, asi el registro no deja a nadie
+      // a mitad de camino sin saber que le falta completar los datos
+      // minimos. El login (arriba) si va al landing porque ya tiene
+      // cuenta y probablemente ya tiene ficha tambien.
+      window.location.href = "/mi-perfil";
     } catch (err) {
       setStatus({ type: "error", text: errorMessage(err) });
     } finally {

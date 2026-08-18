@@ -21,7 +21,8 @@ export const NAV = {
     { href: "/sorteo", label: "Sorteo" }
   ],
   liveCta: "Ver en Vivo",
-  registerCta: "Inscribirme"
+  registerCta: "Inscribirme",
+  profileCta: "Mi Perfil"
 };
 
 export const PAGES = {
@@ -148,11 +149,7 @@ export const PAGES = {
 
   rosterManager: {
     title: "Gestion de Participantes",
-    subtitle: "Editá o eliminá los perfiles que cada peleador cargó desde /inscripcion.",
-    logoutCta: "Cerrar sesion"
-  },
-
-  admin: {
+    subtitle: "Editá o eliminá los perfiles que cada peleador cargó desde /mi-perfil.: {
     tabTitle: "Panel Admin - La Venida del Año",
     title: "Panel del Host",
     subtitle: "Control de fase del evento, combates y sorteo."
@@ -161,11 +158,7 @@ export const PAGES = {
   inscripcion: {
     tabTitle: "Inscripción - La Venida del Año",
     title: "Inscripción",
-    closedTitle: "Inscripciones cerradas",
-    closedSubtitle: "El host cerró las inscripciones por ahora. Volvé a intentarlo más tarde.",
     subtitleAuth: "Ingresá tu email para crear tu cuenta o iniciar sesión.",
-    subtitleNewProfile: "Ya tenés cuenta. Ahora completá tu ficha de peleador.",
-    subtitleEditProfile: "Este es tu perfil. Podés editarlo cuando quieras.",
     emailLabel: "Email",
     passwordLabel: "Contraseña",
     confirmPasswordLabel: "Confirmar contraseña",
@@ -175,16 +168,8 @@ export const PAGES = {
     existingAccountHint: "Ya tenés cuenta. Ingresá tu contraseña para continuar.",
     loginCta: "Entrar",
     registerCta: "Crear cuenta",
-    logoutCta: "Cerrar sesión",
     errorEmailInvalid: "Ingresá un email válido.",
     errorPasswordMismatch: "Las contraseñas no coinciden.",
-    registerSuccess: "Cuenta creada. Ahora completá tu perfil.",
-    rankPendingHint: "Tu rango se consulta automáticamente desde Riot al guardar — no se puede escribir a mano.",
-    currentRankLabel: "Rango actual",
-    submitCreateCta: "Crear mi perfil",
-    submitUpdateCta: "Guardar cambios",
-    successCreated: "¡Perfil creado! Ya formás parte del roster.",
-    successUpdated: "Perfil actualizado.",
     emailCheckingHint: "Verificando email...",
     emailNewAccountHint: "Email válido. Vamos a crear tu cuenta.",
     emailExistingAccountHint: "Ya tenés cuenta con este email.",
@@ -195,6 +180,24 @@ export const PAGES = {
     passwordRequirementNumber: "Un número",
     passwordRequirementsMet: "Contraseña válida",
     passwordMatchHint: "Las contraseñas coinciden"
+  },
+
+  miPerfil: {
+    tabTitle: "Mi Perfil - La Venida del Año",
+    title: "Mi Perfil",
+    titleIncomplete: "Completá tu ficha",
+    closedTitle: "Inscripciones cerradas",
+    closedSubtitle: "El host cerró las inscripciones por ahora. Todavía podés editar tu perfil si ya tenías uno cargado.",
+    subtitleNewProfile: "Falta poco. Completá estos datos para aparecer en el roster.",
+    subtitleEditProfile: "Este es tu perfil. Podés editarlo cuando quieras.",
+    logoutCta: "Cerrar sesión",
+    rankPendingHint: "Tu rango se consulta automáticamente desde Riot al guardar — no se puede escribir a mano.",
+    currentRankLabel: "Rango actual",
+    submitCreateCta: "Crear mi perfil",
+    submitUpdateCta: "Guardar cambios",
+    successCreated: "¡Perfil creado! Ya formás parte del roster.",
+    successUpdated: "Perfil actualizado.",
+    incompleteBadge: "Perfil incompleto — todavía no aparecés en el roster público."
   }
 };
 

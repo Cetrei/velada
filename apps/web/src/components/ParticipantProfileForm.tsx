@@ -66,7 +66,7 @@ function formFromParticipant(p: Participant | null): typeof EMPTY_FORM {
   };
 }
 
-const copy = PAGES.inscripcion;
+const copy = PAGES.miPerfil;
 
 export default function ParticipantProfileForm({ existingParticipant }: ParticipantProfileFormProps) {
   const [form, setForm] = useState(formFromParticipant(existingParticipant));
