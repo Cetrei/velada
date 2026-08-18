@@ -3,6 +3,14 @@ main = "./dist/_worker.js/index.js"
 compatibility_date = "2026-04-15"
 compatibility_flags = ["nodejs_compat"]
 
+# Custom domain: velada.cetrei.dev debe existir como zona (cetrei.dev) en la
+# misma cuenta de Cloudflare. Wrangler crea el registro DNS y el binding
+# automaticamente en cada deploy. El token de CI necesita permisos de Zone
+# (Workers Routes: Edit, DNS: Edit) ademas de Account (Workers Scripts: Edit).
+routes = [
+  { pattern = "velada.cetrei.dev", custom_domain = true }
+]
+
 [assets]
 directory = "./dist"
 binding = "ASSETS"

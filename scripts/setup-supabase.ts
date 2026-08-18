@@ -255,23 +255,32 @@ interface SupabaseInviteResponse {
  * Invites a user by email via Supabase Auth Admin API and marks them as
  * admin. Idempotent: if the user already exists, looks them up instead of
  * failing, and the admins insert uses ON CONFLICT DO NOTHING.
+ * If siteUrl is set, passes redirect_to=<siteUrl>/panel-login so the invite
+ * email lands on the deployed app instead of Supabase's default Site URL
+ * (which defaults to localhost and 404s in production).
  */
 async function inviteAdmin(
   endpoint: string,
   serviceRoleKey: string,
   projectRef: string,
   accessToken: string,
-  email: string
+  email: string,
+  siteUrl: string | undefined
 ): Promise<void> {
-  const inviteResponse = await fetch(`${endpoint}/auth/v1/invite`, {
-    method: "POST",
-    headers: {
-      apikey: serviceRoleKey,
-      Authorization: `Bearer ${serviceRoleKey}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ email })
-  });
+  const redirectTo = siteUrl ? `${siteUrl.replace(/\/$/, "")}/panel-login` : undefined;
+
+  const inviteResponse = await fetch(
+    `${endpoint}/auth/v1/invite${redirectTo ? `?redirect_to=${encodeURIComponent(redirectTo)}` : ""}`,
+    {
+      method: "POST",
+      headers: {
+        apikey: serviceRoleKey,
+        Authorization: `Bearer ${serviceRoleKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ email })
+    }
+  );
 
   let userId: string;
 
@@ -428,6 +437,14 @@ async function main() {
 
   console.log("5/6 Invitando admins (ADMIN_EMAILS en .env, separados por coma)...");
   const adminEmailsRaw = process.env.ADMIN_EMAILS;
+  const siteUrl = process.env.SITE_URL;
+  if (!siteUrl) {
+    console.log(
+      "  SITE_URL no definido: el correo de invitacion usara el Site URL configurado" +
+        " en el dashboard de Supabase (Authentication > URL Configuration), no /panel-login." +
+        " Agrega SITE_URL=https://tu-dominio al .env para fijar el destino explicitamente."
+    );
+  }
   if (!adminEmailsRaw) {
     console.log(
       "  ADMIN_EMAILS no definido, se omite. Agrega ADMIN_EMAILS=tu@email.com,amigo@email.com" +
@@ -440,7 +457,7 @@ async function main() {
       .filter(Boolean);
     for (const email of emails) {
       try {
-        await inviteAdmin(endpoint, serviceRoleKey, projectRef, accessToken, email);
+        await inviteAdmin(endpoint, serviceRoleKey, projectRef, accessToken, email, siteUrl);
       } catch (error) {
         if (error instanceof RateLimitError) {
           console.warn(`  ⚠ ${error.message}`);
