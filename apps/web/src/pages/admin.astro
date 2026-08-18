@@ -1,0 +1,40 @@
+---
+export const prerender = false;
+
+import Layout from "../layouts/Layout.astro";
+import AdminControl from "../components/AdminControl";
+import { loadParticipants } from "../lib/loadParticipants";
+import { fetchEventState } from "../lib/eventState";
+import { getPanelSession } from "../lib/panelSession";
+
+const session = await getPanelSession(Astro.request, Astro.cookies);
+if (!session) {
+  return Astro.redirect("/panel-login?error=forbidden");
+}
+
+const participants = loadParticipants();
+const eventState = await fetchEventState();
+---
+
+<Layout title="Panel Admin - La Velada LoL">
+  <section class="pt-32 pb-24 bg-lol-darkBg min-h-screen">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center mb-16">
+        <h1 class="font-display text-4xl md:text-5xl font-bold text-white uppercase tracking-wider">
+          Panel del Host
+        </h1>
+        <div class="h-1 w-24 bg-lol-gold mx-auto mt-6"></div>
+        <p class="text-slate-400 mt-6 max-w-xl mx-auto">
+          Control de fase del evento y emisión del sorteo en vivo.
+        </p>
+      </div>
+
+      <AdminControl
+        client:load
+        participants={participants}
+        initialRouletteUnlocked={eventState.rouletteUnlocked}
+        initialPhase={eventState.currentPhase}
+      />
+    </div>
+  </section>
+</Layout>

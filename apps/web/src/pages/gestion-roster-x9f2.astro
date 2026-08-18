@@ -1,0 +1,94 @@
+---
+export const prerender = false;
+
+import Layout from "../layouts/Layout.astro";
+import { actions, isInputError } from "astro:actions";
+import { getPanelSession } from "../lib/panelSession";
+import { loadParticipants } from "../lib/loadParticipants";
+import ParticipantManager from "../components/ParticipantManager";
+
+const session = await getPanelSession(Astro.request, Astro.cookies);
+if (!session) {
+  return Astro.redirect("/panel-login?error=forbidden");
+}
+
+const passphraseResult = Astro.getActionResult(actions.verifyPassphrase);
+if (passphraseResult && !passphraseResult.error) {
+  return Astro.redirect("/gestion-roster-x9f2");
+}
+
+const initialParticipants = loadParticipants();
+---
+
+<Layout title="Gestion de Participantes - La Velada LoL">
+  <section class="pt-32 pb-24 bg-lol-darkBg min-h-screen">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      {
+        !session.passphraseVerified ? (
+          <div class="max-w-md mx-auto">
+            <div class="text-center mb-10">
+              <h1 class="font-display text-3xl font-bold text-white uppercase tracking-wider">
+                Clave del panel
+              </h1>
+              <div class="h-1 w-16 bg-lol-gold mx-auto mt-4" />
+              <p class="text-slate-400 mt-4 text-sm">
+                Sesion iniciada como {session.email}. Ingresa la clave adicional del panel.
+              </p>
+            </div>
+
+            {passphraseResult?.error && (
+              <div class="text-sm p-3 rounded mb-6 bg-red-900/30 text-red-400 border border-red-800">
+                {isInputError(passphraseResult.error)
+                  ? "Ingresa una clave."
+                  : passphraseResult.error.message}
+              </div>
+            )}
+
+            <form
+              method="POST"
+              action={actions.verifyPassphrase}
+              class="bg-lol-cardBg border border-lol-border p-6 rounded-xl space-y-4"
+            >
+              <div>
+                <label class="block text-xs uppercase text-slate-400 mb-2" for="passphrase">
+                  Clave
+                </label>
+                <input
+                  type="password"
+                  id="passphrase"
+                  name="passphrase"
+                  required
+                  class="w-full bg-lol-darkBg border border-lol-border rounded px-4 py-3 text-white focus:border-lol-gold outline-none"
+                />
+              </div>
+              <button
+                type="submit"
+                class="w-full py-3 px-6 bg-lol-gold text-black font-bold uppercase tracking-wide hover:bg-yellow-400 transition-all"
+              >
+                Desbloquear
+              </button>
+            </form>
+          </div>
+        ) : (
+          <>
+            <div class="text-center mb-12">
+              <h1 class="font-display text-4xl font-bold text-white uppercase tracking-wider">
+                Gestion de Participantes
+              </h1>
+              <div class="h-1 w-24 bg-lol-gold mx-auto mt-6" />
+              <p class="text-slate-400 mt-4 text-sm flex items-center justify-center gap-2">
+                {session.email}
+                <form method="POST" action={actions.logout} class="inline">
+                  <button type="submit" class="text-lol-blue hover:underline">
+                    Cerrar sesion
+                  </button>
+                </form>
+              </p>
+            </div>
+            <ParticipantManager client:load initialParticipants={initialParticipants} />
+          </>
+        )
+      }
+    </div>
+  </section>
+</Layout>

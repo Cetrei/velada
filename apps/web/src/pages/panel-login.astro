@@ -1,0 +1,73 @@
+---
+export const prerender = false;
+
+import Layout from "../layouts/Layout.astro";
+import { actions, isInputError } from "astro:actions";
+import { getPanelSession } from "../lib/panelSession";
+
+const session = await getPanelSession(Astro.request, Astro.cookies);
+if (session) {
+  return Astro.redirect("/gestion-roster-x9f2");
+}
+
+const result = Astro.getActionResult(actions.login);
+if (result && !result.error) {
+  return Astro.redirect("/gestion-roster-x9f2");
+}
+---
+
+<Layout title="Acceso al Panel - La Velada LoL">
+  <section class="pt-32 pb-24 bg-lol-darkBg min-h-screen flex items-center">
+    <div class="max-w-md mx-auto px-4 sm:px-6 w-full">
+      <div class="text-center mb-10">
+        <h1 class="font-display text-3xl font-bold text-white uppercase tracking-wider">
+          Acceso al Panel
+        </h1>
+        <div class="h-1 w-16 bg-lol-gold mx-auto mt-4"></div>
+      </div>
+
+      {
+        result?.error && (
+          <div class="text-sm p-3 rounded mb-6 bg-red-900/30 text-red-400 border border-red-800">
+            {isInputError(result.error) ? "Revisa el formato del email." : result.error.message}
+          </div>
+        )
+      }
+
+      <form
+        method="POST"
+        action={actions.login}
+        class="bg-lol-cardBg border border-lol-border p-6 rounded-xl space-y-4"
+      >
+        <div>
+          <label class="block text-xs uppercase text-slate-400 mb-2" for="email">Email</label>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            required
+            class="w-full bg-lol-darkBg border border-lol-border rounded px-4 py-3 text-white focus:border-lol-gold outline-none"
+          />
+        </div>
+        <div>
+          <label class="block text-xs uppercase text-slate-400 mb-2" for="password">
+            Contraseña
+          </label>
+          <input
+            type="password"
+            id="password"
+            name="password"
+            required
+            class="w-full bg-lol-darkBg border border-lol-border rounded px-4 py-3 text-white focus:border-lol-gold outline-none"
+          />
+        </div>
+        <button
+          type="submit"
+          class="w-full py-3 px-6 bg-lol-gold text-black font-bold uppercase tracking-wide hover:bg-yellow-400 transition-all"
+        >
+          Entrar
+        </button>
+      </form>
+    </div>
+  </section>
+</Layout>
