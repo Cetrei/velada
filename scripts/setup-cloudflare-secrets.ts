@@ -69,7 +69,7 @@ function setGithubSecret(name: string, value: string): void {
 }
 
 function ensureWranglerCli(cwd: string): void {
-  const check = spawnSync("bunx", ["wrangler", "--version"], { stdio: "ignore", cwd });
+  const check = spawnSync("bunx", ["wrangler", "--version"], { stdio: "inherit", cwd });
   if (check.status !== 0) {
     console.error("wrangler no disponible via bunx. Corre `bun install` en apps/web primero.");
     process.exit(1);
@@ -79,13 +79,13 @@ function ensureWranglerCli(cwd: string): void {
 function setWorkerSecret(name: string, value: string, cwd: string): void {
   const result = spawnSync("bunx", ["wrangler", "secret", "put", name], {
     input: value,
-    stdio: ["pipe", "pipe", "pipe"],
+    stdio: ["pipe", "inherit", "inherit"],
     encoding: "utf-8",
     cwd
   });
 
   if (result.status !== 0) {
-    console.error(`Fallo al setear ${name} en el Worker:`, result.stderr.trim());
+    console.error(`Fallo al setear ${name} en el Worker.`);
     process.exit(1);
   }
 
