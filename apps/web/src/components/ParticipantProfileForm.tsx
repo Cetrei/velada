@@ -70,8 +70,18 @@ const copy = PAGES.inscripcion;
 
 export default function ParticipantProfileForm({ existingParticipant }: ParticipantProfileFormProps) {
   const [form, setForm] = useState(formFromParticipant(existingParticipant));
+  // IMPORTANTE: el _key inicial de cada stat existente NO puede venir de
+  // crypto.randomUUID()/Math.random() aca. Este useState corre tanto en el
+  // render de servidor (SSR) como en el primer render del cliente durante
+  // la hidratacion, y un valor no-determinista generaria un _key distinto
+  // en cada lado -> React detecta el mismatch y descarta todo el arbol
+  // hidratado (los errores #425/#423 en consola, que dejan el resto de la
+  // pagina - incluido el boton de cerrar sesion - sin JS funcionando).
+  // El indice es estable porque viene de datos ya guardados (mismo orden
+  // en servidor y cliente). Los randomUUID de verdad siguen usandose en
+  // addStat(), que solo corre en el cliente despues de la hidratacion.
   const [stats, setStats] = useState<StatWithKey[]>(
-    (existingParticipant?.stats ?? []).map((s) => ({ ...s, _key: makeStatKey() }))
+    (existingParticipant?.stats ?? []).map((s, i) => ({ ...s, _key: `existing-${i}` }))
   );
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [bannerFile, setBannerFile] = useState<File | null>(null);
