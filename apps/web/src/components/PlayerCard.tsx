@@ -38,7 +38,13 @@ function fallbackImg(nickname: string): string {
  * padding son relativos al contenedor (no px fijos grandes) via clamp().
  */
 export default function PlayerCard({ data, className = "" }: PlayerCardProps) {
+  // El banner es el fondo a toda la carta; la foto es un icono circular
+  // superpuesto abajo a la izquierda (como el retrato de invocador sobre el
+  // splash art en el cliente de LoL). Si no hay banner, la foto sirve de
+  // fondo tambien para no dejar la carta vacia; si no hay ninguna de las
+  // dos, placeholder generado con el apodo.
   const bgImage = data.banner || data.photo || fallbackImg(data.nickname);
+  const avatarImage = data.photo || null;
   const visibleStats = (data.stats ?? []).filter((s) => s.label.trim().length > 0).slice(0, 4);
 
   return (
@@ -52,7 +58,15 @@ export default function PlayerCard({ data, className = "" }: PlayerCardProps) {
 
       <div className="player-card-content">
         <div className="player-card-name-row">
-          <h3 className="player-card-name">{data.name || "Nombre del peleador"}</h3>
+          <div className="player-card-identity">
+            {avatarImage && (
+              <img src={avatarImage} alt="" className="player-card-avatar" />
+            )}
+            <div className="player-card-name-block">
+              <h3 className="player-card-name">{data.name || "Nombre del peleador"}</h3>
+              <p className="player-card-nickname">"{data.nickname || "apodo"}"</p>
+            </div>
+          </div>
           {data.lolRank && (
             <span className="player-card-rank">
               <img
@@ -67,7 +81,6 @@ export default function PlayerCard({ data, className = "" }: PlayerCardProps) {
             </span>
           )}
         </div>
-        <p className="player-card-nickname">"{data.nickname || "apodo"}"</p>
         {data.favChampion && <p className="player-card-champion">{data.favChampion}</p>}
 
         {visibleStats.length > 0 && (
@@ -149,10 +162,32 @@ export default function PlayerCard({ data, className = "" }: PlayerCardProps) {
 
         .player-card-name-row {
           display: flex;
-          align-items: baseline;
+          align-items: center;
           justify-content: space-between;
           gap: 8px;
           flex-wrap: wrap;
+        }
+
+        .player-card-identity {
+          display: flex;
+          align-items: center;
+          gap: clamp(6px, 2.5cqw, 10px);
+          min-width: 0;
+        }
+
+        .player-card-avatar {
+          flex-shrink: 0;
+          width: clamp(32px, 12cqw, 48px);
+          height: clamp(32px, 12cqw, 48px);
+          border-radius: 50%;
+          object-fit: cover;
+          border: 2px solid #C8AA6E;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.6);
+          background-color: #0A1428;
+        }
+
+        .player-card-name-block {
+          min-width: 0;
         }
 
         .player-card-name {
@@ -165,6 +200,9 @@ export default function PlayerCard({ data, className = "" }: PlayerCardProps) {
           letter-spacing: 0.02em;
           line-height: 1.1;
           text-shadow: 0 2px 6px rgba(0,0,0,0.8);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
 
         .player-card-rank {

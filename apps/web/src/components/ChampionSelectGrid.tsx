@@ -408,7 +408,7 @@ export default function ChampionSelectGrid({
             position: relative;
             transition: all 0.2s ease;
             box-sizing: border-box;
-            background-color: #1e2328;
+            background-color: #0a0e14;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -419,13 +419,13 @@ export default function ChampionSelectGrid({
         }
 
         .champ-portrait.no-photo {
-            background-color: #1e2328;
-            background-image: radial-gradient(circle at center, #1e2328 0%, rgba(5, 20, 25, 0.85) 100%);
+            background-color: #0a0e14;
+            background-image: radial-gradient(circle at center, #0a0e14 0%, #04070c 100%);
         }
 
         .champ-portrait-random {
-            background-color: #1e2328;
-            background-image: radial-gradient(circle at center, #1e2328 0%, rgba(5, 20, 25, 0.9) 100%);
+            background-color: #0a0e14;
+            background-image: radial-gradient(circle at center, #0a0e14 0%, #04070c 100%);
         }
 
         .champ-portrait-random:disabled {
@@ -434,15 +434,14 @@ export default function ChampionSelectGrid({
         }
 
         .random-icon {
-            color: #0f1017;
+            color: #f0e6d2;
             font-size: 1.4rem;
-            text-shadow: 0 0 8px rgba(54, 54, 54, 0.5);
-            transition: color 0.2s ease, text-shadow 0.2s ease;
+            text-shadow: 0 0 8px rgba(240, 230, 210, 0.4);
+            transition: text-shadow 0.2s ease;
         }
 
         .champ-portrait-random:hover:not(:disabled) .random-icon {
-            color: #e0f8f8;
-            text-shadow: 0 0 12px #0b9ed4a6;
+            text-shadow: 0 0 12px rgba(240, 230, 210, 0.8);
         }
 
         .champ-portrait:hover, .champ-portrait.selected {
