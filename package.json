@@ -10,6 +10,7 @@
     "dev": "bun run --filter web dev",
     "build": "bun run --filter web build",
     "setup:db": "bun run scripts/setup-supabase.ts",
-    "setup:cf-secrets": "bun run scripts/setup-cloudflare-secrets.ts"
+    "setup:cf-secrets": "bun run scripts/setup-cloudflare-secrets.ts",
+    "resend-invite": "bun run scripts/resend-invite.ts"
   }
 }

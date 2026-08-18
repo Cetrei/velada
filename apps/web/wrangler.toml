@@ -14,6 +14,11 @@ routes = [
 [assets]
 directory = "./dist"
 binding = "ASSETS"
+# dist/_worker.js/ es el codigo del Worker (ya declarado arriba como `main`),
+# no un asset publico. Sin apps/web/public/.assetsignore (copiado a dist/ en
+# cada build), Wrangler escanea ./dist completo, encuentra _worker.js/ ahi
+# dentro y aborta el deploy con "Uploading a Pages _worker.js directory as
+# an asset". Ver apps/web/public/.assetsignore.
 
 [vars]
 # PUBLIC_SUPABASE_URL and PUBLIC_SUPABASE_ANON_KEY are injected at build time
