@@ -231,10 +231,21 @@ export const server = {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: "Supabase admin no configurado." });
       }
 
-      const { error, status, statusText } = await admin.from("participants").delete().eq("id", id);
+      const { error, status, statusText, count } = await admin
+        .from("participants")
+        .delete({ count: "exact" })
+        .eq("id", id);
+
       if (error) {
-        console.log(`[debug] deleteParticipant error: id=${id} status=${status} statusText=${statusText} error=${JSON.stringify(error)}`);
-        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: error.message });
+        const detail = `[deleteParticipant] id=${id} status=${status} statusText=${statusText} code=${error.code ?? "?"} details=${error.details ?? "?"} hint=${error.hint ?? "?"} message=${error.message}`;
+        console.log(detail);
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: detail });
+      }
+
+      if (count === 0) {
+        const detail = `[deleteParticipant] id=${id} no matcheo ninguna fila (ya borrado o id incorrecto).`;
+        console.log(detail);
+        throw new ActionError({ code: "NOT_FOUND", message: detail });
       }
 
       return { success: true };

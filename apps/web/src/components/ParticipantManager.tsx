@@ -229,14 +229,14 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
 
       {isFormOpen && (
       <div
-        className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/70 p-2 sm:p-4 overflow-y-auto"
+        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-2 sm:p-4"
         onClick={(e) => {
           if (e.target === e.currentTarget) closeForm();
         }}
       >
       <form
         onSubmit={handleSubmit}
-        className="bg-lol-cardBg border border-lol-border p-4 sm:p-6 rounded-xl space-y-4 w-full max-w-3xl min-w-0 my-4 sm:my-8 box-border"
+        className="bg-lol-cardBg border border-lol-border p-4 sm:p-6 rounded-xl space-y-4 w-full max-w-3xl min-w-0 box-border max-h-[calc(100vh-1rem)] sm:max-h-[calc(100vh-2rem)] overflow-y-auto"
       >
         <div className="flex items-center justify-between mb-2">
           <h2 className="font-display text-xl font-bold text-white uppercase">
