@@ -1,0 +1,12 @@
+{
+  "extends": "astro/tsconfigs/strict",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    "baseUrl": ".",
+    "paths": {
+      "@velada/core": ["../../packages/core/index.ts"],
+      "@velada/types": ["../../packages/types/index.ts"]
+    }
+  }
+}

@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>La Velada LoL - Prototipo</title>
+    
+    <!-- Fuentes de Google -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Oswald:wght@500;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Oswald', 'sans-serif'],
+                    },
+                    colors: {
+                        lol: {
+                            gold: '#C8AA6E',
+                            goldLight: '#F0E6D2',
+                            goldDark: '#7A5C29',
+                            blue: '#0AC8B9',
+                            darkBg: '#050914',
+                            cardBg: '#0A1428',
+                            border: '#1E2A44'
+                        }
+                    },
+                    backgroundImage: {
+                        'hero-pattern': "radial-gradient(ellipse at top, rgba(10, 20, 40, 1) 0%, rgba(5, 9, 20, 1) 100%)",
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #050914;
+            color: #F0E6D2;
+        }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #050914; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1E2A44; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #C8AA6E; 
+        }
+
+        /* Utilidad para clip-path de las tarjetas estilo LoL */
+        .clip-edges {
+            clip-path: polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px);
+        }
+    </style>
+</head>
+<body class="antialiased min-h-screen flex flex-col font-sans">
+
+    <!-- Navbar -->
+    <nav class="fixed top-0 w-full z-50 bg-lol-darkBg/80 backdrop-blur-md border-b border-lol-border">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
+            <div class="flex items-center gap-3 cursor-pointer" onclick="window.scrollTo(0,0)">
+                <div class="w-8 h-8 bg-lol-gold rotate-45 flex items-center justify-center">
+                    <div class="w-6 h-6 bg-lol-darkBg flex items-center justify-center">
+                        <span class="text-lol-gold font-display font-bold -rotate-45 block">VL</span>
+                    </div>
+                </div>
+                <span class="font-display font-bold text-xl text-white tracking-widest uppercase">La Velada LoL</span>
+            </div>
+            <div class="hidden md:flex items-center space-x-8">
+                <a href="#fighters" class="text-sm font-medium text-slate-300 hover:text-lol-gold transition-colors">Peleadores</a>
+                <a href="#roulette-section" class="text-sm font-medium text-slate-300 hover:text-lol-gold transition-colors">Sorteo</a>
+                <a href="#roulette-section" class="px-5 py-2 bg-lol-gold/10 border border-lol-gold text-lol-gold hover:bg-lol-gold hover:text-lol-darkBg transition-all font-bold text-sm tracking-wide uppercase clip-edges">Ver en Vivo</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="relative pt-32 pb-20 lg:pt-48 lg:pb-32 bg-hero-pattern overflow-hidden">
+        <div class="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5 mix-blend-overlay"></div>
+        
+        <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center text-center">
+            <span class="text-lol-blue font-bold tracking-[0.3em] uppercase text-sm mb-4 block">El Evento de la Década</span>
+            <h1 class="font-display text-5xl md:text-7xl lg:text-8xl font-bold text-white uppercase tracking-tight drop-shadow-2xl mb-6">
+                El <span class="text-transparent bg-clip-text bg-gradient-to-r from-lol-gold via-yellow-200 to-lol-goldDark">Enfrentamiento</span>
+                <br />Final
+            </h1>
+            <p class="max-w-2xl text-lg md:text-xl text-slate-400 mb-12 font-light">
+                Ocho combatientes, un solo servidor. La Grieta del Invocador está a punto de arder. Descubre quién se enfrentará a quién en el sorteo oficial en directo.
+            </p>
+            
+            <!-- Countdown -->
+            <div class="flex items-center justify-center gap-4 md:gap-8 mb-12">
+                <div class="flex flex-col items-center">
+                    <span id="c-days" class="font-display text-4xl md:text-6xl font-bold text-white mb-1">00</span>
+                    <span class="text-xs md:text-sm text-lol-gold uppercase tracking-wider font-bold">Días</span>
+                </div>
+                <span class="text-3xl text-lol-border mb-6">:</span>
+                <div class="flex flex-col items-center">
+                    <span id="c-hours" class="font-display text-4xl md:text-6xl font-bold text-white mb-1">00</span>
+                    <span class="text-xs md:text-sm text-lol-gold uppercase tracking-wider font-bold">Horas</span>
+                </div>
+                <span class="text-3xl text-lol-border mb-6">:</span>
+                <div class="flex flex-col items-center">
+                    <span id="c-mins" class="font-display text-4xl md:text-6xl font-bold text-white mb-1">00</span>
+                    <span class="text-xs md:text-sm text-lol-gold uppercase tracking-wider font-bold">Mins</span>
+                </div>
+                <span class="text-3xl text-lol-border mb-6">:</span>
+                <div class="flex flex-col items-center">
+                    <span id="c-secs" class="font-display text-4xl md:text-6xl font-bold text-lol-blue mb-1">00</span>
+                    <span class="text-xs md:text-sm text-lol-gold uppercase tracking-wider font-bold">Segs</span>
+                </div>
+            </div>
+
+            <a href="#fighters" class="animate-bounce p-2 rounded-full border border-lol-border bg-lol-cardBg text-lol-gold mt-8">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>
+            </a>
+        </div>
+    </section>
+
+    <!-- Fighters Roster Section -->
+    <section id="fighters" class="py-24 bg-lol-darkBg border-y border-lol-border relative">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-16">
+                <h2 class="font-display text-4xl md:text-5xl font-bold text-white uppercase tracking-wider">Los Peleadores</h2>
+                <div class="h-1 w-24 bg-lol-gold mx-auto mt-6"></div>
+            </div>
+
+            <!-- Contenedor dinámico de las tarjetas -->
+            <div id="rosterGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+                <!-- Las tarjetas se inyectarán vía JavaScript -->
+            </div>
+        </div>
+    </section>
+
+    <!-- Main Event (Roulette) Section -->
+    <section id="roulette-section" class="py-24 relative overflow-hidden bg-gradient-to-b from-lol-darkBg to-black">
+        
+        <!-- Elementos decorativos de fondo -->
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-lol-gold/5 rounded-full blur-[100px] pointer-events-none"></div>
+
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col lg:flex-row items-center gap-16 relative z-10">
+            
+            <!-- Contenedor de la Ruleta -->
+            <div class="relative flex flex-col items-center w-full lg:w-1/2">
+                <h2 class="font-display text-3xl font-bold text-white uppercase tracking-widest mb-2">Sorteo Oficial</h2>
+                <p class="text-slate-400 mb-8 text-center">La suerte decidirá los cruces. En vivo para todo el mundo.</p>
+                
+                <div class="relative shadow-[0_0_80px_rgba(200,170,110,0.15)] rounded-full p-2 border border-lol-border/50 bg-lol-cardBg/50 backdrop-blur">
+                    <!-- Canvas responsivo (usaremos max-width para adaptar) -->
+                    <canvas id="rouletteCanvas" width="400" height="400" class="rounded-full max-w-full h-auto w-[340px] sm:w-[400px]"></canvas>
+                </div>
+            </div>
+
+            <!-- Panel de Control y Resultados -->
+            <div class="flex flex-col items-center justify-center w-full lg:w-1/2 space-y-8">
+                
+                <!-- Botón para girar (Simulación de Admin/Host) -->
+                <div class="bg-lol-cardBg border border-lol-border p-8 rounded-xl w-full text-center relative overflow-hidden group">
+                    <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-lol-gold to-transparent opacity-50 group-hover:opacity-100 transition-opacity"></div>
+                    
+                    <h3 class="text-2xl font-display font-bold text-white uppercase mb-2">Panel del Host</h3>
+                    <p class="text-sm text-slate-400 mb-6">Inicia el sorteo aleatorio para emparejar a los combatientes.</p>
+                    
+                    <button id="spinBtn" class="w-full py-5 px-6 bg-gradient-to-r from-lol-gold to-yellow-600 hover:from-yellow-500 hover:to-yellow-400 text-black font-display font-bold text-xl transition-all transform hover:-translate-y-1 shadow-[0_10px_20px_rgba(200,170,110,0.3)] clip-edges uppercase tracking-wider">
+                        Girar Ruleta
+                    </button>
+                    <p id="statusText" class="text-sm text-lol-blue mt-4 font-bold opacity-0 transition-opacity uppercase tracking-widest">¡El destino está girando!</p>
+                </div>
+
+                <!-- Tarjeta de Resultado -->
+                <div id="resultCard" class="hidden animate-in fade-in zoom-in duration-500 bg-black/50 backdrop-blur border border-lol-gold rounded-xl p-8 text-center shadow-[0_0_40px_rgba(200,170,110,0.2)] w-full relative overflow-hidden">
+                    <!-- Decoración esquinas -->
+                    <div class="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-lol-gold m-2"></div>
+                    <div class="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-lol-gold m-2"></div>
+
+                    <h4 class="text-lol-blue font-bold tracking-widest uppercase mb-6 text-sm">¡Combatiente Seleccionado!</h4>
+                    
+                    <div class="flex flex-col items-center justify-center">
+                        <p id="winnerNickname" class="text-xl text-lol-gold font-display italic mb-1"></p>
+                        <p id="winnerName" class="text-5xl font-display font-bold text-white uppercase tracking-wider mb-4 drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]"></p>
+                        
+                        <div class="flex items-center gap-3 bg-lol-darkBg py-2 px-4 rounded-full border border-lol-border">
+                            <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                            <span id="winnerRole" class="text-slate-300 text-sm font-bold uppercase tracking-wider"></span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-[#02040a] border-t border-lol-border py-8 text-center text-slate-500 text-sm">
+        <p>© 2026 La Velada LoL. Prototipo creado para demostración.</p>
+    </footer>
+
+    <script>
+        // 1. Datos de los Participantes
+        const participants = [
+            { id: 'p1', name: 'Carlos', nickname: 'El Toro', role: 'Top', rank: 'Diamante II', imgColor: '1A2B4C', textColor: 'C8AA6E' },
+            { id: 'p2', name: 'Mateo', nickname: 'Koreano', role: 'Mid', rank: 'Challenger', imgColor: '2C1A4C', textColor: 'C8AA6E' },
+            { id: 'p3', name: 'David', nickname: 'Rey Smite', role: 'Jungle', rank: 'Master', imgColor: '4C1A1A', textColor: 'C8AA6E' },
+            { id: 'p4', name: 'Sofia', nickname: 'La Reina', role: 'ADC', rank: 'Grandmaster', imgColor: '1A4C3A', textColor: 'C8AA6E' },
+            { id: 'p5', name: 'Lucas', nickname: 'Escudo', role: 'Support', rank: 'Diamante I', imgColor: '4C3A1A', textColor: 'F0E6D2' },
+            { id: 'p6', name: 'Ana', nickname: 'Magia', role: 'Mid', rank: 'Master', imgColor: '4C1A3A', textColor: 'F0E6D2' },
+        ];
+
+        // 2. Lógica del Countdown
+        function initCountdown() {
+            // Establecer fecha objetivo a 7 días desde hoy
+            const targetDate = new Date();
+            targetDate.setDate(targetDate.getDate() + 7);
+
+            const daysEl = document.getElementById('c-days');
+            const hoursEl = document.getElementById('c-hours');
+            const minsEl = document.getElementById('c-mins');
+            const secsEl = document.getElementById('c-secs');
+
+            function update() {
+                const now = new Date().getTime();
+                const diff = targetDate.getTime() - now;
+
+                if (diff <= 0) return;
+
+                const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+                const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+                daysEl.innerText = days.toString().padStart(2, '0');
+                hoursEl.innerText = hours.toString().padStart(2, '0');
+                minsEl.innerText = minutes.toString().padStart(2, '0');
+                secsEl.innerText = seconds.toString().padStart(2, '0');
+            }
+
+            update();
+            setInterval(update, 1000);
+        }
+
+        // 3. Renderizar las tarjetas del Roster
+        function renderRoster() {
+            const grid = document.getElementById('rosterGrid');
+            
+            participants.forEach(p => {
+                // Generar URL de placeholder dinámico para las imágenes
+                const imgUrl = `https://placehold.co/400x500/${p.imgColor}/${p.textColor}?text=${p.nickname.replace(' ', '+')}`;
+                
+                const cardHtml = `
+                    <div class="group relative bg-lol-cardBg border border-lol-border clip-edges overflow-hidden transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_15px_30px_rgba(200,170,110,0.15)]">
+                        <!-- Imagen/Banner -->
+                        <div class="h-64 overflow-hidden relative">
+                            <div class="absolute inset-0 bg-gradient-to-t from-lol-cardBg via-transparent to-transparent z-10"></div>
+                            <img src="${imgUrl}" alt="${p.name}" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" onerror="this.src='https://placehold.co/400x500/0A1428/C8AA6E?text=Peleador'">
+                        </div>
+                        
+                        <!-- Contenido -->
+                        <div class="p-6 relative z-20 -mt-12 text-center">
+                            <span class="inline-block px-3 py-1 bg-lol-darkBg border border-lol-gold text-lol-gold text-xs font-bold uppercase tracking-wider mb-4 rounded-sm">
+                                ${p.role}
+                            </span>
+                            <h3 class="font-display text-2xl font-bold text-white uppercase tracking-wide mb-1">${p.name}</h3>
+                            <p class="text-lol-blue font-italic text-sm mb-4">"${p.nickname}"</p>
+                            
+                            <div class="flex justify-between items-center border-t border-lol-border/50 pt-4 mt-4">
+                                <span class="text-slate-400 text-xs uppercase">Rango Actual</span>
+                                <span class="text-white font-bold text-sm">${p.rank}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                grid.innerHTML += cardHtml;
+            });
+        }
+
+        // 4. Lógica del Canvas (Ruleta)
+        function initRoulette() {
+            const canvas = document.getElementById('rouletteCanvas');
+            const ctx = canvas.getContext('2d');
+            const spinBtn = document.getElementById('spinBtn');
+            const resultCard = document.getElementById('resultCard');
+            const statusText = document.getElementById('statusText');
+
+            let currentAngle = 0;
+            let isSpinning = false;
+
+            // Función para dibujar la ruleta
+            function drawWheel(angle) {
+                const width = canvas.width;
+                const height = canvas.height;
+                const centerX = width / 2;
+                const centerY = height / 2;
+                const radius = Math.min(centerX, centerY) - 20; // Margen exterior
+                const sliceAngle = (2 * Math.PI) / participants.length;
+
+                // Limpiar frame
+                ctx.clearRect(0, 0, width, height);
+
+                // Dibujar segmentos
+                for (let i = 0; i < participants.length; i++) {
+                    const startAngle = angle + i * sliceAngle;
+                    const endAngle = startAngle + sliceAngle;
+
+                    ctx.beginPath();
+                    ctx.moveTo(centerX, centerY);
+                    ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+                    ctx.closePath();
+
+                    // Colores de los gajos
+                    ctx.fillStyle = i % 2 === 0 ? '#C8AA6E' : '#050914';
+                    ctx.fill();
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = '#1E2A44'; // borde interno
+                    ctx.stroke();
+
+                    // Texto del participante
+                    ctx.save();
+                    ctx.translate(centerX, centerY);
+                    ctx.rotate(startAngle + sliceAngle / 2);
+                    ctx.textAlign = 'right';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillStyle = i % 2 === 0 ? '#050914' : '#F0E6D2';
+                    ctx.font = 'bold 16px Inter, sans-serif';
+                    ctx.fillText(participants[i].name.toUpperCase(), radius - 30, 0);
+                    ctx.restore();
+                }
+
+                // Borde exterior grueso metálico
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+                ctx.lineWidth = 12;
+                ctx.strokeStyle = '#050914';
+                ctx.stroke();
+                ctx.lineWidth = 4;
+                ctx.strokeStyle = '#C8AA6E'; // Borde dorado
+                ctx.stroke();
+
+                // Puntero (Arriba al centro)
+                ctx.beginPath();
+                ctx.moveTo(centerX - 15, centerY - radius - 5);
+                ctx.lineTo(centerX + 15, centerY - radius - 5);
+                ctx.lineTo(centerX, centerY - radius + 25);
+                ctx.fillStyle = '#0AC8B9'; // Color cyan LoL
+                ctx.fill();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#fff';
+                ctx.stroke();
+
+                // Centro decorativo
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, 35, 0, 2 * Math.PI);
+                ctx.fillStyle = '#050914';
+                ctx.fill();
+                ctx.lineWidth = 4;
+                ctx.strokeStyle = '#C8AA6E';
+                ctx.stroke();
+                
+                // Remache central
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, 12, 0, 2 * Math.PI);
+                ctx.fillStyle = '#C8AA6E';
+                ctx.fill();
+            }
+
+            // Lógica de Animación Fluida
+            function animateSpin(targetIndex, callback) {
+                if (isSpinning) return;
+                isSpinning = true;
+
+                const sliceAngle = (2 * Math.PI) / participants.length;
+                // Calculamos el ángulo objetivo (se resta PI/2 porque el puntero está arriba, no a la derecha)
+                const targetBaseAngle = - (targetIndex * sliceAngle) - (sliceAngle / 2) - (Math.PI / 2);
+
+                // Añadir vueltas extra (ej. 10 vueltas)
+                const spins = Math.PI * 2 * 10;
+                const finalAngle = currentAngle + spins + (targetBaseAngle - (currentAngle % (Math.PI * 2)));
+
+                const duration = 6000; // 6 segundos de suspense
+                const startTime = performance.now();
+                const startAngle = currentAngle;
+
+                // Easing (easeOutQuart - inicio rápido, final muy lento)
+                const easeOut = (t) => 1 - Math.pow(1 - t, 4);
+
+                function step(currentTime) {
+                    const elapsed = currentTime - startTime;
+                    const progress = Math.min(elapsed / duration, 1);
+                    
+                    const current = startAngle + (finalAngle - startAngle) * easeOut(progress);
+                    currentAngle = current;
+                    drawWheel(current);
+
+                    if (progress < 1) {
+                        requestAnimationFrame(step);
+                    } else {
+                        isSpinning = false;
+                        callback();
+                    }
+                }
+
+                requestAnimationFrame(step);
+            }
+
+            // Evento Click del Botón
+            spinBtn.addEventListener('click', () => {
+                if (isSpinning) return;
+
+                // Ocultar card previo y cambiar estado
+                resultCard.classList.add('hidden');
+                statusText.style.opacity = '1';
+                spinBtn.disabled = true;
+                spinBtn.classList.add('opacity-50', 'cursor-not-allowed', 'scale-95');
+
+                // Lógica aleatoria para elegir ganador
+                const winnerIndex = Math.floor(Math.random() * participants.length);
+                const winner = participants[winnerIndex];
+
+                // Ejecutar giro
+                animateSpin(winnerIndex, () => {
+                    // Actualizar DOM al finalizar
+                    document.getElementById('winnerNickname').innerText = `"${winner.nickname}"`;
+                    document.getElementById('winnerName').innerText = winner.name;
+                    document.getElementById('winnerRole').innerText = `Main ${winner.role} - ${winner.rank}`;
+                    
+                    resultCard.classList.remove('hidden');
+                    statusText.style.opacity = '0';
+                    
+                    // Restaurar botón
+                    spinBtn.disabled = false;
+                    spinBtn.classList.remove('opacity-50', 'cursor-not-allowed', 'scale-95');
+                });
+            });
+
+            // Dibujar el estado inicial
+            drawWheel(currentAngle);
+        }
+
+        // Inicializar todo al cargar el documento
+        window.onload = () => {
+            initCountdown();
+            renderRoster();
+            initRoulette();
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+name = "velada-lol"
+main = "./dist/_worker.js/index.js"
+compatibility_date = "2026-04-15"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+
+[vars]
+# PUBLIC_SUPABASE_URL and PUBLIC_SUPABASE_ANON_KEY are injected at build time
+# via GitHub Actions secrets, not here. Local dev uses apps/web/.env instead.
