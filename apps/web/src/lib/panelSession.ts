@@ -33,14 +33,14 @@ export async function getPanelSession(
   cookies: AstroCookies,
   existingClient?: SupabaseClient
 ): Promise<PanelSession | null> {
-  if (!existingClient) {
-    console.warn("Cliente Supabase inexistente");
-    return null;
-  }
-  const [supabase, msg] = createSupabaseServerClient(request, cookies);
+  let supabase = existingClient;
   if (!supabase) {
-    console.warn("No se pudo crear el cliente de Supabase:", msg);
-    return null;
+    const [freshClient, msg] = createSupabaseServerClient(request, cookies);
+    if (!freshClient) {
+      console.warn("No se pudo crear el cliente de Supabase:", msg);
+      return null;
+    }
+    supabase = freshClient;
   }
 
   const {

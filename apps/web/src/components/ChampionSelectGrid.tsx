@@ -10,12 +10,41 @@ interface ChampionSelectGridProps {
 type RoleFilter = Participant["mainRole"];
 type SortDirection = "asc" | "desc";
 
-const ROLE_FILTERS: Array<{ role: RoleFilter; icon: string; label: string }> = [
-  { role: "Top", icon: "fa-khanda", label: "Top" },
-  { role: "Jungle", icon: "fa-shield-halved", label: "Jungle" },
-  { role: "Mid", icon: "fa-wand-magic-sparkles", label: "Mid" },
-  { role: "ADC", icon: "fa-bow-arrow", label: "ADC" },
-  { role: "Support", icon: "fa-staff-snake", label: "Support" }
+/**
+ * SVGs inline propios, no Font Awesome. fa-bow-arrow y fa-staff-snake son
+ * iconos Pro (no existen en el set free 6.4.0, confirmado contra
+ * fontawesome.com) y se renderizaban como <i> vacios con ancho
+ * inconsistente entre navegadores, causando el gap irregular visible en el
+ * grid de filtro de rol. SVG propio con viewBox/tamano fijo elimina esa
+ * dependencia fragil de un CDN externo y garantiza espaciado uniforme via
+ * el `gap` del flexbox, sin variacion por glyph.
+ */
+const ROLE_FILTERS: Array<{ role: RoleFilter; label: string; path: string }> = [
+  {
+    role: "Top",
+    label: "Top",
+    path: "M6.5 2 4 4.5l7.5 7.5L4 19.5 6.5 22l7.5-7.5 4 4 2-2-4-4L20 8.5 17.5 6 14 9.5z"
+  },
+  {
+    role: "Jungle",
+    label: "Jungle",
+    path: "M12 2 4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5z"
+  },
+  {
+    role: "Mid",
+    label: "Mid",
+    path: "M15 3 13.5 4.5 15.5 6.5 17 5zM2 22 12.5 11.5 10.5 9.5 0 20zM18 2l.7 1.8L20.5 4.5l-1.8.7L18 7l-.7-1.8L15.5 4.5l1.8-.7zM21 8l.5 1.3L23 9.8l-1.3.5L21 12l-.5-1.3L19 10.3l1.3-.5z"
+  },
+  {
+    role: "ADC",
+    label: "ADC",
+    path: "M4 2c8 0 15 5.5 17 10-2 4.5-9 10-17 10 4-3 7-6.5 8-10-1-3.5-4-7-8-10zM2 12h10M9 9l3 3-3 3"
+  },
+  {
+    role: "Support",
+    label: "Support",
+    path: "M12 21s-7-4.6-9.5-9C.8 8.6 2 5 5.5 4.2 8 3.6 10 5 12 7c2-2 4-3.4 6.5-2.8C22 5 23.2 8.6 21.5 12 19 16.4 12 21 12 21zM11 8v6M8 11h6"
+  }
 ];
 
 function fallbackPhoto(p: Participant): string {
@@ -100,15 +129,20 @@ export default function ChampionSelectGrid({
             
             <div className="controls-bar w-full max-w-2xl flex flex-wrap justify-between items-center gap-3 mb-2 px-2 sm:px-[20px] pb-[10px] border-b border-[#c8aa6e]/30">
                 <div className="role-filters flex flex-nowrap items-center gap-2.5 sm:gap-[15px] text-[#a09b8c] text-base sm:text-base order-2 sm:order-1 flex-shrink-0">
-                    {ROLE_FILTERS.map(({ role, icon, label }) => (
-                        <i
+                    {ROLE_FILTERS.map(({ role, label, path }) => (
+                        <button
                             key={role}
-                            className={`fa-solid ${icon} w-[18px] text-center cursor-pointer transition-colors flex-shrink-0 ${roleFilter === role ? 'text-[#0bd4d4] drop-shadow-[0_0_6px_rgba(11,212,212,0.6)]' : 'hover:text-[#c8aa6e]'}`}
+                            type="button"
+                            className={`role-filter-icon flex-shrink-0 bg-transparent border-0 p-0 cursor-pointer transition-colors ${roleFilter === role ? 'text-[#0bd4d4] drop-shadow-[0_0_6px_rgba(11,212,212,0.6)]' : 'text-[#a09b8c] hover:text-[#c8aa6e]'}`}
                             title={label}
-                            role="button"
+                            aria-label={label}
                             aria-pressed={roleFilter === role}
                             onClick={() => setRoleFilter((current) => (current === role ? null : role))}
-                        ></i>
+                        >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                                <path d={path} />
+                            </svg>
+                        </button>
                     ))}
                 </div>
                 
@@ -270,6 +304,13 @@ export default function ChampionSelectGrid({
             margin-bottom: 8px;
             letter-spacing: 2px;
             font-family: 'Beaufort for LOL', serif;
+        }
+
+        .role-filter-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 0;
         }
 
         .search-input-wrap {

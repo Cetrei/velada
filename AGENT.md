@@ -299,6 +299,64 @@ era el de arriba, no whitelist).
   de esta sesion (nuevamente sin acceso a bash sobre el proyecto real, todo
   fue edicion via filesystem MCP).
 
+## Sesion 2026-08-18 (2): 3 bugs reales de auth/robustez encontrados y arreglados
+- **`getPanelSession`/`getParticipantSession` invertidos (el bug critico
+  real detras de "el login no sirve" y de que `/inscripcion` nunca
+  mostraba el form de perfil)**: ambas funciones tenian
+  `if (!existingClient) return null` como primera linea. `existingClient`
+  es un parametro OPCIONAL que solo `login`/`establishMagicLinkSession`
+  (panel) y ningun caller de `getParticipantSession` pasan; every otro
+  caller — el guard de `gestion-roster-x9f2.astro`, `inscripcion.astro`,
+  `verifyPassphrase`, `saveOwnParticipant`, `saveParticipant`,
+  `deleteParticipant`, `lookupRank`, `checkRiotProfile` — lo llama SIN ese
+  tercer argumento. Resultado: esas dos funciones devolvian `null` siempre
+  que no se les pasaba un cliente ya autenticado, es decir, en todos los
+  casos salvo el instante exacto del login. Cualquiera que iniciaba sesion
+  (password o magic link) quedaba autenticado en Supabase pero cada
+  request subsiguiente lo trataba como deslogueado: el panel admin
+  redirigia siempre a `/panel-login?error=forbidden` y `/inscripcion`
+  jamas mostraba `ParticipantProfileForm` (siempre repetia `AuthGate`).
+  Fix: invertido a `let supabase = existingClient; if (!supabase) { crear
+  uno nuevo }` en `apps/web/src/lib/panelSession.ts` y
+  `apps/web/src/lib/participantSession.ts`.
+- **Gap irregular en los iconos de filtro de rol de `ChampionSelectGrid`
+  (NO estaba arreglado pese a que la sesion 2026-08-18 anterior afirmo
+  haberlo reemplazado por SVG inline)**: el codigo seguia usando
+  `<i className="fa-solid fa-bow-arrow">` y `fa-staff-snake`, ambos iconos
+  **Pro** de Font Awesome (confirmado contra fontawesome.com — staff-snake
+  devuelve "Whoopsie! That action requires a Pro Plan"), inexistentes en
+  el set free 6.4.0 cargado por CDN. Se renderizaban vacios con ancho
+  inconsistente entre navegadores. Ahora si esta hecho: los 5 icons de rol
+  son SVG inline propios (`ROLE_FILTERS` con `path` en vez de `icon`
+  string de Font Awesome), boton con `display:flex` fijo — sin dependencia
+  de CDN externo para estos 5 (el resto de iconos de FA del componente —
+  chevron, search, xmark — no se tocaron, esos si existen en el set free).
+- **`.env` local vs Worker desplegado, dos superficies distintas** (ya
+  identificado en la sesion anterior, reconfirmado): `apps/web/.env` +
+  `import.meta.env` solo aplica a `astro dev` local (Vite normal) y al
+  build de Astro. El Worker desplegado en Cloudflare NUNCA lee
+  `apps/web/.env` — necesita `wrangler secret put` (via
+  `bun run setup:cf-secrets`, que ya cubre `SUPABASE_SERVICE_ROLE_KEY` y
+  `RIOT_API_KEY` correctamente) o `[vars]` en `wrangler.toml` para vars no
+  sensibles. `PANEL_PASSPHRASE` NO necesita ir ahi: solo se lee una vez en
+  `scripts/setup-supabase.ts` (proceso Node local) para hashearla en
+  `panel_secret.passphrase_hash`; la verificacion real en runtime es el
+  RPC `verify_panel_passphrase`, no una env var leida por el Worker.
+  Recordatorio importante para diagnostico futuro: Vite/Astro solo lee
+  `.env` al ARRANCAR el proceso — si `apps/web/.env` se edita con el dev
+  server ya corriendo, hay que reiniciar `bun run dev` (Ctrl+C y volver a
+  correr), no alcanza con guardar el archivo. Si un error de "Supabase no
+  configurado" persiste despues de confirmar que el `.env` esta bien,
+  sospechar primero de un proceso de dev viejo antes de seguir tocando
+  codigo.
+- Pendiente de esta sesion: correr `bun install` + `bun run dev` (con
+  reinicio real del proceso) para confirmar en caliente que
+  `/inscripcion` ahora muestra el form de perfil tras registrarse/loguear,
+  que `/gestion-roster-x9f2` ya no rebota siempre a `/panel-login`, y que
+  el grid de iconos de rol ya no muestra el gap. Seguia sin poder correr
+  `bun`/`wrangler`/`gh` sobre el proyecto real en esta sesion (solo
+  filesystem MCP + context7 + web search, sin bash sobre esta ruta).
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.
