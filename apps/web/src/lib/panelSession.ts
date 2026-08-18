@@ -21,19 +21,25 @@ export async function getPanelSession(
   cookies: AstroCookies
 ): Promise<PanelSession | null> {
   const supabase = createSupabaseServerClient(request, cookies);
-  if (!supabase) return null;
+  if (!supabase) {
+    console.log("[debug] getPanelSession: no supabase client (missing env vars)");
+    return null;
+  }
 
   const {
-    data: { user }
+    data: { user },
+    error: getUserError
   } = await supabase.auth.getUser();
+  console.log(`[debug] getPanelSession internal getUser: user=${JSON.stringify(user?.id)} email=${user?.email} error=${JSON.stringify(getUserError)}`);
 
   if (!user || !user.email) return null;
 
-  const { data: adminRow } = await supabase
+  const { data: adminRow, error: adminError } = await supabase
     .from("admins")
     .select("user_id")
     .eq("user_id", user.id)
     .maybeSingle();
+  console.log(`[debug] getPanelSession admin lookup: adminRow=${JSON.stringify(adminRow)} error=${JSON.stringify(adminError)}`);
 
   if (!adminRow) return null;
 
