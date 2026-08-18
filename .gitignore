@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+.bun/
+
+# Build output
+dist/
+.astro/
+.wrangler/
+
+# Docs internos (no van al repo publico)
+docs/
+
+# Environment secrets (never commit real credentials)
+.env
+.env.local
+apps/web/.env
+apps/web/.env.local
+
+# Editor / OS
+.DS_Store
+*.log
