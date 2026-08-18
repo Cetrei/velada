@@ -170,7 +170,7 @@ export default function ChampionSelectGrid({
                 </div>
             </div>
 
-            <div className="champ-grid-scroll grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 gap-1 auto-rows-[64px]">
+            <div className="champ-grid-scroll grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 gap-2 auto-rows-[64px]">
                 {/* Boton de seleccion al azar dentro de los resultados filtrados actuales */}
                 <button
                     type="button"
@@ -372,7 +372,8 @@ export default function ChampionSelectGrid({
             min-height: 128px;
             max-height: 128px;
             overflow-y: auto;
-            padding-right: 6px;
+            overflow-x: hidden;
+            padding: 6px 6px 6px 4px;
             align-content: start;
             scrollbar-width: thin;
             scrollbar-color: #c8aa6e #0a1420;

@@ -381,6 +381,56 @@ era el de arriba, no whitelist).
   real) da un tinte razonable; si no, ajustar esos valores en el `<style>`
   de `ChampionSelectGrid.tsx` es mas facil que tocar los PNGs.
 
+## Sesion 2026-08-18 (4): `lib/env.ts` faltante (import roto) + ultimo call-site sin `locals`
+- **Bug critico de build**: la sesion anterior (documentada en el chat que
+  trajo el usuario, no en este AGENT.md) dejo `supabaseServer.ts` y
+  `actions/index.ts` importando `getServerEnv` desde `./lib/env`, pero ese
+  archivo nunca se creo — no estaba en el filesystem real del proyecto.
+  Esto rompe el build/typecheck entero (import a modulo inexistente), no
+  solo el flujo de borrar/editar/guardar que se estaba diagnosticando.
+  Creado `apps/web/src/lib/env.ts` con `getServerEnv(context, key)`: lee
+  primero `context.locals.runtime.env[key]` (secrets reales de Cloudflare
+  Workers en runtime, confirmado el tipo exacto contra
+  `node_modules/@astrojs/cloudflare/dist/entrypoints/server.d.ts` ->
+  `Runtime['runtime']['env']`), y cae a `import.meta.env[key]` (funciona en
+  `astro dev` local via `.env`, y para las `PUBLIC_*` inlineadas en build).
+- **Ultimo call-site sin `locals`**: `inscripcion.astro` llamaba
+  `findParticipantByOwner(session.userId)` sin el segundo argumento
+  `Astro.locals` — `loadParticipants.ts` ya soportaba recibirlo
+  (`findParticipantByOwner(ownerUserId, locals?)`), pero este caller
+  especifico se quedo afuera cuando se propago `locals` al resto de las
+  actions/paginas. Sin esto, el admin client de esa llamada puntual
+  volvia a depender solo de `import.meta.env`, es decir el mismo bug que
+  se estaba arreglando pero limitado a la deteccion de "ya tenes perfil"
+  en `/inscripcion` (mostraria siempre el form de "crear" en vez de
+  "editar" en produccion). Fix: `findParticipantByOwner(session.userId,
+  Astro.locals)`.
+- Revisados uno por uno todos los demas callers de
+  `createSupabaseAdminClient`/`createSupabaseServerClient`/`getPanelSession`/
+  `getParticipantSession` en `actions/index.ts` y en cada `.astro` de
+  `pages/` (`gestion-roster-x9f2`, `panel-login`, `peleadores`, `sorteo`,
+  `combates`, `index`, `pronosticos`, `admin` que es el redirect vacio) —
+  todos ya pasaban `locals`/`context.locals` correctamente, no habia otro
+  gap. `supabase.ts`/`matches.ts`/`eventState.ts` no necesitan tocarse: solo
+  leen `PUBLIC_*` via `import.meta.env`, que si esta inlineado en build.
+- El tema de scraping de Mobalytics (leer rank Solo/Flex de
+  mobalytics.gg/lol/profile/... en vez de la API de Riot) que aparecia en
+  el chat pegado por el usuario **no se implemento**: en la transcripcion
+  original quedo como advertencia de riesgo pendiente antes de escribir
+  cualquier codigo, no se llego a esa parte. Sigue pendiente si se quiere
+  retomar, evaluando el riesgo (ToS de Mobalytics, fragilidad del HTML/
+  clases hasheadas tipo `m-dbvt3o` que cambian con cada build de su
+  frontend) antes de implementar.
+- Pendiente (igual que sesiones anteriores): sin bash sobre esta ruta en
+  esta sesion tampoco (solo filesystem MCP), no se pudo correr
+  `bun install` / `bun run dev` / typecheck real para confirmar en caliente
+  que el import de `env.ts` resuelve limpio. Recomendado que el usuario
+  corra `bun run dev` (reinicio real del proceso) y pruebe
+  borrar/editar/guardar un participante desde `/gestion-roster-x9f2` en
+  produccion (o `wrangler dev` local) para confirmar que el fix de
+  `SUPABASE_SERVICE_ROLE_KEY`/`RIOT_API_KEY` en runtime de Cloudflare
+  ahora si funciona.
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.

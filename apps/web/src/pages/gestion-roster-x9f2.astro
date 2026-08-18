@@ -8,7 +8,7 @@ import { loadParticipants } from "../lib/loadParticipants";
 import ParticipantManager from "../components/ParticipantManager";
 import { PAGES } from "@velada/core";
 
-const session = await getPanelSession(Astro.request, Astro.cookies);
+const session = await getPanelSession(Astro.request, Astro.cookies, undefined, Astro.locals);
 if (!session) {
   return Astro.redirect("/panel-login?error=forbidden");
 }

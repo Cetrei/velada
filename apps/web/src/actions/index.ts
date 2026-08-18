@@ -4,6 +4,7 @@ import { createSupabaseServerClient, createSupabaseAdminClient } from "../lib/su
 import { getPanelSession, markPassphraseVerified } from "../lib/panelSession";
 import { getParticipantSession } from "../lib/participantSession";
 import { fetchEventState } from "../lib/eventState";
+import { getServerEnv } from "../lib/env";
 import { ParticipantStatsSchema } from "@velada/core";
 
 const RIOT_PLATFORM_BY_SERVER: Record<string, string> = {
@@ -38,13 +39,68 @@ function requirePanelAuth<T>(session: T | null): T {
 }
 
 /**
+ * Robust sign-out: clears the session both server-side (Supabase) and via
+ * explicit cookie deletion, instead of trusting supabase.auth.signOut()
+ * alone to round-trip through the @supabase/ssr cookie adapter.
+ *
+ * Two things were making logout "stick" (session reappears right after
+ * clicking cerrar sesion, no error shown anywhere):
+ *
+ * 1. signOut()'s default scope is "global", which calls Supabase's revoke
+ *    endpoint over the network before the SDK tells the cookie adapter to
+ *    clear anything. If that call is slow or fails (flaky network, cold
+ *    Cloudflare Worker), the local cookies never get cleared even though
+ *    no error surfaces to the caller. scope: "local" clears the local
+ *    session immediately without waiting on that round-trip.
+ * 2. @supabase/ssr stores the session as a SINGLE cookie normally, but
+ *    splits it into <base>.0, <base>.1, ... chunks when the JWT is long
+ *    enough. If anything upstream only clears the base name, the .0/.1
+ *    chunks survive and supabase.auth.getUser() on the next request
+ *    reassembles a valid session from them - logout "didn't work" from the
+ *    user's POV even though the action ran and returned success. This
+ *    sweeps every sb-*-auth-token* cookie (base + numbered chunks) as a
+ *    belt-and-suspenders on top of whatever the SDK already cleared.
+ */
+async function signOutAndClearCookies(
+  supabase: NonNullable<ReturnType<typeof createSupabaseServerClient>[0]>,
+  request: Request,
+  cookies: Parameters<typeof createSupabaseServerClient>[1]
+): Promise<void> {
+  try {
+    await supabase.auth.signOut({ scope: "local" });
+  } catch (err) {
+    console.error("[signOutAndClearCookies] supabase.auth.signOut fallo, limpiando cookies igual:", err);
+  }
+
+  // Reads cookie NAMES straight off the incoming request header instead of
+  // iterating context.cookies (whose iterator shape isn't stable across
+  // Astro versions) - same parsing supabaseServer.ts already trusts for
+  // reading the session.
+  const rawCookieHeader = request.headers.get("Cookie") ?? "";
+  const cookieNames = rawCookieHeader
+    .split(";")
+    .map((pair) => pair.split("=")[0]?.trim())
+    .filter((name): name is string => !!name);
+
+  for (const name of cookieNames) {
+    if (name.startsWith("sb-") && name.includes("-auth-token")) {
+      cookies.delete(name, { path: "/" });
+    }
+  }
+}
+
+/**
  * Looks up a player's current solo queue rank from the Riot API. Shared by
  * the admin lookupRank action (manual "Consultar" button) and
  * saveOwnParticipant (self-service profile save, where the rank is always
  * re-derived server-side so nobody can type in "Challenger" by hand).
  */
-async function fetchRiotRank(lolUsername: string, lolServer: string): Promise<{ rank: string; lp: number }> {
-  const riotApiKey = import.meta.env.RIOT_API_KEY;
+async function fetchRiotRank(
+  lolUsername: string,
+  lolServer: string,
+  locals: Parameters<typeof getServerEnv>[0]["locals"]
+): Promise<{ rank: string; lp: number }> {
+  const riotApiKey = getServerEnv({ locals }, "RIOT_API_KEY");
   if (!riotApiKey) {
     throw new ActionError({
       code: "INTERNAL_SERVER_ERROR",
@@ -157,7 +213,7 @@ export const server = {
       password: z.string().min(6)
     }),
     handler: async ({ email, password }, context) => {
-      const [supabase, msg] = createSupabaseServerClient(context.request, context.cookies);
+      const [supabase, msg] = createSupabaseServerClient(context.request, context.cookies, context.locals);
       if (!supabase) {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
       }
@@ -200,7 +256,7 @@ export const server = {
       refreshToken: z.string().min(1)
     }),
     handler: async ({ accessToken, refreshToken }, context) => {
-      const [supabase, msg] = createSupabaseServerClient(context.request, context.cookies);
+      const [supabase, msg] = createSupabaseServerClient(context.request, context.cookies, context.locals);
       if (!supabase) {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
       }
@@ -228,10 +284,10 @@ export const server = {
 
   logout: defineAction({
     handler: async (_input, context) => {
-      const [supabase, msg] = createSupabaseServerClient(context.request, context.cookies);
+      const [supabase, msg] = createSupabaseServerClient(context.request, context.cookies, context.locals);
       if (!supabase) throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
-      
-      await supabase.auth.signOut();
+
+      await signOutAndClearCookies(supabase, context.request, context.cookies);
       context.cookies.delete("velada_panel_unlocked", { path: "/" });
       return { success: true };
     }
@@ -241,8 +297,8 @@ export const server = {
     accept: "form",
     input: z.object({ passphrase: z.string().min(1) }),
     handler: async ({ passphrase }, context) => {
-      const session = requirePanelAuth(await getPanelSession(context.request, context.cookies));
-      const [supabase, msg] = createSupabaseServerClient(context.request, context.cookies);
+      const session = requirePanelAuth(await getPanelSession(context.request, context.cookies, undefined, context.locals));
+      const [supabase, msg] = createSupabaseServerClient(context.request, context.cookies, context.locals);
       if (!supabase) {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
       }
@@ -269,9 +325,9 @@ export const server = {
   checkEmailExists: defineAction({
     accept: "form",
     input: z.object({ email: z.string().email() }),
-    handler: async ({ email }) => {
-      const url = import.meta.env.PUBLIC_SUPABASE_URL;
-      const serviceRoleKey = import.meta.env.SUPABASE_SERVICE_ROLE_KEY;
+    handler: async ({ email }, context) => {
+      const url = getServerEnv(context, "PUBLIC_SUPABASE_URL");
+      const serviceRoleKey = getServerEnv(context, "SUPABASE_SERVICE_ROLE_KEY");
       if (!url || !serviceRoleKey) {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: "Supabase no configurado." });
       }
@@ -312,7 +368,7 @@ export const server = {
         throw new ActionError({ code: "FORBIDDEN", message: "Las inscripciones estan cerradas." });
       }
 
-      const [supabase, msg] = createSupabaseServerClient(context.request, context.cookies);
+      const [supabase, msg] = createSupabaseServerClient(context.request, context.cookies, context.locals);
       if (!supabase) {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
       }
@@ -338,7 +394,7 @@ export const server = {
       password: z.string().min(6)
     }),
     handler: async ({ email, password }, context) => {
-      const [supabase, msg] = createSupabaseServerClient(context.request, context.cookies);
+      const [supabase, msg] = createSupabaseServerClient(context.request, context.cookies, context.locals);
       if (!supabase) {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
       }
@@ -354,11 +410,11 @@ export const server = {
 
   logoutParticipant: defineAction({
     handler: async (_input, context) => {
-      const [supabase, msg] = createSupabaseServerClient(context.request, context.cookies);
+      const [supabase, msg] = createSupabaseServerClient(context.request, context.cookies, context.locals);
       if (!supabase) {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
       }
-      await supabase.auth.signOut();
+      await signOutAndClearCookies(supabase, context.request, context.cookies);
       // Tambien limpia el gate del panel: sin esto, un admin que cierra
       // sesion desde /inscripcion se queda con velada_panel_unlocked=true
       // de una sesion Supabase vieja, y el proximo login por cualquier via
@@ -379,13 +435,13 @@ export const server = {
     accept: "form",
     input: z.object(ownParticipantFields),
     handler: async (input, context) => {
-      const session = requirePanelAuth(await getParticipantSession(context.request, context.cookies));
-      const [admin, msg] = createSupabaseAdminClient();
+      const session = requirePanelAuth(await getParticipantSession(context.request, context.cookies, undefined, context.locals));
+      const [admin, msg] = createSupabaseAdminClient(context.locals);
       if (!admin) {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
       }
 
-      const { rank } = await fetchRiotRank(input.lolUsername, input.lolServer);
+      const { rank } = await fetchRiotRank(input.lolUsername, input.lolServer, context.locals);
 
       const { data: existing } = await admin
         .from("participants")
@@ -503,8 +559,8 @@ export const server = {
       banner: z.instanceof(File).optional()
     }),
     handler: async (input, context) => {
-      requirePanelAuth(await getPanelSession(context.request, context.cookies));
-      const [admin, msg] = createSupabaseAdminClient();
+      requirePanelAuth(await getPanelSession(context.request, context.cookies, undefined, context.locals));
+      const [admin, msg] = createSupabaseAdminClient(context.locals);
       if (!admin) {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
       }
@@ -594,8 +650,8 @@ export const server = {
     accept: "form",
     input: z.object({ id: z.string().min(1) }),
     handler: async ({ id }, context) => {
-      requirePanelAuth(await getPanelSession(context.request, context.cookies));
-      const [admin, msg] = createSupabaseAdminClient();
+      requirePanelAuth(await getPanelSession(context.request, context.cookies, undefined, context.locals));
+      const [admin, msg] = createSupabaseAdminClient(context.locals);
       if (!admin) {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
       }
@@ -636,8 +692,8 @@ export const server = {
       lolServer: z.string().min(1)
     }),
     handler: async ({ lolUsername, lolServer }, context) => {
-      requirePanelAuth(await getPanelSession(context.request, context.cookies));
-      return fetchRiotRank(lolUsername, lolServer);
+      requirePanelAuth(await getPanelSession(context.request, context.cookies, undefined, context.locals));
+      return fetchRiotRank(lolUsername, lolServer, context.locals);
     }
   }),
 
@@ -659,7 +715,7 @@ export const server = {
       lolServer: z.string().min(1)
     }),
     handler: async ({ lolUsername, lolServer }, context) => {
-      requirePanelAuth(await getParticipantSession(context.request, context.cookies));
+      requirePanelAuth(await getParticipantSession(context.request, context.cookies, undefined, context.locals));
 
       const serverKey = lolServer.toUpperCase();
       if (!RIOT_PLATFORM_BY_SERVER[serverKey]) {
@@ -671,7 +727,7 @@ export const server = {
       }
 
       try {
-        const { rank } = await fetchRiotRank(lolUsername, lolServer);
+        const { rank } = await fetchRiotRank(lolUsername, lolServer, context.locals);
         return { status: "found" as const, rank };
       } catch (err) {
         if (err instanceof ActionError && err.code === "NOT_FOUND") {

@@ -6,7 +6,7 @@ import { actions, isInputError } from "astro:actions";
 import { getPanelSession } from "../lib/panelSession";
 import { PAGES } from "@velada/core";
 
-const session = await getPanelSession(Astro.request, Astro.cookies);
+const session = await getPanelSession(Astro.request, Astro.cookies, undefined, Astro.locals);
 if (session) {
   return Astro.redirect("/gestion-roster-x9f2");
 }

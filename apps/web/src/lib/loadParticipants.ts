@@ -1,4 +1,5 @@
 import { parseParticipants, ParticipantListSchema, ParticipantSchema, type Participant } from "@velada/core";
+import type { APIContext } from "astro";
 import { getSupabaseClient } from "./supabase";
 import { createSupabaseAdminClient } from "./supabaseServer";
 
@@ -106,8 +107,11 @@ export async function loadParticipants(): Promise<Participant[]> {
  * isn't exposed by the public read policy's selected columns by default
  * here, but mainly to keep this lookup reliable regardless of RLS changes.
  */
-export async function findParticipantByOwner(ownerUserId: string): Promise<Participant | null> {
-  const [admin, msg] = createSupabaseAdminClient();
+export async function findParticipantByOwner(
+  ownerUserId: string,
+  locals?: Pick<APIContext, "locals">["locals"]
+): Promise<Participant | null> {
+  const [admin, msg] = createSupabaseAdminClient(locals);
   if (!admin) {
     console.warn("No se pudo crear el cliente de Supabase admin:", msg);
     return null;

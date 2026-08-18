@@ -1,4 +1,4 @@
-import type { AstroCookies } from "astro";
+import type { AstroCookies, APIContext } from "astro";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "./supabaseServer";
 
@@ -21,11 +21,12 @@ export interface ParticipantSession {
 export async function getParticipantSession(
   request: Request,
   cookies: AstroCookies,
-  existingClient?: SupabaseClient
+  existingClient?: SupabaseClient,
+  locals?: Pick<APIContext, "locals">["locals"]
 ): Promise<ParticipantSession | null> {
   let supabase = existingClient;
   if (!supabase) {
-    const [freshClient, msg] = createSupabaseServerClient(request, cookies);
+    const [freshClient, msg] = createSupabaseServerClient(request, cookies, locals);
     if (!freshClient) {
       console.warn("No se pudo crear el cliente de Supabase:", msg);
       return null;
