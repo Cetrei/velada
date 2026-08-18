@@ -244,6 +244,8 @@ async function fetchProjectEndpoint(projectRef: string, accessToken: string): Pr
   return data.endpoint ?? `https://${data.ref}.supabase.co`;
 }
 
+class RateLimitError extends Error {}
+
 interface SupabaseInviteResponse {
   id: string;
   email?: string;
@@ -296,6 +298,13 @@ async function inviteAdmin(
       throw new Error(`${email} devolvio 422 pero no se encontro en la lista de usuarios`);
     }
     userId = existing.id;
+  } else if (inviteResponse.status === 429) {
+    throw new RateLimitError(
+      `Rate limit de emails alcanzado al invitar a ${email}. ` +
+        `Supabase Auth (SMTP por defecto) permite muy pocos correos por hora. ` +
+        `Espera unos minutos y vuelve a correr "bun run setup:db": los admins ya invitados ` +
+        `se detectan como existentes (422) y no se reenvia el correo.`
+    );
   } else {
     throw new Error(`Fallo al invitar a ${email} (${inviteResponse.status}): ${await inviteResponse.text()}`);
   }
@@ -334,7 +343,7 @@ function writeEnvFile(
 }
 
 /**
- * Seeds the participants table from apps/web/src/content/participants.yml
+ * Seeds the participants table from apps/web/src/data/participants.yml
  * so the admin panel has real starting data instead of an empty table.
  * Uses ON CONFLICT DO NOTHING, so it never overwrites edits made from the
  * admin panel on a re-run. Reuses @velada/core's validated YAML parser
@@ -350,7 +359,7 @@ async function seedParticipantsFromYaml(projectRef: string, accessToken: string)
     "apps",
     "web",
     "src",
-    "content",
+    "data",
     "participants.yml"
   );
 
@@ -430,7 +439,19 @@ async function main() {
       .map((e) => e.trim())
       .filter(Boolean);
     for (const email of emails) {
-      await inviteAdmin(endpoint, serviceRoleKey, projectRef, accessToken, email);
+      try {
+        await inviteAdmin(endpoint, serviceRoleKey, projectRef, accessToken, email);
+      } catch (error) {
+        if (error instanceof RateLimitError) {
+          console.warn(`  ⚠ ${error.message}`);
+          console.warn(
+            `  Deteniendo invitaciones por rate limit; el resto de emails pendientes no se intentaron. ` +
+              `Vuelve a correr "bun run setup:db" mas tarde para invitar a los que falten.`
+          );
+          break;
+        }
+        throw error;
+      }
     }
   }
 
