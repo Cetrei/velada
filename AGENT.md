@@ -658,6 +658,88 @@ era el de arriba, no whitelist).
   para confirmar que el paso 2/7 pasa esta vez. Sigo sin poder correrlo yo
   mismo.
 
+## Sesion 2026-08-18 (10): bug real encontrado (PBKDF2 > 100k en Cloudflare Workers) + UX de /inscripcion
+- **Causa raiz del login/registro roto en produccion** (el usuario reporto
+  el error exacto en pantalla: "Pbkdf2 failed: iteration counts above
+  100000 are not supported (requested 210000)", tanto en el paso "admin"
+  de `AuthGate` como en un 500 de `/panel-login?error=forbidden`):
+  `lib/password.ts` tenia `PBKDF2_ITERATIONS = 210_000`. Node's webcrypto
+  (usado por `astro dev`) no tiene limite de iteraciones, pero **Cloudflare
+  Workers' WebCrypto si tiene un cap duro y actualmente no configurable de
+  100_000** (confirmado contra el foro oficial de Cloudflare Community,
+  mismo mensaje de error textual reportado por otros usuarios con otros
+  valores > 100k). Por eso todo funcionaba en local y fallaba siempre en
+  el Worker desplegado, en cualquier llamada que derive un hash — hashear
+  al registrar Y verificar al loguear, incluida la creacion de la fila
+  placeholder de un admin nuevo en `login` (`hashPassword(crypto.randomUUID())`).
+  Fix: `PBKDF2_ITERATIONS = 100_000` en `lib/password.ts` (comentario en
+  el archivo explica el porque). El formato versionado
+  (`pbkdf2$<iterations>$...`) ya soportaba esto sin tocar `verifyPassword`.
+  **Pendiente/riesgo para el usuario**: si alguna cuenta llego a
+  registrarse corriendo `astro dev` en local contra la base de Supabase
+  real mientras `PBKDF2_ITERATIONS` todavia era 210_000, esa fila en
+  `participant_users.password_hash` quedo con `pbkdf2$210000$...` — esas
+  filas especificas NUNCA van a poder loguearse desde el Worker desplegado
+  (el error ocurre al derivar, tanto para hashear como para verificar), aun
+  con este fix, porque el fix solo afecta hashes nuevos. Si el usuario
+  sospecha que existe alguna cuenta asi, tiene que borrarla a mano en el
+  dashboard de Supabase (tabla `participant_users`) y volver a registrarse
+  — no hay forma de "re-hashear" sin la contrasena en texto plano. No pude
+  confirmar esto yo mismo, sin acceso a la base real desde esta sesion.
+- **UX pedida para `/inscripcion` (AuthGate.tsx)**: dos cosas, ambas
+  implementadas siguiendo el patron ya existente de `checkRiotProfile` en
+  `ParticipantProfileForm.tsx` (debounce + `requestId` en `useRef` para
+  descartar respuestas fuera de orden, mismo lenguaje visual de icono
+  check verde / spinner amarillo / X roja):
+  - **Verificacion de email en vivo**: nuevo estado `emailCheck` con
+    debounce de 500ms sobre `checkEmailExists` (accion que ya existia, no
+    se creo ninguna nueva). Icono dinamico dentro del campo de email:
+    spinner amarillo mientras verifica, X roja si el formato es invalido
+    o la llamada fallo, check verde si es valido — con un hint de texto
+    debajo que distingue "cuenta nueva" / "ya tenes cuenta" / "cuenta de
+    host". El boton "Continuar" queda deshabilitado hasta que el check
+    resuelva a un estado usable (`new`/`existing`/`admin`), y al hacer
+    click se REUSA ese resultado en vez de volver a llamar
+    `checkEmailExists` una segunda vez (antes el submit siempre repetia la
+    llamada aunque el debounce ya la hubiera hecho).
+  - **Checklist dinamico de requisitos de contrasena**: nuevo modulo
+    compartido `packages/core/passwordRules.ts`
+    (`checkPasswordRules`/`isPasswordValid`/`PASSWORD_MIN_LENGTH = 8`,
+    reglas: 8+ caracteres, una letra, un numero) exportado desde
+    `@velada/core` para que el checklist del cliente y la validacion del
+    server (`registerParticipant` en `actions/index.ts`, antes solo
+    `z.string().min(6)` sin chequear complejidad) usen exactamente la
+    misma regla — evita que el cliente marque algo "valido" que el server
+    despues rechaza, o viceversa. En `AuthGate.tsx`, mientras el paso es
+    "register" y el campo de contrasena tiene contenido: se listan SOLO
+    los requisitos que faltan (no los tres siempre, para no saturar como
+    pidio el usuario explicitamente), y cuando se cumplen todos colapsa a
+    una sola linea verde compacta en vez de una lista vacia. Confirmar
+    contrasena tambien tiene su propio hint en vivo (coincide / no
+    coincide) apenas el campo tiene contenido. El boton "Crear cuenta"
+    queda deshabilitado hasta que ambas cosas esten en regla.
+  - `login`/`loginParticipant` (acciones de LOGIN, no de registro) se
+    dejaron con su `z.string().min(6)` original a proposito: subir el
+    minimo ahi rechazaria logins de cuentas que ya se hayan registrado
+    antes de este fix con una contrasena mas corta. Solo
+    `registerParticipant` (alta de cuenta nueva) usa la regla nueva.
+- No se toco nada de apariencia/estilos por pedido explicito del usuario
+  (solo UX): mismos colores, mismas clases Tailwind, mismo layout de
+  `AuthGate`, solo se agrego la logica y los indicadores nuevos dentro de
+  la estructura existente.
+- Pendiente para el usuario (sin bash real sobre el proyecto tampoco en
+  esta sesion, todo via filesystem MCP): correr `bun install` + `bun run
+  dev`, probar registro/login localmente, y sobre todo hacer un deploy
+  real (push a `main` o un release) para confirmar en caliente que el
+  error de PBKDF2 desaparecio en produccion — es imposible de reproducir
+  en `astro dev` porque Node's webcrypto no tiene el limite que si tiene
+  el Worker. Revisar tambien si el 500 de `/panel-login?error=forbidden`
+  (Imagen 3 que mando el usuario) desaparece con este mismo fix — es
+  consistente con el mismo bug (una excepcion no capturada de
+  `crypto.subtle.deriveBits` durante un intento de login de admin), pero
+  no se pudo confirmar la causa exacta de ESE 500 especifico sin logs del
+  Worker real.
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.

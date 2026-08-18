@@ -5,7 +5,7 @@ import { getSession, createSession, destroySession, markPassphraseVerified, isAd
 import { hashPassword, verifyPassword } from "../lib/password";
 import { getServerEnv } from "../lib/env";
 import { fetchEventState } from "../lib/eventState";
-import { ParticipantStatsSchema } from "@velada/core";
+import { ParticipantStatsSchema, isPasswordValid, PASSWORD_MIN_LENGTH } from "@velada/core";
 import type { AppSession } from "../lib/session";
 
 const RIOT_PLATFORM_BY_SERVER: Record<string, string> = {
@@ -315,12 +315,20 @@ export const server = {
     accept: "form",
     input: z.object({
       email: z.string().email(),
-      password: z.string().min(6)
+      password: z.string().min(PASSWORD_MIN_LENGTH)
     }),
     handler: async ({ email, password }, context) => {
       const eventState = await fetchEventState();
       if (!eventState.registrationsOpen) {
         throw new ActionError({ code: "FORBIDDEN", message: "Las inscripciones estan cerradas." });
+      }
+
+      // El min(PASSWORD_MIN_LENGTH) de arriba solo cubre el largo; letra +
+      // numero se validan aca contra la misma regla que dibuja el checklist
+      // en AuthGate.tsx (checkPasswordRules de @velada/core), asi las dos
+      // superficies nunca quedan desincronizadas.
+      if (!isPasswordValid(password)) {
+        throw new ActionError({ code: "BAD_REQUEST", message: "La contrasena no cumple los requisitos minimos." });
       }
 
       const [admin, msg] = createSupabaseAdminClient(context.locals);

@@ -184,7 +184,17 @@ export const PAGES = {
     submitCreateCta: "Crear mi perfil",
     submitUpdateCta: "Guardar cambios",
     successCreated: "¡Perfil creado! Ya formás parte del roster.",
-    successUpdated: "Perfil actualizado."
+    successUpdated: "Perfil actualizado.",
+    emailCheckingHint: "Verificando email...",
+    emailNewAccountHint: "Email válido. Vamos a crear tu cuenta.",
+    emailExistingAccountHint: "Ya tenés cuenta con este email.",
+    emailAdminHint: "Cuenta de host detectada.",
+    passwordRequirementsTitle: "Tu contraseña necesita:",
+    passwordRequirementMinLength: "Al menos 8 caracteres",
+    passwordRequirementLetter: "Una letra",
+    passwordRequirementNumber: "Un número",
+    passwordRequirementsMet: "Contraseña válida",
+    passwordMatchHint: "Las contraseñas coinciden"
   }
 };
 

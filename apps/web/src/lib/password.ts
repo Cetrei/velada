@@ -10,9 +10,23 @@
  * bump to the work factor doesn't invalidate already-hashed passwords —
  * verify() reads whatever iteration count is stored, it doesn't assume
  * PBKDF2_ITERATIONS matches every existing hash.
+ *
+ * Iteration count capped at 100_000: Cloudflare Workers' WebCrypto
+ * implementation hard-rejects PBKDF2 above that ("NotSupportedError:
+ * iteration counts above 100000 are not supported"), unlike Node's
+ * webcrypto used by `astro dev` (no such limit there) — that mismatch is
+ * exactly why login/register worked locally but failed in every real
+ * deploy with the original 210_000 value (bug reported by the user,
+ * confirmed against Cloudflare's own community forum: this is a known,
+ * currently non-configurable platform limit, not a bug in this file).
+ * 100_000 was itself the industry-standard PBKDF2-SHA256 recommendation
+ * for years, so it's a real, defensible work factor on its own — not
+ * merely "the max Cloudflare allows". If Cloudflare ever raises the cap,
+ * existing hashes still verify fine (see the versioning note above); only
+ * new hashPassword() calls would pick up a higher value.
  */
 
-const PBKDF2_ITERATIONS = 210_000;
+const PBKDF2_ITERATIONS = 100_000;
 const SALT_BYTES = 16;
 const HASH_BITS = 256;
 
