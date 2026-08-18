@@ -1,0 +1,36 @@
+---
+import type { Participant } from "@velada/core";
+
+interface Props {
+  participant: Participant;
+  isWinner: boolean;
+  align: "left" | "right";
+}
+
+const { participant, isWinner, align } = Astro.props;
+const fallback = `https://placehold.co/400x500/0A1428/C8AA6E?text=${encodeURIComponent(participant.nickname)}`;
+---
+
+<div class="relative h-48 sm:h-56 overflow-hidden">
+  <img
+    src={participant.photo ?? fallback}
+    alt={participant.name}
+    loading="lazy"
+    class={`w-full h-full object-cover ${!isWinner ? "grayscale-[0.4] opacity-80" : ""}`}
+  />
+  <div class="absolute inset-0 bg-gradient-to-t from-lol-cardBg via-transparent to-transparent" />
+  {
+    isWinner && (
+      <span class="absolute top-2 inset-x-0 text-center">
+        <span class="inline-block px-2 py-0.5 bg-lol-gold text-lol-darkBg text-[10px] font-bold uppercase tracking-wide rounded-sm">
+          ★
+        </span>
+      </span>
+    )
+  }
+  <span
+    class={`absolute bottom-2 ${align === "left" ? "left-2" : "right-2 text-right"} text-white font-display font-bold text-sm sm:text-base uppercase drop-shadow-lg`}
+  >
+    {participant.name}
+  </span>
+</div>

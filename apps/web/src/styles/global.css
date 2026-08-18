@@ -31,3 +31,7 @@ body {
     0 15px
   );
 }
+
+.snap-start {
+  scroll-snap-stop: always;
+}

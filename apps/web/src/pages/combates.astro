@@ -1,29 +1,32 @@
 ---
 import Layout from "../layouts/Layout.astro";
-import RosterExplorer from "../components/RosterExplorer";
+import MatchesSection from "../components/MatchesSection.astro";
 import { loadParticipants } from "../lib/loadParticipants";
-import { fetchVotesByParticipant } from "../lib/matches";
+import { fetchMatches, withOfficialResult } from "../lib/matches";
 import { PAGES } from "@velada/core";
 
 const participants = await loadParticipants();
-const votesById = await fetchVotesByParticipant();
-const copy = PAGES.fighters;
+const participantsById = Object.fromEntries(participants.map((p) => [p.id, p]));
+const allMatches = await fetchMatches();
+const officialMatches = withOfficialResult(allMatches);
+
+const copy = PAGES.matches;
 ---
 
 <Layout title={copy.tabTitle}>
   <section class="pt-32 pb-24 bg-lol-darkBg min-h-screen">
-    <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="text-center mb-16">
         <h1 class="font-display text-4xl md:text-5xl font-bold text-white uppercase tracking-wider">
           {copy.title}
         </h1>
         <div class="h-1 w-24 bg-lol-gold mx-auto mt-6"></div>
         <p class="text-slate-400 mt-6 max-w-xl mx-auto">
-          {copy.subtitle(participants.length)}
+          {copy.subtitle}
         </p>
       </div>
 
-      <RosterExplorer client:load participants={participants} votesById={votesById} />
+      <MatchesSection matches={officialMatches} participantsById={participantsById} />
     </div>
   </section>
 </Layout>

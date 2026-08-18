@@ -1,0 +1,150 @@
+---
+import type { Participant } from "@velada/core";
+import { SITE } from "@velada/core";
+
+interface Props {
+  participants: Participant[];
+  hero: {
+    eyebrow: string;
+    titleLine1: string;
+    titleHighlight: string;
+    titleLine2: string;
+    subtitle: (count: number) => string;
+  };
+}
+
+const { participants, hero } = Astro.props;
+---
+
+<section class="relative h-screen min-h-[640px] overflow-hidden bg-lol-darkBg border-b border-lol-border snap-start flex flex-col">
+  <div class="absolute inset-0">
+    <img
+      src="/images/hero-banner.jpg"
+      alt=""
+      loading="eager"
+      fetchpriority="high"
+      class="w-full h-full object-cover"
+    />
+  </div>
+
+  <div class="absolute inset-0 bg-gradient-to-t from-lol-darkBg/85 via-transparent to-lol-darkBg/20" />
+
+  <div class="relative flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-10 flex flex-col items-center justify-end text-center">
+    {
+      hero.eyebrow && (
+        <span
+          class="hero-reveal hero-eyebrow font-display uppercase text-xs sm:text-sm mb-4 block"
+          style="animation-delay: 80ms"
+        >
+          {hero.eyebrow}
+        </span>
+      )
+    }
+
+    {
+      (hero.titleLine1 || hero.titleHighlight || hero.titleLine2) && (
+        <h1
+          class="hero-reveal hero-title font-display text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold uppercase tracking-tight mb-4 leading-[0.95]"
+          style="animation-delay: 180ms"
+        >
+          {hero.titleLine1}{" "}
+          <span class="hero-title-highlight">
+            {hero.titleHighlight}
+          </span>
+          <br />
+          {hero.titleLine2}
+        </h1>
+      )
+    }
+
+    {
+      hero.subtitle(participants.length) && (
+        <p
+          class="hero-reveal max-w-xl text-sm sm:text-base text-slate-300/90 mb-3 font-light"
+          style="animation-delay: 280ms"
+        >
+          {hero.subtitle(participants.length)}
+        </p>
+      )
+    }
+
+    <div class="hero-reveal flex items-center gap-3 mb-6" style="animation-delay: 340ms">
+      <span class="h-px w-8 bg-lol-gold/40" />
+      <span class="text-lol-gold/90 text-[0.65rem] uppercase tracking-[0.25em] font-bold">{SITE.name}</span>
+      <span class="h-px w-8 bg-lol-gold/40" />
+    </div>
+
+    <div class="hero-reveal scale-90 sm:scale-100" style="animation-delay: 400ms">
+      <slot />
+    </div>
+  </div>
+
+  <div class="relative pb-8 flex justify-center scroll-hint">
+    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-lol-gold/70">
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  </div>
+</section>
+
+<style>
+  .hero-reveal {
+    opacity: 0;
+    transform: translateY(16px);
+    animation: hero-reveal-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  .hero-title {
+    position: relative;
+    display: inline-block;
+    color: #f5efe0;
+    text-shadow:
+      0 2px 4px rgba(0, 0, 0, 0.9),
+      0 4px 24px rgba(0, 0, 0, 0.75),
+      0 0 18px rgba(11, 212, 212, 0.12);
+  }
+
+  .hero-title-highlight {
+    color: transparent;
+    background-image: linear-gradient(120deg, #c8aa6e, #f0e6d2 45%, #785a28 80%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    text-shadow: 0 2px 20px rgba(200, 170, 110, 0.35);
+  }
+
+  .hero-eyebrow {
+    letter-spacing: 0.35em;
+    font-weight: 700;
+    color: transparent;
+    background-image: linear-gradient(90deg, #ff6a1a, #ffb347 45%, #ff6a1a 90%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    text-shadow: 0 2px 14px rgba(255, 106, 26, 0.35);
+  }
+
+  .scroll-hint {
+    animation: scroll-hint-bounce 2s ease-in-out infinite;
+  }
+
+  @keyframes hero-reveal-in {
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes scroll-hint-bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(8px); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero-reveal {
+      animation: none;
+      opacity: 1;
+      transform: none;
+    }
+    .scroll-hint {
+      animation: none;
+    }
+  }
+</style>

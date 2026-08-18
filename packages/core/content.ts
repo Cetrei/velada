@@ -16,9 +16,12 @@ export const NAV = {
   links: [
     { href: "/", label: "Inicio" },
     { href: "/peleadores", label: "Peleadores" },
+    { href: "/combates", label: "Combates" },
+    { href: "/pronosticos", label: "Pronósticos" },
     { href: "/sorteo", label: "Sorteo" }
   ],
-  liveCta: "Ver en Vivo"
+  liveCta: "Ver en Vivo",
+  registerCta: "Inscribirme"
 };
 
 export const PAGES = {
@@ -26,17 +29,27 @@ export const PAGES = {
     tabTitle: "La Venida del Año",
     hero: {
       eyebrow: "La corrida de la decada",
-      titleLine1: "El",
-      titleHighlight: "Phonk",
-      titleLine2: "Final",
-      subtitle: (fighterCount: number) =>
-        `${fighterCount} pajeros, un solo sigma. La Grieta del Invocador está a punto temblar.`
+      titleLine1: "",
+      titleHighlight: "",
+      titleLine2: "",
+      subtitle: () => ""
     },
     overview: {
       title: "Los Peleadores",
       subtitle: (fighterCount: number) =>
         `${fighterCount} combatientes confirmados. Adelanto del roster completo.`,
       cta: "Ver el roster completo"
+    },
+    predictions: {
+      title: "Pronósticos",
+      subtitle: "Así está votando la comunidad. Elige tu ganador antes de que empiece.",
+      cta: "Ver todos los pronósticos",
+      emptyState: "Aún no hay combates abiertos a pronóstico."
+    },
+    matches: {
+      title: "Combates",
+      subtitle: "Resultados oficiales y tarjetas de los jueces.",
+      cta: "Ver todos los combates"
     },
     raffle: {
       title: "Sorteo Oficial",
@@ -51,7 +64,62 @@ export const PAGES = {
   fighters: {
     tabTitle: "Peleadores - La Venida en LoL",
     title: "Roster Completo",
-    subtitle: (fighterCount: number) => `${fighterCount} combatientes listos para la Grieta del Invocador.`
+    subtitle: (fighterCount: number) => `${fighterCount} combatientes listos para la Grieta del Invocador.`,
+    searchPlaceholder: "Buscar por nombre o apodo...",
+    filterRoleLabel: "Rol",
+    filterRoleAll: "Todos",
+    filterEloLabel: "Elo",
+    filterEloAll: "Todos",
+    sortLabel: "Ordenar por",
+    sortOptions: {
+      nameAsc: "Nombre (A-Z)",
+      votesDesc: "Más votados",
+      votesAsc: "Menos votados"
+    },
+    emptyState: "Ningún peleador coincide con esa búsqueda."
+  },
+
+  fighterDetail: {
+    tabTitle: (name: string) => `${name} - La Venida del Año`,
+    backCta: "Volver al roster",
+    followersLabel: "Seguidores",
+    countryLabel: "País",
+    heightLabel: "Estatura",
+    weightLabel: "Peso",
+    categoryLabel: "Categoría",
+    rivalLabel: "Su rival",
+    viewMatchCta: "Ver el combate",
+    noRivalYet: "Rival por definir",
+    predictionTitle: "Pronóstico de la comunidad",
+    notFoundTitle: "Peleador no encontrado",
+    notFoundSubtitle: "Puede que el link esté roto o el participante ya no exista.",
+    notFoundCta: "Volver al roster"
+  },
+
+  matches: {
+    tabTitle: "Combates - La Venida del Año",
+    title: "Combates",
+    subtitle: "Resultados oficiales y tarjetas de los jueces de La Venida del Año.",
+    officialResultsLabel: "Resultados oficiales",
+    winnerLabel: "Ganadora",
+    winnerLabelMasc: "Ganador",
+    decisionLabel: "Decisión",
+    pendingResult: "Resultado pendiente",
+    emptyState: "Todavía no hay combates cargados."
+  },
+
+  predictions: {
+    tabTitle: "Pronósticos - La Venida del Año",
+    title: "Pronósticos",
+    subtitle: "Así pronosticó la comunidad los combates de La Venida del Año.",
+    communityLabel: "Pronóstico de la comunidad",
+    votesLabel: (count: number) => `${count.toLocaleString("es")} votos`,
+    votedLabel: "Ya votaste",
+    voteCta: "Votar",
+    emptyState: "No hay combates abiertos a pronóstico todavía.",
+    closedLabel: "Pronóstico cerrado",
+    votingPhaseClosedTitle: "Votaciones cerradas",
+    votingPhaseClosedSubtitle: "El host todavía no habilitó la fase de votaciones. Volvé a intentarlo más tarde."
   },
 
   raffle: {
@@ -80,13 +148,43 @@ export const PAGES = {
 
   rosterManager: {
     title: "Gestion de Participantes",
+    subtitle: "Editá o eliminá los perfiles que cada peleador cargó desde /inscripcion.",
     logoutCta: "Cerrar sesion"
   },
 
   admin: {
     tabTitle: "Panel Admin - La Venida del Año",
     title: "Panel del Host",
-    subtitle: "Control de fase del evento y emisión del sorteo."
+    subtitle: "Control de fase del evento, combates y sorteo."
+  },
+
+  inscripcion: {
+    tabTitle: "Inscripción - La Venida del Año",
+    title: "Inscripción",
+    closedTitle: "Inscripciones cerradas",
+    closedSubtitle: "El host cerró las inscripciones por ahora. Volvé a intentarlo más tarde.",
+    subtitleAuth: "Ingresá tu email para crear tu cuenta o iniciar sesión.",
+    subtitleNewProfile: "Ya tenés cuenta. Ahora completá tu ficha de peleador.",
+    subtitleEditProfile: "Este es tu perfil. Podés editarlo cuando quieras.",
+    emailLabel: "Email",
+    passwordLabel: "Contraseña",
+    confirmPasswordLabel: "Confirmar contraseña",
+    continueCta: "Continuar",
+    changeEmailCta: "Usar otro email",
+    newAccountHint: "No encontramos una cuenta con este email. Creá una contraseña para registrarte.",
+    existingAccountHint: "Ya tenés cuenta. Ingresá tu contraseña para continuar.",
+    loginCta: "Entrar",
+    registerCta: "Crear cuenta",
+    logoutCta: "Cerrar sesión",
+    errorEmailInvalid: "Ingresá un email válido.",
+    errorPasswordMismatch: "Las contraseñas no coinciden.",
+    registerSuccess: "Cuenta creada. Ahora completá tu perfil.",
+    rankPendingHint: "Tu rango se consulta automáticamente desde Riot al guardar — no se puede escribir a mano.",
+    currentRankLabel: "Rango actual",
+    submitCreateCta: "Crear mi perfil",
+    submitUpdateCta: "Guardar cambios",
+    successCreated: "¡Perfil creado! Ya formás parte del roster.",
+    successUpdated: "Perfil actualizado."
   }
 };
 
@@ -95,13 +193,32 @@ export const FIGHTER_CARD = {
   favChampionLabel: "Campeón Favorito"
 };
 
+export const CHAMPION_SELECT = {
+  title: "¡Elige tu peleador!",
+  hint: "",
+  emptyHint: "Selecciona un peleador",
+  backCta: "Volver",
+  viewProfileCta: "Ver ficha completa",
+  vsLabel: "VS"
+};
+
 export const ADMIN_CONTROL = {
   connected: "Conectado a Supabase",
   disconnected: "Sin conexión a Supabase",
-  phaseTitle: "Fase del evento",
-  raffleControlTitle: "Control del sorteo",
-  lockRaffle: "Bloquear sorteo",
-  unlockRaffle: "Desbloquear sorteo",
+  stateTitle: "Estado del evento",
+  stateHint: "Activá o desactivá cada etapa en el orden que quieras. Cada switch solo habilita/deshabilita esa parte del sitio.",
+  registrationsLabel: "Inscripciones",
+  registrationsOpenState: "Abiertas",
+  registrationsClosedState: "Cerradas",
+  rouletteLabel: "Ruleta de combates",
+  rouletteEnabledState: "Habilitada",
+  rouletteDisabledState: "Bloqueada",
+  votingLabel: "Fase de votaciones",
+  votingEnabledState: "Habilitada",
+  votingDisabledState: "Bloqueada",
+  eventStartedLabel: "Inicio de la velada",
+  eventStartedOnState: "Empezada",
+  eventStartedOffState: "Sin empezar",
   emitRandomMatch: "Emitir sorteo aleatorio en vivo",
   loadedFighters: (count: number) => `Participantes cargados (${count})`,
   startTimeTitle: "Fecha de inicio",
@@ -110,12 +227,33 @@ export const ADMIN_CONTROL = {
   errorStartTimeEmpty: "Elegi una fecha valida.",
   successStartTimeUpdated: "Fecha de inicio actualizada.",
   errorNotConnected: "Supabase no esta configurado. Corre bun run setup:supabase.",
-  errorUnexpected: (detail: string) => `Error inesperado: ${detail}`
+  errorUnexpected: (detail: string) => `Error inesperado: ${detail}`,
+  matchesTitle: "Combates",
+  newMatchCta: "Nuevo combate",
+  matchNumberLabel: "N° de combate",
+  player1Label: "Peleador 1",
+  player2Label: "Peleador 2",
+  createMatchCta: "Crear combate",
+  deleteMatchCta: "Borrar",
+  predictionsOpenLabel: "Pronóstico abierto al público",
+  togglePredictionsCta: "Cambiar",
+  winnerLabel: "Ganador",
+  noWinnerYet: "Sin definir",
+  decisionLabel: "Decisión (ej: Decisión unánime 5-0)",
+  saveResultCta: "Guardar resultado",
+  votesCountLabel: (p1: number, p2: number) => `${p1} vs ${p2} votos`,
+  successMatchCreated: "Combate creado.",
+  successMatchUpdated: "Combate actualizado.",
+  successMatchDeleted: "Combate eliminado.",
+  confirmDeleteMatch: "¿Borrar este combate? Se borran también sus pronósticos.",
+  errorNeedTwoDifferent: "Elegí dos peleadores distintos."
 };
 
 export const PARTICIPANT_MANAGER = {
-  newParticipant: "Nuevo participante",
   editingParticipant: (id: string) => `Editando: ${id}`,
+  newParticipant: "Nuevo participante",
+  submitNewCta: "Crear participante",
+  noManualCreateHint: "Los peleadores se inscriben ellos mismos en /inscripcion. Acá solo podés editar o borrar.",
   fields: {
     name: "Nombre *",
     nickname: "Apodo *",
@@ -128,7 +266,8 @@ export const PARTICIPANT_MANAGER = {
     lolServer: "Servidor",
     lolRank: "Rango *",
     description: "Descripcion",
-    photo: "Foto (desde archivos o camara del celular)"
+    photo: "Foto (desde archivos o camara del celular)",
+    banner: "Banner (foto grande, se usa en la selección de peleador)"
   },
   placeholders: {
     weight: "75 kg",
@@ -153,7 +292,6 @@ export const PARTICIPANT_MANAGER = {
   rosterTitle: (count: number) => `Roster actual (${count})`,
   editCta: "Editar",
   deleteCta: "Borrar",
-  submitNewCta: "Agregar participante",
   submitEditCta: "Guardar cambios",
   cancelCta: "Cancelar"
 };

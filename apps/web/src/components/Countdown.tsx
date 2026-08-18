@@ -45,23 +45,23 @@ export default function Countdown({ targetIso }: CountdownProps) {
   ];
 
   return (
-    <div className="flex items-center justify-center gap-4 md:gap-8 mb-12">
+    <div className="flex items-center justify-center gap-3 md:gap-6 mb-2">
       {units.map((unit, index) => (
-        <div key={unit.label} className="flex items-center gap-4 md:gap-8">
+        <div key={unit.label} className="flex items-center gap-3 md:gap-6">
           <div className="flex flex-col items-center">
             <span
-              className={`font-display text-4xl md:text-6xl font-bold mb-1 ${
+              className={`font-display text-2xl md:text-4xl font-bold mb-0.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] ${
                 unit.accent ? "text-lol-blue" : "text-white"
               }`}
             >
               {pad(unit.value)}
             </span>
-            <span className="text-xs md:text-sm text-lol-gold uppercase tracking-wider font-bold">
+            <span className="text-[0.6rem] md:text-xs text-lol-gold/90 uppercase tracking-wider font-bold">
               {unit.label}
             </span>
           </div>
           {index < units.length - 1 && (
-            <span className="text-3xl text-lol-border mb-6">:</span>
+            <span className="text-lg md:text-2xl text-lol-border mb-4">:</span>
           )}
         </div>
       ))}

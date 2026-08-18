@@ -18,7 +18,7 @@ if (passphraseResult && !passphraseResult.error) {
   return Astro.redirect("/gestion-roster-x9f2");
 }
 
-const initialParticipants = loadParticipants();
+const initialParticipants = await loadParticipants();
 const copy = PAGES.panelPassphrase;
 const managerCopy = PAGES.rosterManager;
 ---

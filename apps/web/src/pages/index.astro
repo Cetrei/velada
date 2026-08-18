@@ -1,87 +1,143 @@
 ---
 import Layout from "../layouts/Layout.astro";
+import HeroBanner from "../components/HeroBanner.astro";
 import Countdown from "../components/Countdown";
-import FighterCard from "../components/FighterCard.astro";
+import ChampionSelectGrid from "../components/ChampionSelectGrid";
+import PredictionsSection from "../components/PredictionsSection";
+import MatchesSection from "../components/MatchesSection.astro";
 import { loadParticipants } from "../lib/loadParticipants";
 import { fetchEventState } from "../lib/eventState";
+import { fetchMatches, withOfficialResult, openForPredictions, fetchPredictionTallies } from "../lib/matches";
 import { PAGES } from "@velada/core";
 
-const participants = loadParticipants();
+const participants = await loadParticipants();
 const eventState = await fetchEventState();
+const allMatches = await fetchMatches();
 
-const previewFighters = participants.slice(0, 3);
-const { hero, overview, raffle } = PAGES.home;
+const participantsById = Object.fromEntries(participants.map((p) => [p.id, p]));
+const rivalByParticipantId = Object.fromEntries(
+  allMatches.flatMap((m) => [
+    [m.player1Id, participantsById[m.player2Id]],
+    [m.player2Id, participantsById[m.player1Id]]
+  ])
+);
+
+const officialMatches = withOfficialResult(allMatches).slice(0, 3);
+const predictionMatches = openForPredictions(allMatches).slice(0, 4);
+const tallies = await fetchPredictionTallies(predictionMatches);
+const talliesRecord = Object.fromEntries(tallies);
+
+const { predictions, matches, home } = PAGES;
 ---
 
-<Layout title={PAGES.home.tabTitle}>
-  <section class="relative pt-32 pb-20 lg:pt-48 lg:pb-32 bg-hero-pattern overflow-hidden">
-    <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center text-center">
-      <span class="text-lol-blue font-bold tracking-[0.3em] uppercase text-sm mb-4 block">
-        {hero.eyebrow}
-      </span>
-      <h1 class="font-display text-5xl md:text-7xl lg:text-8xl font-bold text-white uppercase tracking-tight drop-shadow-2xl mb-6">
-        {hero.titleLine1} <span class="text-transparent bg-clip-text bg-gradient-to-r from-lol-gold via-yellow-200 to-lol-goldDark">{hero.titleHighlight}</span>
-        <br />{hero.titleLine2}
-      </h1>
-      <p class="max-w-2xl text-lg md:text-xl text-slate-400 mb-12 font-light">
-        {hero.subtitle(participants.length)}
-      </p>
-
+<Layout title={home.tabTitle}>
+  <div class="snap-y snap-mandatory overflow-y-auto h-screen scroll-smooth" style="scroll-padding-top: 4rem;">
+    <HeroBanner participants={participants} hero={home.hero}>
       <Countdown client:load targetIso={eventState.startTime} />
+    </HeroBanner>
 
-      <a
-        href="#overview"
-        class="animate-bounce p-2 rounded-full border border-lol-border bg-lol-cardBg text-lol-gold mt-8"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>
-      </a>
-    </div>
-  </section>
+    <section id="roster" class="h-screen snap-start flex flex-col items-center justify-center bg-lol-darkBg border-y border-lol-border overflow-hidden py-4">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full h-full flex flex-col items-center justify-center gap-2 sm:gap-3">
+        <div class="text-center flex-shrink-0">
+          <h2 class="font-display text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-white uppercase tracking-wider">
+            {home.overview.title}
+          </h2>
+          <div class="h-1 w-24 bg-lol-gold mx-auto mt-2 sm:mt-3"></div>
+        </div>
 
-  <section id="overview" class="py-24 bg-lol-darkBg border-y border-lol-border">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="text-center mb-16">
-        <h2 class="font-display text-4xl md:text-5xl font-bold text-white uppercase tracking-wider">
-          {overview.title}
+        <div class="w-full flex-1 min-h-0 flex items-center justify-center overflow-y-auto sm:overflow-visible">
+          <ChampionSelectGrid client:load participants={participants} rivalByParticipantId={rivalByParticipantId} />
+        </div>
+
+        <div class="text-center flex-shrink-0">
+          <a
+            href="/peleadores"
+            class="inline-block px-8 py-3 bg-lol-gold/10 border border-lol-gold text-lol-gold hover:bg-lol-gold hover:text-lol-darkBg transition-all font-bold text-sm tracking-wide uppercase clip-edges"
+          >
+            {home.overview.cta}
+          </a>
+        </div>
+      </div>
+    </section>
+
+    {
+      predictionMatches.length > 0 && (
+        <section id="pronosticos" class="h-screen snap-start flex items-center justify-center bg-black overflow-hidden">
+          <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 w-full max-h-full overflow-y-auto">
+            <div class="text-center mb-10">
+              <h2 class="font-display text-4xl md:text-5xl font-bold text-white uppercase tracking-wider">
+                {home.predictions.title}
+              </h2>
+              <div class="h-1 w-24 bg-lol-gold mx-auto mt-6" />
+              <p class="text-slate-400 mt-6 max-w-xl mx-auto">{home.predictions.subtitle}</p>
+            </div>
+
+            <PredictionsSection
+              client:load
+              matches={predictionMatches}
+              participantsById={participantsById}
+              tallies={talliesRecord}
+            />
+
+            <div class="text-center mt-8">
+              <a
+                href="/pronosticos"
+                class="inline-block px-8 py-3 bg-lol-gold/10 border border-lol-gold text-lol-gold hover:bg-lol-gold hover:text-lol-darkBg transition-all font-bold text-sm tracking-wide uppercase clip-edges"
+              >
+                {home.predictions.cta}
+              </a>
+            </div>
+          </div>
+        </section>
+      )
+    }
+
+    {
+      officialMatches.length > 0 && (
+        <section id="combates" class="h-screen snap-start flex items-center justify-center bg-lol-darkBg border-y border-lol-border overflow-hidden">
+          <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full max-h-full overflow-y-auto">
+            <div class="text-center mb-10">
+              <h2 class="font-display text-4xl md:text-5xl font-bold text-white uppercase tracking-wider">
+                {home.matches.title}
+              </h2>
+              <div class="h-1 w-24 bg-lol-gold mx-auto mt-6" />
+              <p class="text-slate-400 mt-6 max-w-xl mx-auto">{home.matches.subtitle}</p>
+            </div>
+
+            <MatchesSection matches={officialMatches} participantsById={participantsById} />
+
+            <div class="text-center mt-8">
+              <a
+                href="/combates"
+                class="inline-block px-8 py-3 bg-lol-gold/10 border border-lol-gold text-lol-gold hover:bg-lol-gold hover:text-lol-darkBg transition-all font-bold text-sm tracking-wide uppercase clip-edges"
+              >
+                {home.matches.cta}
+              </a>
+            </div>
+          </div>
+        </section>
+      )
+    }
+
+    <section class="h-screen snap-start flex items-center justify-center relative bg-gradient-to-b from-lol-darkBg to-black overflow-hidden">
+      <div
+        class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-lol-gold/5 rounded-full blur-[100px] pointer-events-none"
+      />
+
+      <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10 w-full max-h-full overflow-y-auto">
+        <h2 class="font-display text-3xl font-bold text-white uppercase tracking-widest mb-4">
+          {home.raffle.title}
         </h2>
-        <div class="h-1 w-24 bg-lol-gold mx-auto mt-6"></div>
-        <p class="text-slate-400 mt-6 max-w-xl mx-auto">
-          {overview.subtitle(participants.length)}
+        <p class="text-slate-400 mb-8">
+          {eventState.rouletteUnlocked ? home.raffle.subtitleLive : home.raffle.subtitleWaiting}
         </p>
-      </div>
-
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
-        {previewFighters.map((participant) => <FighterCard participant={participant} />)}
-      </div>
-
-      <div class="text-center">
         <a
-          href="/peleadores"
-          class="inline-block px-8 py-3 bg-lol-gold/10 border border-lol-gold text-lol-gold hover:bg-lol-gold hover:text-lol-darkBg transition-all font-bold text-sm tracking-wide uppercase clip-edges"
+          href="/sorteo"
+          class="inline-block px-8 py-4 bg-gradient-to-r from-lol-gold to-yellow-600 hover:from-yellow-500 hover:to-yellow-400 text-black font-display font-bold text-lg transition-all transform hover:-translate-y-1 shadow-[0_10px_20px_rgba(200,170,110,0.3)] clip-edges uppercase tracking-wider"
         >
-          {overview.cta}
+          {eventState.rouletteUnlocked ? home.raffle.ctaLive : home.raffle.ctaWaiting}
         </a>
       </div>
-    </div>
-  </section>
-
-  <section class="py-24 relative overflow-hidden bg-gradient-to-b from-lol-darkBg to-black">
-    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-lol-gold/5 rounded-full blur-[100px] pointer-events-none">
-    </div>
-
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
-      <h2 class="font-display text-3xl font-bold text-white uppercase tracking-widest mb-4">
-        {raffle.title}
-      </h2>
-      <p class="text-slate-400 mb-8">
-        {eventState.rouletteUnlocked ? raffle.subtitleLive : raffle.subtitleWaiting}
-      </p>
-      <a
-        href="/sorteo"
-        class="inline-block px-8 py-4 bg-gradient-to-r from-lol-gold to-yellow-600 hover:from-yellow-500 hover:to-yellow-400 text-black font-display font-bold text-lg transition-all transform hover:-translate-y-1 shadow-[0_10px_20px_rgba(200,170,110,0.3)] clip-edges uppercase tracking-wider"
-      >
-        {eventState.rouletteUnlocked ? raffle.ctaLive : raffle.ctaWaiting}
-      </a>
-    </div>
-  </section>
+    </section>
+  </div>
 </Layout>

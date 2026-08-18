@@ -3,6 +3,9 @@ export type {
   ParticipantStats,
   EventPhase,
   EventState,
+  JudgeCard,
   Match,
+  Prediction,
+  PredictionTally,
   SpinStartPayload
 } from "@velada/core";

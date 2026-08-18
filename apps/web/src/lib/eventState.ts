@@ -5,7 +5,10 @@ const FALLBACK_EVENT_STATE: EventState = {
   id: "main",
   startTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
   rouletteUnlocked: false,
-  currentPhase: "COUNTDOWN"
+  currentPhase: "COUNTDOWN",
+  registrationsOpen: true,
+  votingEnabled: false,
+  eventStarted: false
 };
 
 /**
@@ -19,7 +22,7 @@ export async function fetchEventState(): Promise<EventState> {
 
   const { data, error } = await supabase
     .from("event_state")
-    .select("id, start_time, roulette_unlocked, current_phase")
+    .select("id, start_time, roulette_unlocked, current_phase, registrations_open, voting_enabled, event_started")
     .eq("id", "main")
     .maybeSingle();
 
@@ -32,6 +35,9 @@ export async function fetchEventState(): Promise<EventState> {
     id: data.id,
     startTime: data.start_time,
     rouletteUnlocked: data.roulette_unlocked,
-    currentPhase: data.current_phase
+    currentPhase: data.current_phase,
+    registrationsOpen: data.registrations_open ?? true,
+    votingEnabled: data.voting_enabled ?? false,
+    eventStarted: data.event_started ?? false
   };
 }

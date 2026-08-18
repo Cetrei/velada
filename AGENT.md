@@ -55,7 +55,48 @@ Se decidio (con el usuario, no unilateral) migrar a SSR completo
   `pages deploy`)
 - `docs/ARCHITECTURE_SPEC.md` actualizado con nota al respecto
 
+## Sesion 2026-08-17: rediseno landing + banner de peleador
+- `HeroBanner.astro`: ya no arma un collage de fotos de participantes de
+  fondo; usa una imagen fija del sitio en
+  `apps/web/public/images/hero-banner.jpg` (el usuario la pone a mano, no
+  se sube desde el admin). El bloque de texto/countdown ahora ocupa toda
+  la altura del viewport (`h-screen`) con flecha de scroll animada abajo.
+- `index.astro`: el landing paso a scroll vertical con snap
+  (`snap-y snap-mandatory`, cada seccion `min-h-screen snap-start`) en vez
+  de scroll libre continuo — hero, roster/champ-select, pronosticos,
+  combates y sorteo son "actos" separados, cada uno resumido (ya estaba
+  limitado con `.slice()`, eso no cambio).
+- `ChampionSelectGrid.tsx`: reescrito de hover-preview a un layout tipo
+  cliente de LoL — rail angosto de retratos a la izquierda (click, no
+  hover), panel vacio a la derecha hasta seleccionar, banner grande al
+  seleccionar (usa `participant.banner`, fallback a `photo`) con boton
+  volver y boton "ver ficha completa" hacia `/peleadores/[id]`.
+- Nav superior: el CTA dorado ya no es "Ver en Vivo" -> `/sorteo`, ahora es
+  "Inscribirme" -> `/inscripcion` (`NAV.registerCta`, ya existia en
+  content.ts). El CTA "Ver en vivo" del sorteo en el fondo del landing NO
+  se toco (ese si es sobre el sorteo en vivo real).
+- `participant.banner` (ya existia en el schema y en la tabla de Supabase,
+  pero no se subia desde ningun formulario): se agrego el input de archivo
+  en `ParticipantProfileForm.tsx` (self-service) y `ParticipantManager.tsx`
+  (admin), y el upload correspondiente a Supabase Storage
+  (bucket `participant-photos`, prefijo `{id}-banner-{timestamp}`) en las
+  actions `saveOwnParticipant` y `saveParticipant`.
+- Bug del secret truncado (`SUPABASE_SERVICE_ROLE_KE` en el dashboard de
+  Cloudflare): no se re-pegó el valor a mano. Se le indicó al usuario
+  correr `bun run setup:cf-secrets` (lee `.env` real y usa
+  `wrangler secret put` por stdin, sin riesgo de truncamiento de UI). No
+  confirmado aun que lo haya corrido.
+
 ## Pendiente / siguiente sesion
+- Confirmar que el usuario puso `apps/web/public/images/hero-banner.jpg`
+  (la imagen de la arena en llamas) y que `bun run dev` / build no rompe
+  por el nuevo `HeroBanner`.
+- Confirmar que corrio `bun run setup:cf-secrets` y que el secret de
+  Cloudflare quedo bien (deleteParticipant y el resto de actions con admin
+  client dejaron de fallar).
+- Revisar en pantallas chicas el nuevo `ChampionSelectGrid` (el rail pasa a
+  fila horizontal arriba del panel en mobile via `flex-col md:flex-row`,
+  no probado en dispositivo real).
 - Instalar dependencias reales (`bun install`) y correr `bun run dev` para
   verificar que compila; no se corrio ningun comando en esta sesion, todo
   fue edicion de archivos via filesystem MCP.
@@ -108,6 +149,93 @@ era el de arriba, no whitelist).
 - Evaluar si hace falta manejar `type=recovery` o expiracion de magic link
   con mejor UX (hoy el script del cliente en `panel-login.astro` muestra
   el error crudo de Supabase).
+
+## Sesion 2026-08-17 (2): pulido ChampionSelectGrid + HeroBanner + auditoria backend
+- `ChampionSelectGrid.tsx`: la grid de retratos ahora vive dentro de
+  `.champ-grid-scroll` (`max-height: 260px`, `overflow-y: auto`) con
+  scrollbar tematizado dorado (mismo estilo que `global.css` pero en
+  `#c8aa6e`/`#0a1420`) en vez de crecer sin limite; el padding del
+  contenedor bajo de 40px a 16px verticales para que se vea menos alto.
+  Buscador y filtros de rol ahora filtran de verdad: `roleFilter` (estado
+  nuevo) + `ROLE_FILTERS` mapea los 5 iconos a `Participant.mainRole`
+  exacto (Top/Jungle/Mid/ADC/Support, antes eran iconos decorativos con
+  roles inventados tipo "Fighter"/"Tank" que no correspondian al schema).
+  Retratos sin `photo` (`.no-photo`) llevan fondo radial negro
+  transparente-al-centro -> mas opaco en los bordes en vez de
+  `background-color` solido. Contadores decorativos hardcodeados 81 -> 21
+  (banner del jugador) y 81 -> 67 (timer grande); siguen siendo estaticos,
+  no hay temporizador real detras (si se quiere un conteo real habria que
+  conectarlo a `eventState` o a un campo nuevo, no se hizo esta sesion).
+- `HeroBanner.astro`: el bloque de texto ya no reclama el centro completo
+  del viewport (`justify-center` -> `justify-end`, tipografia del titulo
+  reducida de `text-8xl` a `text-6xl` en desktop, gradiente del scrim mas
+  transparente en el medio) para dejar ver mas cara/fondo de la imagen.
+  El titulo perdio el `drop-shadow-2xl` simple: ahora tiene
+  `-webkit-text-stroke` sutil + un pseudo-elemento `::after` con un barrido
+  diagonal (`mix-blend-mode: overlay`, gradiente dorado/cyan) en loop de 6s
+  (`hero-title-sheen`), mas parecido a un efecto hextech que a una sombra
+  plana. `Countdown.tsx` se redujo de tamano (`text-6xl` -> `text-4xl` en
+  desktop) para acompanar el titulo mas chico.
+- Auditoria del flujo de Supabase (inscripcion/votaciones/panel): todo el
+  codigo ya estaba completo de sesiones anteriores (`actions/index.ts`,
+  `scripts/setup-supabase.ts`, RLS, storage bucket, `inscripcion.astro`,
+  `PredictionCard.tsx` con upsert anonimo a `predictions`). El `.env` raiz
+  YA tiene `SUPABASE_ACCESS_TOKEN`/`SUPABASE_PROJECT_REF` reales y
+  `PUBLIC_SUPABASE_URL`/`PUBLIC_SUPABASE_ANON_KEY`/`SUPABASE_SERVICE_ROLE_KEY`
+  parecen generados (probablemente `setup:db` ya corrio en algun momento).
+  No se pudo confirmar en esta sesion si el schema remoto sigue al dia ni
+  si el secret de Cloudflare sigue truncado, porque el sandbox de esta
+  sesion no tiene red hacia supabase.co ni ejecuta `bun`/`gh`/`wrangler`
+  sobre el proyecto real (solo filesystem MCP, sin bash sobre esta ruta).
+  Pendiente que el usuario corra el:
+  - `bun install` (si no lo hizo desde la ultima sesion)
+  - `bun run setup:db` (reafirma DDL/RLS/realtime, es idempotente, no pisa
+    datos por `ON CONFLICT DO NOTHING`/`IF NOT EXISTS`)
+  - `bun run setup:cf-secrets` (confirma que `SUPABASE_SERVICE_ROLE_KEY` no
+    sigue truncado en el Worker)
+  - `bun run dev` para verificar visualmente los cambios de esta sesion
+
+## Sesion 2026-08-17 (3): fixes de feedback visual (subtitulo, encogimiento, mobile, efecto de texto)
+- `index.astro`: quitado el subtitulo "N combatientes confirmados..." de la
+  seccion `#roster` (arriba del `ChampionSelectGrid`) por pedido directo;
+  el titulo "LOS PELEADORES" se queda solo.
+- `ChampionSelectGrid.tsx`: la causa del "se encoje al filtrar" era que
+  `.champ-grid-scroll` solo tenia `max-height`, sin `min-height` -> con
+  pocos resultados el grid colapsaba a su contenido. Se agrego
+  `min-height: 260px` (igual al max) + `align-content: start` +
+  `auto-rows-[64px]` en el grid para que la altura de fila no dependa del
+  numero de filas.
+  El solape/rotura en mobile (visible en las capturas: el player-banner
+  quedaba encima de la grilla, el buscador se salia del viewport) era
+  porque `.player-banner` era `position: absolute; width: 300px` fijo y
+  `.cancel-btn`/`.ver-ficha-btn` usaban `position: absolute` con
+  `margin-left/right: 170px` fijos respecto al centro — funcionaba solo en
+  desktop ancho. Reescrito todo a flujo normal responsivo:
+  - `.player-banner` ahora ocupa su propia fila arriba (`width: 100%`,
+    `position: relative`), ya no flota sobre la grilla.
+  - `.action-bar` ahora es `display: grid; grid-template-columns: 1fr auto 1fr`
+    con `.action-bar-side` (flex `justify-end`/`justify-start`) para los
+    botones laterales — se acomodan solos a cualquier ancho en vez de
+    offsets en px.
+  - `.controls-bar` (filtros + orden + buscador) pasa a `flex-wrap` con
+    orden invertido en mobile (buscador arriba, iconos de rol abajo) y el
+    input de busqueda es `w-full` en mobile en vez de 150px fijo.
+  - Grid de retratos: `grid-cols-4` (mobile) / `grid-cols-5` (sm) /
+    `grid-cols-7` (md+), antes saltaba directo de 4 a 7 columnas.
+  No probado en dispositivo real (segue sin acceso a bash sobre el
+  proyecto), pero el layout ya no depende de ningun ancho de viewport fijo.
+- `HeroBanner.astro`: el efecto de texto del titulo (barrido animado con
+  `mix-blend-mode: overlay` sobre todo el `<h1>`, incluyendo el span con
+  gradiente propio del highlight) era la causa del look "brusco" e
+  ilegible en capturas (se ve claro en "EL PHONK FINAL": el barrido cyan
+  pisaba el gradiente dorado del highlight). Se quito el pseudo-elemento
+  `::after` animado por completo. `.hero-title` ahora es solo color solido
+  + `text-shadow` en capas (sombra dura pegada al texto + sombra difusa +
+  halo cyan tenue) para legibilidad sobre cualquier fondo, sin animacion ni
+  blend modes. `.hero-title-highlight` no cambio (su gradiente dorado
+  propio se queda limpio, ya no se pisa con el overlay). Las posiciones del
+  bloque de texto (justify-end, tamanos reducidos) se dejaron igual porque
+  el usuario confirmo que esas ya estaban bien.
 
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones

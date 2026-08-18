@@ -41,6 +41,7 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
   const [form, setForm] = useState(EMPTY_FORM);
   const [stats, setStats] = useState<StatWithKey[]>([]);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
   const [status, setStatus] = useState<StatusMessage>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [isLookingUpRank, setIsLookingUpRank] = useState(false);
@@ -52,13 +53,9 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
     setForm(EMPTY_FORM);
     setStats([]);
     setPhotoFile(null);
+    setBannerFile(null);
     setEditingId(null);
     setInvalidFields(new Set());
-  }
-
-  function openNewForm() {
-    resetForm();
-    setIsFormOpen(true);
   }
 
   function closeForm() {
@@ -94,6 +91,7 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
     });
     setStats((p.stats ?? []).map((s) => ({ ...s, _key: makeStatKey() })));
     setPhotoFile(null);
+    setBannerFile(null);
     setEditingId(p.id);
     setIsFormOpen(true);
   }
@@ -167,6 +165,7 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
       .map(({ _key, ...s }) => s);
     if (validStats.length > 0) data.set("stats", JSON.stringify(validStats));
     if (photoFile) data.set("photo", photoFile);
+    if (bannerFile) data.set("banner", bannerFile);
 
     const { data: result, error } = await actions.saveParticipant(data);
     setIsBusy(false);
@@ -237,15 +236,7 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
         </div>
       )}
 
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={openNewForm}
-          className="py-3 px-6 bg-lol-gold text-black font-bold uppercase tracking-wide hover:bg-yellow-400 transition-all"
-        >
-          {PARTICIPANT_MANAGER.newParticipant}
-        </button>
-      </div>
+      <p className="text-slate-500 text-xs">{PARTICIPANT_MANAGER.noManualCreateHint}</p>
 
       {isFormOpen && (
       <div
@@ -429,15 +420,25 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
           </div>
         </div>
 
-        <Field label={PARTICIPANT_MANAGER.fields.photo}>
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={(e) => setPhotoFile(e.target.files?.[0] ?? null)}
-            className="input file:mr-4 file:py-2 file:px-4 file:border-0 file:bg-lol-gold file:text-black file:font-bold file:uppercase file:text-xs"
-          />
-        </Field>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Field label={PARTICIPANT_MANAGER.fields.photo}>
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={(e) => setPhotoFile(e.target.files?.[0] ?? null)}
+              className="input file:mr-4 file:py-2 file:px-4 file:border-0 file:bg-lol-gold file:text-black file:font-bold file:uppercase file:text-xs"
+            />
+          </Field>
+          <Field label={PARTICIPANT_MANAGER.fields.banner}>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setBannerFile(e.target.files?.[0] ?? null)}
+              className="input file:mr-4 file:py-2 file:px-4 file:border-0 file:bg-lol-gold file:text-black file:font-bold file:uppercase file:text-xs"
+            />
+          </Field>
+        </div>
 
         <div className="flex gap-3 pt-2">
           <button

@@ -9,20 +9,45 @@ CREATE TABLE IF NOT EXISTS event_state (
   start_time TIMESTAMPTZ NOT NULL,
   roulette_unlocked BOOLEAN DEFAULT FALSE,
   current_phase TEXT DEFAULT 'COUNTDOWN',
+  registrations_open BOOLEAN DEFAULT TRUE,
+  voting_enabled BOOLEAN DEFAULT FALSE,
+  event_started BOOLEAN DEFAULT FALSE,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE event_state ADD COLUMN IF NOT EXISTS registrations_open BOOLEAN DEFAULT TRUE;
+ALTER TABLE event_state ADD COLUMN IF NOT EXISTS voting_enabled BOOLEAN DEFAULT FALSE;
+ALTER TABLE event_state ADD COLUMN IF NOT EXISTS event_started BOOLEAN DEFAULT FALSE;
+
 CREATE TABLE IF NOT EXISTS matches (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  match_number INTEGER,
   player1_id TEXT NOT NULL,
   player2_id TEXT NOT NULL,
   winner_id TEXT DEFAULT NULL,
+  decision TEXT DEFAULT NULL,
+  judge_cards JSONB DEFAULT NULL,
+  predictions_open BOOLEAN DEFAULT FALSE,
   is_random BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS match_number INTEGER;
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS decision TEXT DEFAULT NULL;
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS judge_cards JSONB DEFAULT NULL;
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS predictions_open BOOLEAN DEFAULT FALSE;
+
+CREATE TABLE IF NOT EXISTS predictions (
+  match_id UUID NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+  voter_id TEXT NOT NULL,
+  predicted_winner_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (match_id, voter_id)
+);
+
 CREATE TABLE IF NOT EXISTS participants (
   id TEXT PRIMARY KEY,
+  owner_user_id UUID UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   nickname TEXT NOT NULL,
   photo TEXT,
@@ -30,6 +55,12 @@ CREATE TABLE IF NOT EXISTS participants (
   age INTEGER,
   weight TEXT,
   height TEXT,
+  country TEXT,
+  country_flag TEXT,
+  instagram_handle TEXT,
+  instagram_followers TEXT,
+  x_handle TEXT,
+  x_followers TEXT,
   lol_rank TEXT NOT NULL DEFAULT '',
   lol_username TEXT,
   lol_server TEXT,
@@ -40,6 +71,22 @@ CREATE TABLE IF NOT EXISTS participants (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS owner_user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'participants_owner_user_id_key'
+  ) THEN
+    ALTER TABLE participants ADD CONSTRAINT participants_owner_user_id_key UNIQUE (owner_user_id);
+  END IF;
+END $$;
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS country TEXT;
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS country_flag TEXT;
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS instagram_handle TEXT;
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS instagram_followers TEXT;
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS x_handle TEXT;
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS x_followers TEXT;
 
 CREATE TABLE IF NOT EXISTS admins (
   user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -67,6 +114,13 @@ BEGIN
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE matches;
   END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND tablename = 'predictions'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE predictions;
+  END IF;
 END $$;
 
 ALTER TABLE event_state ENABLE ROW LEVEL SECURITY;
@@ -74,6 +128,7 @@ ALTER TABLE matches ENABLE ROW LEVEL SECURITY;
 ALTER TABLE participants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admins ENABLE ROW LEVEL SECURITY;
 ALTER TABLE panel_secret ENABLE ROW LEVEL SECURITY;
+ALTER TABLE predictions ENABLE ROW LEVEL SECURITY;
 
 CREATE OR REPLACE FUNCTION is_admin() RETURNS BOOLEAN AS $$
   SELECT EXISTS (SELECT 1 FROM admins WHERE user_id = auth.uid());
@@ -102,7 +157,16 @@ DROP POLICY IF EXISTS "Escritura protegida event_state" ON event_state;
 CREATE POLICY "Escritura protegida event_state" ON event_state FOR ALL USING (auth.role() = 'service_role');
 
 DROP POLICY IF EXISTS "Escritura protegida matches" ON matches;
-CREATE POLICY "Escritura protegida matches" ON matches FOR ALL USING (auth.role() = 'service_role');
+CREATE POLICY "Escritura protegida matches" ON matches FOR ALL USING (is_admin() OR auth.role() = 'service_role');
+
+DROP POLICY IF EXISTS "Lectura publica de predictions" ON predictions;
+CREATE POLICY "Lectura publica de predictions" ON predictions FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Voto publico anonimo" ON predictions;
+CREATE POLICY "Voto publico anonimo" ON predictions FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Cambio de voto publico anonimo" ON predictions;
+CREATE POLICY "Cambio de voto publico anonimo" ON predictions FOR UPDATE USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Escritura admin de participants" ON participants;
 CREATE POLICY "Escritura admin de participants" ON participants FOR ALL USING (is_admin() OR auth.role() = 'service_role');
@@ -122,8 +186,8 @@ DROP POLICY IF EXISTS "Escritura admin de fotos" ON storage.objects;
 CREATE POLICY "Escritura admin de fotos" ON storage.objects FOR ALL
   USING (bucket_id = 'participant-photos' AND (is_admin() OR auth.role() = 'service_role'));
 
-INSERT INTO event_state (id, start_time, roulette_unlocked, current_phase)
-VALUES ('main', NOW() + INTERVAL '7 days', FALSE, 'COUNTDOWN')
+INSERT INTO event_state (id, start_time, roulette_unlocked, current_phase, registrations_open, voting_enabled, event_started)
+VALUES ('main', NOW() + INTERVAL '7 days', FALSE, 'COUNTDOWN', TRUE, FALSE, FALSE)
 ON CONFLICT (id) DO NOTHING;
 `;
 

@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>League of Legends Champion Select</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Beaufort+for+LOL:ital,wght@0,400;0,500;0,700;1,400&family=Spiegel:ital,wght@0,400;0,600;0,700;1,400&display=swap');
+
+        body {
+            /* Basic dark background similar to the client */
+            background-color: #010a13;
+            color: #f0e6d2;
+            font-family: 'Spiegel', sans-serif;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            /* Faint radial gradient to simulate the center glow */
+            background: radial-gradient(circle at center, #0a1f2e 0%, #010a13 70%);
+        }
+
+        /* Typography matching the client */
+        h1, h2, .beaufort {
+            font-family: 'Beaufort for LOL', serif;
+        }
+
+        .champ-grid-container {
+            position: relative;
+            /* The ornate circular background framing the grid */
+            background-image: url('data:image/svg+xml;utf8,<svg width="600" height="600" viewBox="0 0 600 600" xmlns="http://www.w3.org/2000/svg"><circle cx="300" cy="300" r="280" fill="none" stroke="rgba(200, 170, 110, 0.1)" stroke-width="2"/><circle cx="300" cy="300" r="290" fill="none" stroke="rgba(200, 170, 110, 0.05)" stroke-width="1" stroke-dasharray="4 4"/></svg>');
+            background-position: center;
+            background-repeat: no-repeat;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .timer-text {
+            color: #f0e6d2;
+            font-size: 2.5rem;
+            font-weight: bold;
+            text-shadow: 0 0 10px rgba(240, 230, 210, 0.5);
+            margin-bottom: 20px;
+            letter-spacing: 2px;
+        }
+
+        .champ-portrait {
+            width: 64px;
+            height: 64px;
+            border: 2px solid transparent;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s ease;
+            box-sizing: border-box;
+            background-color: #1e2328; /* Placeholder dark bg */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        /* The cyan border on hover/select */
+        .champ-portrait:hover, .champ-portrait.selected {
+            border-color: #0bd4d4;
+            box-shadow: 0 0 8px rgba(11, 212, 212, 0.8), inset 0 0 10px rgba(11, 212, 212, 0.5);
+            transform: scale(1.05);
+            z-index: 10;
+        }
+
+        .champ-portrait.selected {
+            border-width: 2px;
+            border-style: solid;
+            border-image: linear-gradient(to bottom, #e0f8f8, #0bd4d4) 1;
+        }
+
+        /* Active and Locked states for the Lock In button */
+        @keyframes magicPulse {
+            0% { box-shadow: 0 0 10px rgba(0, 200, 200, 0.4); }
+            50% { box-shadow: 0 0 25px rgba(11, 212, 212, 0.8), inset 0 0 15px rgba(11, 212, 212, 0.4); }
+            100% { box-shadow: 0 0 10px rgba(0, 200, 200, 0.4); }
+        }
+
+        @keyframes magicShine {
+            0% { left: -150%; }
+            100% { left: 150%; }
+        }
+
+        .champ-name {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            color: #a09b8c;
+            font-size: 0.6rem;
+            text-align: center;
+            padding: 2px 0;
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            pointer-events: none; /* Let clicks pass through to the portrait */
+        }
+
+        .champ-portrait:hover .champ-name, .champ-portrait.selected .champ-name {
+            color: #f0e6d2;
+        }
+
+        /* Placeholder image styles */
+        .placeholder-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            filter: brightness(0.8) contrast(1.2); /* Make them look a bit more "gamey" */
+        }
+
+        .controls-bar {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 0 20px;
+            border-bottom: 1px solid rgba(200, 170, 110, 0.3);
+            padding-bottom: 10px;
+        }
+
+        .role-filters {
+            display: flex;
+            gap: 15px;
+            color: #a09b8c;
+        }
+
+        .role-filters i {
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+        
+        .role-filters i:hover {
+            color: #c8aa6e;
+        }
+
+        .search-input {
+            background-color: transparent;
+            border: 1px solid #3c3c41;
+            color: #a09b8c;
+            padding: 5px 10px;
+            font-family: 'Spiegel', sans-serif;
+            font-size: 0.8rem;
+            width: 150px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .search-input:focus {
+            border-color: #5c5c5c; /* Gris sutil en lugar de color brillante */
+            color: #a09b8c; /* Mantiene el color del texto tenue */
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
+        }
+
+        .lock-in-container {
+            margin-top: 30px;
+            position: relative;
+            /* Arc background behind the button */
+            width: 300px;
+            height: 60px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-image: url('data:image/svg+xml;utf8,<svg width="300" height="60" viewBox="0 0 300 60" xmlns="http://www.w3.org/2000/svg"><path d="M 0 0 Q 150 60 300 0" fill="none" stroke="rgba(0, 255, 255, 0.3)" stroke-width="2"/><path d="M 20 0 Q 150 50 280 0" fill="none" stroke="rgba(0, 255, 255, 0.1)" stroke-width="1"/></svg>');
+            background-position: top center;
+            background-repeat: no-repeat;
+        }
+
+        .lock-in-btn {
+            background: linear-gradient(to bottom, #1a2a3a, #0d1620);
+            border: 2px solid #3c3c41;
+            color: #5c5c5c; /* Greyed out initially */
+            font-family: 'Beaufort for LOL', serif;
+            font-size: 1.2rem;
+            font-weight: 700;
+            letter-spacing: 2px;
+            padding: 10px 40px;
+            cursor: not-allowed;
+            text-transform: uppercase;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            /* Clip-path to create the angled edges typical of hextech UI */
+        clip-path: polygon(10% 0, 90% 0, 100% 50%, 90% 100%, 10% 100%, 0 50%);
+        }
+
+        .lock-in-btn.active {
+            border-color: #0bd4d4; /* Hextech cyan */
+            color: #ffffff;
+            cursor: pointer;
+            background: linear-gradient(to bottom, #0a3a4a, #051a25);
+        }
+
+        .lock-in-btn.active:hover {
+            border-color: #00ffff;
+            text-shadow: 0 0 8px rgba(255,255,255,0.7);
+            box-shadow: 0 0 15px rgba(11, 212, 212, 0.3);
+        }
+
+        .lock-in-btn.active:active {
+            transform: scale(0.98);
+        }
+
+        .lock-in-btn.locked-state {
+            border-color: #0bd4d4;
+            color: #ffffff;
+            background: linear-gradient(to bottom, #0a3a4a, #051a25);
+            cursor: default;
+            animation: magicPulse 1.5s infinite alternate; /* Mantiene la pulsación */
+            text-shadow: 0 0 10px #0bd4d4;
+        }
+
+        /* Sweeping magical light SOLO en el estado locked */
+        .lock-in-btn.locked-state::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 50%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(11, 212, 212, 0.5), transparent);
+            transform: skewX(-25deg);
+            animation: magicShine 2.5s infinite;
+        }
+        
+        .lock-in-btn.locked-state:hover {
+            transform: none; /* Desactiva el efecto de click cuando ya está bloqueado */
+        }
+
+        /* Specific style for the Random button */
+        .champ-portrait.random-btn {
+            background-color: #0d1620;
+            border: 1px solid #3c3c41;
+        }
+        .champ-portrait.random-btn i {
+            font-size: 2rem;
+            color: #a09b8c;
+        }
+        
+        /* NUEVOS ESTILOS PARA LA VISTA DE BANNER Y BOTONES */
+        .hidden-view {
+            display: none !important;
+        }
+
+        .fade-in {
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Estilos para el Splash Art a pantalla completa */
+        .splash-background {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            overflow: hidden;
+            opacity: 0.3; /* Bastante sutil */
+            transition: opacity 0.5s ease;
+            pointer-events: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            mask-image: radial-gradient(circle at center, black 40%, transparent 80%);
+            -webkit-mask-image: radial-gradient(circle at center, black 40%, transparent 80%);
+        }
+
+        .splash-background img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            filter: blur(2px) brightness(0.6);
+        }
+
+        /* Arcos decorativos estilo Hextech */
+        .hextech-arcs {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 700px;
+            height: 700px;
+            z-index: 1;
+            pointer-events: none;
+            opacity: 0.4;
+        }
+        
+        .arc-left, .arc-right {
+            position: absolute;
+            top: 0;
+            width: 50%;
+            height: 100%;
+            border: 2px solid transparent;
+            border-radius: 50%;
+        }
+
+        .arc-left {
+            left: 0;
+            border-left-color: #c8aa6e;
+            border-top-color: rgba(200, 170, 110, 0.2);
+            border-bottom-color: rgba(200, 170, 110, 0.2);
+            clip-path: polygon(0 10%, 100% 0, 100% 100%, 0 90%);
+        }
+
+        .arc-right {
+            right: 0;
+            border-right-color: #c8aa6e;
+            border-top-color: rgba(200, 170, 110, 0.2);
+            border-bottom-color: rgba(200, 170, 110, 0.2);
+            clip-path: polygon(0 0, 100% 10%, 100% 90%, 0 100%);
+        }
+
+        /* Marcas de graduación en los arcos */
+        .tick-marks {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: repeating-conic-gradient(from 0deg, transparent 0deg, transparent 2deg, rgba(200, 170, 110, 0.5) 2deg, rgba(200, 170, 110, 0.5) 3deg);
+            border-radius: 50%;
+            mask-image: radial-gradient(circle at center, transparent 68%, black 70%, black 72%, transparent 74%);
+            -webkit-mask-image: radial-gradient(circle at center, transparent 68%, black 70%, black 72%, transparent 74%);
+            clip-path: polygon(0 15%, 20% 0, 80% 0, 100% 15%, 100% 85%, 80% 100%, 20% 100%, 0 85%);
+        }
+
+        /* Contenedor principal del contenido del Loadout */
+        .loadout-content {
+            position: relative;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end; /* Empuja el contenido hacia abajo */
+            height: 100%;
+            padding-bottom: 20px;
+        }
+
+        /* Selector de Skins Simulado */
+        .skin-selector {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .random-skin-tag {
+            border: 1px solid #c8aa6e;
+            color: #c8aa6e;
+            font-size: 0.6rem;
+            padding: 2px 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 5px;
+            background: rgba(0,0,0,0.5);
+        }
+
+        .skin-name {
+            font-family: 'Spiegel', sans-serif;
+            font-size: 1.2rem;
+            color: #f0e6d2;
+            font-style: italic;
+            margin-bottom: 15px; /* Aumentado un poco el margen al quitar los puntos */
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+        }
+
+        .skin-thumbnails {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .skin-thumb {
+            width: 48px;
+            height: 48px;
+            border: 1px solid #3c3c41;
+            position: relative;
+            cursor: pointer;
+            filter: grayscale(0.5);
+        }
+        
+        .skin-thumb.active {
+            border-color: #c8aa6e;
+            width: 56px;
+            height: 56px;
+            filter: grayscale(0);
+        }
+
+        .skin-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* Botón de Cancelar (X) */
+        .cancel-btn {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: 2px solid #3c3c41;
+            color: #5c5c5c;
+            background: transparent;
+            cursor: not-allowed;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            position: absolute;
+            right: 50%;
+            margin-right: 170px; /* Flotante a la izquierda del botón central */
+            z-index: 10;
+        }
+
+        .cancel-btn.cancel-active {
+            border-color: #c8aa6e;
+            color: #c8aa6e; /* Dorado */
+            background: radial-gradient(circle, #3a2a15 0%, #1a120a 100%);
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(200, 170, 110, 0.3);
+            pointer-events: auto;
+        }
+
+        .cancel-btn.cancel-active:hover {
+            color: #f0e6d2;
+            background: radial-gradient(circle, #4a3a25 0%, #2a1a0f 100%);
+            box-shadow: 0 0 15px rgba(200, 170, 110, 0.6), inset 0 0 5px rgba(200, 170, 110, 0.4);
+            transform: scale(1.05);
+        }
+        
+        .cancel-btn.cancel-active:active {
+            transform: scale(0.95);
+        }
+
+        /* Botón Ver Ficha */
+        .ver-ficha-btn {
+            background: linear-gradient(to bottom, #051a25, #020a10);
+            border: 1px solid #0bd4d4;
+            color: #0bd4d4;
+            font-family: 'Beaufort for LOL', serif;
+            font-size: 1rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            padding: 10px 25px;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: all 0.3s ease;
+            clip-path: polygon(10% 0, 100% 0, 100% 70%, 90% 100%, 0 100%, 0 30%);
+            position: absolute;
+            left: 50%;
+            margin-left: 170px; /* Flotante a la derecha del botón central */
+            width: 150px;
+            text-align: center;
+            z-index: 10;
+        }
+
+        .ver-ficha-btn:hover {
+            background: linear-gradient(to bottom, #0a3a4a, #051a25);
+            color: #ffffff;
+            box-shadow: 0 0 15px rgba(11, 212, 212, 0.4);
+            border-color: #00ffff;
+        }
+        
+        /* Ajuste layout de los botones inferiores */
+        .action-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 30px;
+            height: 60px;
+            width: 100%;
+            position: relative;
+            z-index: 20; /* Asegurar que esté por encima del fondo */
+        }
+        
+        .action-bar .lock-in-container {
+            margin-top: 0; /* Override del margen original */
+            position: relative;
+            z-index: 15; /* Siempre por encima */
+        }
+        
+        /* ESTILOS DEL BANNER LATERAL DEL JUGADOR */
+        .player-banner {
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 300px;
+            height: 76px;
+            display: flex;
+            align-items: center;
+            z-index: 30;
+            transition: all 0.4s ease;
+        }
+
+        .banner-bg {
+            position: absolute;
+            inset: 0;
+            z-index: -1;
+            mask-image: linear-gradient(to right, black 70%, transparent 100%);
+            -webkit-mask-image: linear-gradient(to right, black 70%, transparent 100%);
+            overflow: hidden;
+        }
+
+        .banner-bg::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            transform: skewX(-20deg);
+        }
+
+        /* Estado: Eligiendo (Dorado) */
+        .player-banner.picking-state .banner-bg {
+            background: linear-gradient(to right, rgba(80, 60, 20, 0.8) 0%, rgba(160, 120, 40, 0.4) 60%, transparent 100%);
+        }
+        
+        .player-banner.picking-state .banner-bg::after {
+            background: linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.25), transparent);
+            animation: sweepGold 2s infinite linear;
+        }
+
+        .player-banner.picking-state .avatar-border {
+            border-color: #c8aa6e;
+            box-shadow: 0 0 10px rgba(200, 170, 110, 0.5);
+        }
+
+        .player-banner.picking-state .dynamic-text-color {
+            color: #c8aa6e;
+        }
+
+        .player-banner.picking-state .dynamic-border-color {
+            border-color: rgba(200, 170, 110, 0.4);
+        }
+
+        /* Estado: Fijado (Celeste) */
+        .player-banner.locked-state-banner .banner-bg {
+            background: linear-gradient(to right, rgba(5, 30, 40, 0.9) 0%, rgba(11, 212, 212, 0.4) 60%, transparent 100%);
+        }
+
+        .player-banner.locked-state-banner .banner-bg::after {
+            background: linear-gradient(90deg, transparent, rgba(11, 212, 212, 0.4), transparent);
+            animation: sweepCyan 2.5s infinite linear;
+        }
+
+        .player-banner.locked-state-banner .avatar-border {
+            border-color: #0bd4d4;
+            box-shadow: 0 0 12px rgba(11, 212, 212, 0.7);
+        }
+
+        .player-banner.locked-state-banner .dynamic-text-color {
+            color: #0bd4d4;
+        }
+
+        .player-banner.locked-state-banner .dynamic-border-color {
+            border-color: rgba(11, 212, 212, 0.5);
+        }
+
+        @keyframes sweepGold {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+
+        @keyframes sweepCyan {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+        
+    </style>
+</head>
+<body>
+
+    <!-- BANNER LATERAL DE SELECCIÓN DEL JUGADOR -->
+    <div id="playerBanner" class="player-banner picking-state">
+        <div class="banner-bg"></div>
+        
+        <!-- Hechizos de Invocador -->
+        <div class="flex flex-col gap-1 ml-4 z-10">
+            <div class="w-5 h-5 border bg-[#1e2328] dynamic-border-color transition-colors duration-300"></div>
+            <div class="w-5 h-5 border bg-[#1e2328] dynamic-border-color transition-colors duration-300"></div>
+        </div>
+
+        <!-- Anillo de Avatar -->
+        <div class="w-[52px] h-[52px] rounded-full border-2 ml-3 flex items-center justify-center bg-[#010a13] overflow-hidden avatar-border z-10 relative transition-all duration-300">
+             <img id="bannerAvatar" src="" class="hidden w-full h-full object-cover">
+        </div>
+
+        <!-- Textos -->
+        <div class="ml-3 flex flex-col justify-center z-10 w-28">
+             <span id="bannerStatus" class="text-[#f0e6d2] text-sm font-bold tracking-wide drop-shadow-md">Eligiendo...</span>
+             <span class="text-[0.65rem] dynamic-text-color font-semibold tracking-wider uppercase transition-colors duration-300">Invocador 1</span>
+        </div>
+
+        <!-- Número y flecha al final del barrido -->
+        <div class="ml-auto mr-4 text-2xl font-bold dynamic-text-color z-10 flex items-center transition-colors duration-300" style="font-family: 'Beaufort for LOL', serif;">
+            <i class="fa-solid fa-chevron-left text-xs mr-2 opacity-50 relative top-1"></i> 81
+        </div>
+    </div>
+
+    <h2 id="mainHeader" class="text-xl text-[#a09b8c] mb-2 tracking-wide italic transition-opacity duration-300">¡Elige a tu campeón!</h2>
+    <div class="timer-text">81</div>
+
+    <!-- Contenedor Principal (Cambia entre Grid y Splash Art) -->
+    <div class="relative w-full max-w-4xl flex justify-center items-center min-h-[500px]" style="perspective: 1000px;">
+        
+        <!-- VISTA 1: CUADRÍCULA DE CAMPEONES -->
+        <div class="champ-grid-container w-full" id="gridContainer">
+            <!-- Barra de Controles (Filtros y Búsqueda) -->
+            <div class="controls-bar w-full max-w-2xl">
+                <div class="role-filters">
+                    <i class="fa-solid fa-khanda" title="Fighter"></i>
+                    <i class="fa-solid fa-shield-halved" title="Tank"></i>
+                    <i class="fa-solid fa-wand-magic-sparkles" title="Mage"></i>
+                    <i class="fa-solid fa-crosshairs" title="Assassin"></i>
+                    <i class="fa-solid fa-staff-snake" title="Support"></i>
+                    <i class="fa-solid fa-bow-arrow" title="Marksman"></i>
+                </div>
+                
+                <div class="flex items-center gap-4">
+                    <div class="text-xs text-[#a09b8c] cursor-pointer hover:text-[#c8aa6e]">
+                        Ordenar por Nombre <i class="fa-solid fa-chevron-down ml-1"></i>
+                    </div>
+                    <div class="relative">
+                        <i class="fa-solid fa-search absolute left-2 top-1/2 transform -translate-y-1/2 text-[#5c5c5c] text-xs"></i>
+                        <input type="text" class="search-input pl-6" placeholder="Buscar">
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-7 gap-1" id="championGrid">
+                <!-- JavaScript lo rellenará -->
+            </div>
+        </div>
+
+        <!-- VISTA 2: LOADOUT Y SPLASH BACKGROUND (Simulando la segunda referencia) -->
+        <div id="splashContainer" class="hidden-view absolute inset-0 w-full h-full">
+            
+            <!-- Fondo de imagen enorme y sutil -->
+            <div class="splash-background">
+                 <img id="bgSplashImage" src="" alt="Background">
+            </div>
+
+            <!-- Decoración de Arcos Hextech -->
+            <div class="hextech-arcs">
+                <div class="arc-left"></div>
+                <div class="arc-right"></div>
+                <div class="tick-marks"></div>
+            </div>
+            
+            <!-- Contenido Frontal (Skins, nombre, etc) -->
+            <div class="loadout-content w-full h-full">
+                
+                <div class="skin-selector">
+                    <div class="random-skin-tag">Random Skin</div>
+                    <div id="skinNameDisplay" class="skin-name">Aspecto Original</div>
+
+                    <div class="skin-thumbnails">
+                        <div class="skin-thumb active" id="activeSkinThumb"><img src="" alt="skin"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- BOTONES DE ACCIÓN INFERIORES -->
+    <div class="action-bar">
+        
+        <!-- Botón Cancelar (X) -->
+        <button id="cancelBtn" class="cancel-btn pointer-events-none">
+            <i class="fa-solid fa-xmark text-xl"></i>
+        </button>
+
+        <!-- Botón Lock In -->
+        <div class="lock-in-container">
+            <button id="lockInBtn" class="lock-in-btn">FIJAR</button>
+        </div>
+        
+        <!-- Botón Ver Ficha -->
+        <button id="verFichaBtn" class="ver-ficha-btn hidden-view">Ver Ficha</button>
+        
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const championGrid = document.getElementById('championGrid');
+            const lockInBtn = document.getElementById('lockInBtn');
+            let selectedChampion = null;
+
+            // List of champions (simulated based on image)
+            const champions = [
+                { id: 'random', name: 'Random', isRandom: true },
+                { id: 'aatrox', name: 'Aatrox', color: 'bg-red-900' },
+                { id: 'ahri', name: 'Ahri', color: 'bg-pink-800' },
+                { id: 'akali', name: 'Akali', color: 'bg-green-800' },
+                { id: 'alistar', name: 'Alistar', color: 'bg-purple-900' },
+                { id: 'amumu', name: 'Amumu', color: 'bg-green-900' },
+                
+                { id: 'anivia', name: 'Anivia', color: 'bg-blue-600' },
+                { id: 'annie', name: 'Annie', color: 'bg-orange-700' },
+                { id: 'ashe', name: 'Ashe', color: 'bg-blue-300' },
+                { id: 'aurelionsol', name: 'Aurelion Sol', color: 'bg-indigo-700' },
+                { id: 'azir', name: 'Azir', color: 'bg-yellow-600' },
+                { id: 'bard', name: 'Bard', color: 'bg-yellow-800' },
+
+                { id: 'blitzcrank', name: 'Blitzcrank', color: 'bg-yellow-500' },
+                { id: 'brand', name: 'Brand', color: 'bg-orange-600' },
+                { id: 'braum', name: 'Braum', color: 'bg-blue-200' },
+                { id: 'caitlyn', name: 'Caitlyn', color: 'bg-purple-700' },
+                { id: 'camille', name: 'Camille', color: 'bg-gray-400' },
+                { id: 'cassiopeia', name: 'Cassiopeia', color: 'bg-green-700' },
+
+                { id: 'chogath', name: 'Cho\'Gath', color: 'bg-purple-800' },
+                { id: 'corki', name: 'Corki', color: 'bg-yellow-700' },
+                { id: 'darius', name: 'Darius', color: 'bg-red-800' },
+                { id: 'diana', name: 'Diana', color: 'bg-gray-200' },
+                { id: 'drmundo', name: 'Dr. Mundo', color: 'bg-purple-600' },
+                { id: 'draven', name: 'Draven', color: 'bg-red-600' },
+
+                { id: 'ekko', name: 'Ekko', color: 'bg-teal-500' },
+                { id: 'elise', name: 'Elise', color: 'bg-red-900' },
+                { id: 'evelynn', name: 'Evelynn', color: 'bg-pink-700' },
+                { id: 'ezreal', name: 'Ezreal', color: 'bg-yellow-300' },
+                { id: 'fiddlesticks', name: 'Fiddlesticks', color: 'bg-green-800' },
+                { id: 'fiora', name: 'Fiora', color: 'bg-pink-600' },
+            ];
+
+            // Render the grid
+            champions.forEach(champ => {
+                const champDiv = document.createElement('div');
+                
+                if (champ.isRandom) {
+                    champDiv.className = 'champ-portrait random-btn';
+                    champDiv.innerHTML = `
+                        <i class="fa-solid fa-question"></i>
+                        <div class="champ-name">${champ.name}</div>
+                    `;
+                } else {
+                    champDiv.className = 'champ-portrait';
+                    // Generate a placeholder image using placehold.co based on the champion's name initial
+                    const initial = champ.name.charAt(0);
+                    const bgColor = champ.color.replace('bg-', '').split('-')[0]; // Simple color map for placeholder
+                    champDiv.innerHTML = `
+                        <img src="https://placehold.co/64x64/1e2328/a09b8c?text=${initial}&font=oswald" alt="${champ.name}" class="placeholder-img">
+                        <div class="champ-name">${champ.name}</div>
+                    `;
+                }
+
+                champDiv.addEventListener('click', () => {
+                    // Deselect previous
+                    const prevSelected = document.querySelector('.champ-portrait.selected');
+                    if (prevSelected) {
+                        prevSelected.classList.remove('selected');
+                    }
+
+                    // Select new
+                    champDiv.classList.add('selected');
+                    selectedChampion = champ;
+
+                    // Update Player Banner Avatar
+                    const bannerAvatar = document.getElementById('bannerAvatar');
+                    if (!champ.isRandom) {
+                        const initial = champ.name.charAt(0);
+                        const bgColor = champ.color.replace('bg-', '').split('-')[0];
+                        // Usamos un color oscuro de fondo para que parezca más real
+                        bannerAvatar.src = `https://placehold.co/64x64/1e2328/a09b8c?text=${initial}&font=oswald`;
+                        bannerAvatar.classList.remove('hidden');
+                    } else {
+                        bannerAvatar.classList.add('hidden');
+                    }
+
+                    // Activate Lock In button
+                    lockInBtn.classList.add('active');
+                });
+
+                championGrid.appendChild(champDiv);
+            });
+
+            // Handle Lock In Click (mock functionality)
+            const gridContainer = document.getElementById('gridContainer');
+            const splashContainer = document.getElementById('splashContainer');
+            const bgSplashImage = document.getElementById('bgSplashImage');
+            const activeSkinThumb = document.getElementById('activeSkinThumb').querySelector('img');
+            const skinNameDisplay = document.getElementById('skinNameDisplay');
+            const mainHeader = document.getElementById('mainHeader');
+            
+            const cancelBtn = document.getElementById('cancelBtn');
+            const verFichaBtn = document.getElementById('verFichaBtn');
+            
+            const playerBanner = document.getElementById('playerBanner');
+            const bannerStatus = document.getElementById('bannerStatus');
+
+            // Click en Fijar (Lock In)
+            lockInBtn.addEventListener('click', () => {
+                if (lockInBtn.classList.contains('active') && !lockInBtn.classList.contains('locked-state') && selectedChampion) {
+                    
+                    // 1. Modificar botón principal y Header
+                    lockInBtn.textContent = 'FIJADO';
+                    lockInBtn.classList.add('locked-state');
+                    mainHeader.textContent = 'CHOOSE YOUR LOADOUT!';
+                    mainHeader.classList.replace('text-[#a09b8c]', 'text-[#f0e6d2]');
+                    mainHeader.classList.replace('italic', 'font-bold');
+                    mainHeader.style.letterSpacing = '2px';
+                    mainHeader.classList.remove('text-xl');
+                    mainHeader.classList.add('text-2xl');
+                    
+                    // 2. Transición visual (Ocultar grid, mostrar Vista Loadout)
+                    gridContainer.classList.add('hidden-view');
+                    splashContainer.classList.remove('hidden-view');
+                    splashContainer.classList.add('fade-in');
+
+                    // 3. Configurar imágenes de fondo basándonos en el campeón
+                    let colorCode = '1e2328';
+                    if(selectedChampion.color) {
+                         const colorName = selectedChampion.color.replace('bg-', '').split('-')[0];
+                         const colors = { 'red': '8b0000', 'pink': 'c71585', 'green': '006400', 'purple': '4b0082', 'blue': '00008b', 'orange': 'ff8c00', 'yellow': 'b8860b', 'indigo': '483d8b', 'teal': '008080', 'gray': '696969' };
+                         colorCode = colors[colorName] || colorCode;
+                    }
+                    const initial = selectedChampion.name.charAt(0);
+                    
+                    // Imagen de fondo gigante (simula el splash art recortado)
+                    bgSplashImage.src = `https://placehold.co/1200x800/${colorCode}/111111?text=${selectedChampion.name}&font=oswald`;
+                    
+                    // Thumbnail activo
+                    activeSkinThumb.src = `https://placehold.co/56x56/${colorCode}/a09b8c?text=${initial}`;
+                    skinNameDisplay.textContent = `Aspecto Original de ${selectedChampion.name}`;
+
+                    // 4. Activar el botón (X) dorado
+                    cancelBtn.classList.add('cancel-active');
+                    cancelBtn.classList.remove('pointer-events-none');
+                    
+                    // 5. Revelar Botón Ver Ficha
+                    verFichaBtn.classList.remove('hidden-view');
+                    verFichaBtn.classList.add('fade-in');
+
+                    // 6. Actualizar Banner del Jugador a estado Celeste
+                    playerBanner.classList.replace('picking-state', 'locked-state-banner');
+                    bannerStatus.textContent = selectedChampion.name.toUpperCase();
+                }
+            });
+
+            // Click en Cancelar (X)
+            cancelBtn.addEventListener('click', () => {
+                if (cancelBtn.classList.contains('cancel-active')) {
+                    
+                    // 1. Revertir el estado del botón principal y Header
+                    lockInBtn.textContent = 'FIJAR';
+                    lockInBtn.classList.remove('locked-state');
+                    
+                    mainHeader.textContent = '¡Elige a tu campeón!';
+                    mainHeader.classList.replace('text-[#f0e6d2]', 'text-[#a09b8c]');
+                    mainHeader.classList.replace('font-bold', 'italic');
+                    mainHeader.style.letterSpacing = 'normal';
+                    mainHeader.classList.remove('text-2xl');
+                    mainHeader.classList.add('text-xl');
+
+                    // 2. Transición visual de vuelta (Ocultar Loadout, mostrar grid)
+                    splashContainer.classList.add('hidden-view');
+                    splashContainer.classList.remove('fade-in');
+                    gridContainer.classList.remove('hidden-view');
+                    
+                    gridContainer.classList.add('fade-in');
+                    setTimeout(() => gridContainer.classList.remove('fade-in'), 400);
+
+                    // 3. Desactivar botón X devolviéndolo a gris
+                    cancelBtn.classList.remove('cancel-active');
+                    cancelBtn.classList.add('pointer-events-none');
+                    
+                    // 4. Ocultar Botón Ver Ficha
+                    verFichaBtn.classList.add('hidden-view');
+                    verFichaBtn.classList.remove('fade-in');
+
+                    // 5. Revertir Banner del Jugador a estado Dorado
+                    playerBanner.classList.replace('locked-state-banner', 'picking-state');
+                    bannerStatus.textContent = 'Eligiendo...';
+                }
+            });
+        });
+    </script>
+</body>
+</html>

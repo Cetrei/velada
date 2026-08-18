@@ -1,0 +1,49 @@
+---
+import Layout from "../layouts/Layout.astro";
+import PredictionsSection from "../components/PredictionsSection";
+import { loadParticipants } from "../lib/loadParticipants";
+import { fetchMatches, openForPredictions, fetchPredictionTallies } from "../lib/matches";
+import { fetchEventState } from "../lib/eventState";
+import { PAGES } from "@velada/core";
+
+const eventState = await fetchEventState();
+
+/**
+ * votingEnabled is the host's global switch for the whole "fase de
+ * votaciones" (independent of registrations/roulette/event-started). Each
+ * match still has its own predictionsOpen flag from the admin match editor
+ * for per-combat control, so when the global phase is off we skip the
+ * per-match fetch entirely rather than fetching then hiding.
+ */
+const participants = eventState.votingEnabled ? await loadParticipants() : [];
+const participantsById = Object.fromEntries(participants.map((p) => [p.id, p]));
+const allMatches = eventState.votingEnabled ? await fetchMatches() : [];
+const predictionMatches = eventState.votingEnabled ? openForPredictions(allMatches) : [];
+const tallies = eventState.votingEnabled ? await fetchPredictionTallies(predictionMatches) : [];
+const talliesRecord = Object.fromEntries(tallies);
+
+const copy = PAGES.predictions;
+---
+
+<Layout title={copy.tabTitle}>
+  <section class="pt-32 pb-24 bg-lol-darkBg min-h-screen">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center mb-16">
+        <h1 class="font-display text-4xl md:text-5xl font-bold text-white uppercase tracking-wider">
+          {copy.title}
+        </h1>
+        <div class="h-1 w-24 bg-lol-gold mx-auto mt-6"></div>
+        <p class="text-slate-400 mt-6 max-w-xl mx-auto">
+          {copy.subtitle}
+        </p>
+      </div>
+
+      <PredictionsSection
+        client:load
+        matches={predictionMatches}
+        participantsById={participantsById}
+        tallies={talliesRecord}
+      />
+    </div>
+  </section>
+</Layout>

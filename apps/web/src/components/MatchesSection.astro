@@ -1,0 +1,31 @@
+---
+import type { Match, Participant } from "@velada/core";
+import { PAGES } from "@velada/core";
+import MatchResultCard from "./MatchResultCard.astro";
+
+interface Props {
+  matches: Match[];
+  participantsById: Record<string, Participant>;
+}
+
+const { matches, participantsById } = Astro.props;
+const copy = PAGES.matches;
+
+const renderable = matches
+  .map((m) => ({ match: m, player1: participantsById[m.player1Id], player2: participantsById[m.player2Id] }))
+  .filter((entry): entry is { match: Match; player1: Participant; player2: Participant } =>
+    Boolean(entry.player1 && entry.player2)
+  );
+---
+
+{
+  renderable.length === 0 ? (
+    <p class="text-center text-slate-500">{copy.emptyState}</p>
+  ) : (
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+      {renderable.map(({ match, player1, player2 }, index) => (
+        <MatchResultCard match={match} player1={player1} player2={player2} index={index} />
+      ))}
+    </div>
+  )
+}

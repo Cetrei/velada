@@ -1,0 +1,185 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import { loadParticipants } from "../../lib/loadParticipants";
+import { fetchMatches, fetchPredictionTallies } from "../../lib/matches";
+import { PAGES } from "@velada/core";
+
+const { id } = Astro.params;
+
+const participants = await loadParticipants();
+const participant = participants.find((p) => p.id === id);
+
+if (!participant) {
+  return Astro.rewrite("/404");
+}
+
+const participantsById = Object.fromEntries(participants.map((p) => [p.id, p]));
+const allMatches = await fetchMatches();
+const match = allMatches.find((m) => m.player1Id === participant.id || m.player2Id === participant.id) ?? null;
+const rival = match
+  ? participantsById[match.player1Id === participant.id ? match.player2Id : match.player1Id]
+  : undefined;
+
+const tallies = match ? await fetchPredictionTallies([match]) : new Map();
+const tally = match?.id ? tallies.get(match.id) : undefined;
+
+const isPlayer1 = match?.player1Id === participant.id;
+const participantVotes = tally ? (isPlayer1 ? tally.player1Votes : tally.player2Votes) : 0;
+const totalVotes = tally?.totalVotes ?? 0;
+const participantPct = totalVotes > 0 ? Math.round((participantVotes / totalVotes) * 1000) / 10 : 50;
+const rivalPct = totalVotes > 0 ? Math.round((100 - participantPct) * 10) / 10 : 50;
+
+const copy = PAGES.fighterDetail;
+const fallbackPhoto = `https://placehold.co/800x1000/0A1428/C8AA6E?text=${encodeURIComponent(participant.nickname)}`;
+---
+
+<Layout title={copy.tabTitle(participant.name)}>
+  <section class="pt-24 pb-24 bg-lol-darkBg min-h-screen">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <a
+        href="/peleadores"
+        class="inline-flex items-center gap-2 text-slate-400 hover:text-lol-gold transition-colors text-sm mb-8 mt-8"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+        {copy.backCta}
+      </a>
+
+      <div class="grid grid-cols-1 lg:grid-cols-5 gap-10">
+        <div class="lg:col-span-2 relative">
+          <div class="relative overflow-hidden bg-lol-cardBg border border-lol-border clip-edges aspect-[4/5]">
+            <img
+              src={participant.photo ?? fallbackPhoto}
+              alt={participant.name}
+              class="w-full h-full object-cover"
+            />
+            <div class="absolute inset-0 bg-gradient-to-t from-lol-darkBg via-transparent to-transparent" />
+          </div>
+          <div class="flex items-center gap-4 mt-4">
+            {participant.instagramHandle && (
+              <span class="flex items-center gap-1.5 text-slate-300 text-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="20" x="2" y="2" rx="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><path d="M17.5 6.5h.01"/></svg>
+                {participant.instagramFollowers ?? participant.instagramHandle}
+              </span>
+            )}
+            {participant.xHandle && (
+              <span class="flex items-center gap-1.5 text-slate-300 text-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                {participant.xFollowers ?? participant.xHandle}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div class="lg:col-span-3">
+          <div class="flex items-center gap-3 mb-3">
+            {participant.countryFlag && <span class="text-2xl">{participant.countryFlag}</span>}
+            <span class="px-3 py-1 bg-lol-darkBg border border-lol-gold text-lol-gold text-xs font-bold uppercase tracking-wider rounded-sm">
+              {participant.mainRole}
+            </span>
+          </div>
+
+          <h1 class="font-display text-4xl md:text-6xl font-bold text-white uppercase tracking-tight mb-2">
+            {participant.name}
+          </h1>
+          <p class="text-lol-blue italic text-lg mb-8">"{participant.nickname}"</p>
+
+          <div class="grid grid-cols-2 gap-x-8 gap-y-5 bg-lol-cardBg border border-lol-border p-6 mb-8">
+            {participant.country && (
+              <div>
+                <p class="text-slate-500 text-xs uppercase tracking-wide mb-1">{copy.countryLabel}</p>
+                <p class="text-white font-bold">{participant.country}</p>
+              </div>
+            )}
+            {participant.height && (
+              <div>
+                <p class="text-slate-500 text-xs uppercase tracking-wide mb-1">{copy.heightLabel}</p>
+                <p class="text-white font-bold">{participant.height}</p>
+              </div>
+            )}
+            {participant.weight && (
+              <div>
+                <p class="text-slate-500 text-xs uppercase tracking-wide mb-1">{copy.weightLabel}</p>
+                <p class="text-white font-bold">{participant.weight}</p>
+              </div>
+            )}
+            <div>
+              <p class="text-slate-500 text-xs uppercase tracking-wide mb-1">{copy.categoryLabel}</p>
+              <p class="text-white font-bold">{participant.mainRole}</p>
+            </div>
+            <div>
+              <p class="text-slate-500 text-xs uppercase tracking-wide mb-1">Rango</p>
+              <p class="text-white font-bold">{participant.lolRank}</p>
+            </div>
+            <div>
+              <p class="text-slate-500 text-xs uppercase tracking-wide mb-1">Campeón favorito</p>
+              <p class="text-white font-bold">{participant.favChampion}</p>
+            </div>
+          </div>
+
+          {participant.description && <p class="text-slate-300 leading-relaxed mb-8">{participant.description}</p>}
+
+          {participant.stats && participant.stats.length > 0 && (
+            <div class="space-y-4 mb-8">
+              {participant.stats.map((stat) => (
+                <div>
+                  <div class="flex justify-between text-xs uppercase text-slate-400 mb-1">
+                    <span>{stat.label}</span>
+                    <span>{stat.value}</span>
+                  </div>
+                  <div class="h-2 bg-lol-darkBg rounded-full overflow-hidden border border-lol-border/50">
+                    <div class="h-full bg-gradient-to-r from-lol-gold to-yellow-400" style={`width: ${stat.value}%`} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div class="flex items-center justify-between bg-lol-cardBg border border-lol-border p-5 mb-8">
+            <div>
+              <p class="text-slate-500 text-xs uppercase tracking-wide mb-1">{copy.rivalLabel}</p>
+              {rival ? (
+                <a href={`/peleadores/${rival.id}`} class="text-lol-gold font-bold hover:underline">
+                  {rival.name}
+                </a>
+              ) : (
+                <p class="text-slate-400">{copy.noRivalYet}</p>
+              )}
+            </div>
+            {rival && match?.id && (
+              <a
+                href="/combates"
+                class="inline-flex items-center gap-2 text-sm text-white bg-lol-gold/10 border border-lol-gold text-lol-gold px-4 py-2 hover:bg-lol-gold hover:text-lol-darkBg transition-all font-bold uppercase tracking-wide clip-edges"
+              >
+                {copy.viewMatchCta}
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+              </a>
+            )}
+          </div>
+
+          {rival && match?.predictionsOpen && !match.winnerId && (
+            <div class="bg-lol-cardBg border border-lol-border p-6">
+              <div class="flex items-center justify-between mb-4">
+                <span class="text-xs uppercase text-slate-500 tracking-wide">{copy.predictionTitle}</span>
+                <span class="text-xs text-slate-500">{totalVotes.toLocaleString("es")} votos</span>
+              </div>
+              <div class="flex items-center justify-between gap-4 mb-3">
+                <div>
+                  <p class="text-white font-bold text-sm">{participant.name}</p>
+                  <p class="font-display font-bold text-2xl text-lol-gold">{participantPct}%</p>
+                </div>
+                <div class="text-right">
+                  <p class="text-white font-bold text-sm">{rival.name}</p>
+                  <p class="font-display font-bold text-2xl text-lol-blue">{rivalPct}%</p>
+                </div>
+              </div>
+              <div class="h-2.5 rounded-full overflow-hidden bg-lol-darkBg border border-lol-border/50 flex">
+                <div class="h-full bg-gradient-to-r from-lol-gold to-yellow-400" style={`width: ${participantPct}%`} />
+                <div class="h-full bg-gradient-to-r from-lol-blue to-cyan-400" style={`width: ${rivalPct}%`} />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  </section>
+</Layout>

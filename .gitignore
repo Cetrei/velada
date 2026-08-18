@@ -19,3 +19,5 @@ apps/web/.env.local
 # Editor / OS
 .DS_Store
 *.log
+
+assets/

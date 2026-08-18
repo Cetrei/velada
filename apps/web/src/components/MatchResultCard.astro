@@ -1,0 +1,81 @@
+---
+import type { Match, Participant } from "@velada/core";
+import { PAGES } from "@velada/core";
+import FighterHalf from "./FighterHalf.astro";
+
+interface Props {
+  match: Match;
+  player1: Participant;
+  player2: Participant;
+  index: number;
+}
+
+const { match, player1, player2, index } = Astro.props;
+const copy = PAGES.matches;
+
+const winner = match.winnerId === player1.id ? player1 : match.winnerId === player2.id ? player2 : null;
+---
+
+<div
+  class="reveal-on-scroll bg-lol-cardBg border border-lol-border overflow-hidden clip-edges"
+  style={`transition-delay: ${(index % 4) * 80}ms`}
+>
+  <div class="grid grid-cols-2">
+    <FighterHalf participant={player1} isWinner={winner?.id === player1.id} align="left" />
+    <FighterHalf participant={player2} isWinner={winner?.id === player2.id} align="right" />
+  </div>
+
+  <div class="relative -mt-6 flex justify-center z-20">
+    <div class="w-10 h-10 bg-lol-darkBg border border-lol-gold rotate-45 flex items-center justify-center">
+      <span class="text-lol-gold font-display font-bold text-xs -rotate-45">VS</span>
+    </div>
+  </div>
+
+  <div class="px-6 pb-5 pt-2 text-center">
+    {
+      winner ? (
+        <>
+          <p class="text-xs uppercase text-slate-500 tracking-wide">{copy.winnerLabel}</p>
+          <p class="font-display text-lg font-bold text-lol-gold uppercase">{winner.name}</p>
+          {match.decision && <p class="text-xs text-slate-500 mt-1">{match.decision}</p>}
+        </>
+      ) : (
+        <p class="text-sm text-slate-500 uppercase tracking-wide">{copy.pendingResult}</p>
+      )
+    }
+  </div>
+</div>
+
+<script>
+  const observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("is-visible");
+          observer.unobserve(entry.target);
+        }
+      }
+    },
+    { threshold: 0.15 }
+  );
+  document.querySelectorAll(".reveal-on-scroll").forEach((el) => observer.observe(el));
+</script>
+
+<style>
+  .reveal-on-scroll {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .reveal-on-scroll.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal-on-scroll {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+  }
+</style>

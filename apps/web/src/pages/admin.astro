@@ -35,8 +35,10 @@ const copy = PAGES.admin;
         client:load
         participants={participants}
         initialRouletteUnlocked={eventState.rouletteUnlocked}
-        initialPhase={eventState.currentPhase}
         initialStartTime={eventState.startTime}
+        initialRegistrationsOpen={eventState.registrationsOpen}
+        initialVotingEnabled={eventState.votingEnabled}
+        initialEventStarted={eventState.eventStarted}
       />
     </div>
   </section>

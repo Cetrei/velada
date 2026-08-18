@@ -1,18 +1,25 @@
 import { useState } from "react";
-import type { EventPhase, Participant, SpinStartPayload } from "@velada/core";
+import type { Participant, SpinStartPayload } from "@velada/core";
 import { ADMIN_CONTROL } from "@velada/core";
 import { getSupabaseClient, ROULETTE_CHANNEL, SPIN_START_EVENT } from "../lib/supabase";
 
 interface AdminControlProps {
   participants: Participant[];
   initialRouletteUnlocked: boolean;
-  initialPhase: EventPhase;
   initialStartTime: string;
+  initialRegistrationsOpen: boolean;
+  initialVotingEnabled: boolean;
+  initialEventStarted: boolean;
 }
 
-const PHASES: EventPhase[] = ["COUNTDOWN", "SHOWCASE", "ROULETTE", "MATCHES", "ENDED"];
-
 type StatusMessage = { type: "success" | "error"; text: string } | null;
+
+interface EventFlags {
+  rouletteUnlocked: boolean;
+  registrationsOpen: boolean;
+  votingEnabled: boolean;
+  eventStarted: boolean;
+}
 
 function errorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
@@ -35,11 +42,17 @@ function toDatetimeLocalValue(iso: string): string {
 export default function AdminControl({
   participants,
   initialRouletteUnlocked,
-  initialPhase,
-  initialStartTime
+  initialStartTime,
+  initialRegistrationsOpen,
+  initialVotingEnabled,
+  initialEventStarted
 }: AdminControlProps) {
-  const [rouletteUnlocked, setRouletteUnlocked] = useState(initialRouletteUnlocked);
-  const [phase, setPhase] = useState<EventPhase>(initialPhase);
+  const [flags, setFlags] = useState<EventFlags>({
+    rouletteUnlocked: initialRouletteUnlocked,
+    registrationsOpen: initialRegistrationsOpen,
+    votingEnabled: initialVotingEnabled,
+    eventStarted: initialEventStarted
+  });
   const [startTime, setStartTime] = useState(initialStartTime);
   const [startTimeInput, setStartTimeInput] = useState(toDatetimeLocalValue(initialStartTime));
   const [status, setStatus] = useState<StatusMessage>(null);
@@ -48,19 +61,23 @@ export default function AdminControl({
   const supabase = getSupabaseClient();
   const isConnected = supabase !== null;
 
-  async function updateEventState(nextRouletteUnlocked: boolean, nextPhase: EventPhase) {
+  async function updateFlag(key: keyof EventFlags, value: boolean) {
     if (!supabase) {
       setStatus({ type: "error", text: ADMIN_CONTROL.errorNotConnected });
       return;
     }
+
+    const nextFlags = { ...flags, [key]: value };
 
     setIsBusy(true);
     try {
       const { error } = await supabase
         .from("event_state")
         .update({
-          roulette_unlocked: nextRouletteUnlocked,
-          current_phase: nextPhase,
+          roulette_unlocked: nextFlags.rouletteUnlocked,
+          registrations_open: nextFlags.registrationsOpen,
+          voting_enabled: nextFlags.votingEnabled,
+          event_started: nextFlags.eventStarted,
           updated_at: new Date().toISOString()
         })
         .eq("id", "main");
@@ -70,8 +87,7 @@ export default function AdminControl({
         return;
       }
 
-      setRouletteUnlocked(nextRouletteUnlocked);
-      setPhase(nextPhase);
+      setFlags(nextFlags);
       setStatus({ type: "success", text: "Estado del evento actualizado." });
     } catch (err) {
       setStatus({ type: "error", text: ADMIN_CONTROL.errorUnexpected(errorMessage(err)) });
@@ -216,35 +232,45 @@ export default function AdminControl({
           </button>
         </div>
 
-        <h3 className="font-display text-xl font-bold text-white uppercase mb-4">{ADMIN_CONTROL.phaseTitle}</h3>
-        <div className="flex flex-wrap gap-2 mb-6">
-          {PHASES.map((p) => (
-            <button
-              key={p}
-              disabled={isBusy}
-              onClick={() => updateEventState(rouletteUnlocked, p)}
-              className={`px-4 py-2 text-sm font-bold uppercase tracking-wide rounded disabled:opacity-50 ${
-                phase === p
-                  ? "bg-lol-gold text-black"
-                  : "bg-lol-darkBg border border-lol-border text-slate-300 hover:border-lol-gold"
-              }`}
-            >
-              {p}
-            </button>
-          ))}
+        <h3 className="font-display text-xl font-bold text-white uppercase mb-1">{ADMIN_CONTROL.stateTitle}</h3>
+        <p className="text-xs text-slate-500 mb-4">{ADMIN_CONTROL.stateHint}</p>
+        <div className="space-y-3 mb-6">
+          <EventFlagToggle
+            label={ADMIN_CONTROL.registrationsLabel}
+            onState={ADMIN_CONTROL.registrationsOpenState}
+            offState={ADMIN_CONTROL.registrationsClosedState}
+            checked={flags.registrationsOpen}
+            disabled={isBusy}
+            onToggle={(v) => updateFlag("registrationsOpen", v)}
+          />
+          <EventFlagToggle
+            label={ADMIN_CONTROL.rouletteLabel}
+            onState={ADMIN_CONTROL.rouletteEnabledState}
+            offState={ADMIN_CONTROL.rouletteDisabledState}
+            checked={flags.rouletteUnlocked}
+            disabled={isBusy}
+            onToggle={(v) => updateFlag("rouletteUnlocked", v)}
+          />
+          <EventFlagToggle
+            label={ADMIN_CONTROL.votingLabel}
+            onState={ADMIN_CONTROL.votingEnabledState}
+            offState={ADMIN_CONTROL.votingDisabledState}
+            checked={flags.votingEnabled}
+            disabled={isBusy}
+            onToggle={(v) => updateFlag("votingEnabled", v)}
+          />
+          <EventFlagToggle
+            label={ADMIN_CONTROL.eventStartedLabel}
+            onState={ADMIN_CONTROL.eventStartedOnState}
+            offState={ADMIN_CONTROL.eventStartedOffState}
+            checked={flags.eventStarted}
+            disabled={isBusy}
+            onToggle={(v) => updateFlag("eventStarted", v)}
+          />
         </div>
 
-        <h3 className="font-display text-xl font-bold text-white uppercase mb-4">{ADMIN_CONTROL.raffleControlTitle}</h3>
         <button
-          disabled={isBusy}
-          onClick={() => updateEventState(!rouletteUnlocked, phase)}
-          className="w-full py-3 px-6 bg-lol-blue/10 border border-lol-blue text-lol-blue hover:bg-lol-blue hover:text-black font-bold uppercase tracking-wide transition-all disabled:opacity-50 mb-4"
-        >
-          {rouletteUnlocked ? ADMIN_CONTROL.lockRaffle : ADMIN_CONTROL.unlockRaffle}
-        </button>
-
-        <button
-          disabled={isBusy || !rouletteUnlocked}
+          disabled={isBusy || !flags.rouletteUnlocked}
           onClick={triggerRandomMatch}
           className="w-full py-4 px-6 bg-gradient-to-r from-lol-gold to-yellow-600 hover:from-yellow-500 hover:to-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed text-black font-display font-bold text-lg uppercase tracking-wide"
         >
@@ -265,5 +291,52 @@ export default function AdminControl({
         </ul>
       </div>
     </div>
+  );
+}
+
+function EventFlagToggle({
+  label,
+  onState,
+  offState,
+  checked,
+  disabled,
+  onToggle
+}: {
+  label: string;
+  onState: string;
+  offState: string;
+  checked: boolean;
+  disabled: boolean;
+  onToggle: (value: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => onToggle(!checked)}
+      className={`w-full flex items-center justify-between gap-4 px-4 py-3 rounded border transition-all disabled:opacity-50 ${
+        checked
+          ? "bg-lol-gold/10 border-lol-gold"
+          : "bg-lol-darkBg border-lol-border hover:border-lol-gold/50"
+      }`}
+    >
+      <span className="text-sm font-bold uppercase tracking-wide text-white">{label}</span>
+      <span className="flex items-center gap-2">
+        <span className={`text-xs uppercase font-bold ${checked ? "text-lol-gold" : "text-slate-500"}`}>
+          {checked ? onState : offState}
+        </span>
+        <span
+          className={`relative w-10 h-5 rounded-full transition-colors ${
+            checked ? "bg-lol-gold" : "bg-lol-border"
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 w-4 h-4 rounded-full bg-black transition-transform ${
+              checked ? "translate-x-5" : "translate-x-0.5"
+            }`}
+          />
+        </span>
+      </span>
+    </button>
   );
 }
