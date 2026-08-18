@@ -11,7 +11,6 @@ const ROLES: Participant["mainRole"][] = ["Top", "Jungle", "Mid", "ADC", "Suppor
 const SERVERS = ["LAN", "LAS", "NA", "BR", "EUW", "EUNE", "KR", "JP", "OCE"];
 
 const EMPTY_FORM = {
-  id: "",
   name: "",
   nickname: "",
   age: "",
@@ -27,17 +26,26 @@ const EMPTY_FORM = {
 
 const EMPTY_STAT: ParticipantStat = { label: "", value: 50 };
 
+type StatWithKey = ParticipantStat & { _key: string };
+
+function makeStatKey(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `stat-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 type StatusMessage = { type: "success" | "error"; text: string } | null;
 
 export default function ParticipantManager({ initialParticipants }: ParticipantManagerProps) {
   const [participants, setParticipants] = useState(initialParticipants);
   const [form, setForm] = useState(EMPTY_FORM);
-  const [stats, setStats] = useState<ParticipantStat[]>([]);
+  const [stats, setStats] = useState<StatWithKey[]>([]);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [status, setStatus] = useState<StatusMessage>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [isLookingUpRank, setIsLookingUpRank] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [isFormOpen, setIsFormOpen] = useState(false);
 
   function resetForm() {
     setForm(EMPTY_FORM);
@@ -46,21 +54,30 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
     setEditingId(null);
   }
 
+  function openNewForm() {
+    resetForm();
+    setIsFormOpen(true);
+  }
+
+  function closeForm() {
+    setIsFormOpen(false);
+    resetForm();
+  }
+
   function addStat() {
-    setStats((prev) => [...prev, { ...EMPTY_STAT }]);
+    setStats((prev) => [...prev, { ...EMPTY_STAT, _key: makeStatKey() }]);
   }
 
-  function updateStat(index: number, patch: Partial<ParticipantStat>) {
-    setStats((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)));
+  function updateStat(key: string, patch: Partial<ParticipantStat>) {
+    setStats((prev) => prev.map((s) => (s._key === key ? { ...s, ...patch } : s)));
   }
 
-  function removeStat(index: number) {
-    setStats((prev) => prev.filter((_, i) => i !== index));
+  function removeStat(key: string) {
+    setStats((prev) => prev.filter((s) => s._key !== key));
   }
 
   function loadIntoForm(p: Participant) {
     setForm({
-      id: p.id,
       name: p.name,
       nickname: p.nickname,
       age: p.age?.toString() ?? "",
@@ -73,10 +90,10 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
       favChampion: p.favChampion,
       description: p.description ?? ""
     });
-    setStats(p.stats ?? []);
+    setStats((p.stats ?? []).map((s) => ({ ...s, _key: makeStatKey() })));
     setPhotoFile(null);
     setEditingId(p.id);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setIsFormOpen(true);
   }
 
   async function handleLookupRank() {
@@ -104,14 +121,16 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.id || !form.name || !form.nickname || !form.lolRank || !form.favChampion) {
+    if (!form.name || !form.nickname || !form.lolRank || !form.favChampion) {
       setStatus({ type: "error", text: PARTICIPANT_MANAGER.errorRequiredFields });
       return;
     }
 
+    const participantId = editingId ?? crypto.randomUUID();
+
     setIsBusy(true);
     const data = new FormData();
-    data.set("id", form.id);
+    data.set("id", participantId);
     data.set("name", form.name);
     data.set("nickname", form.nickname);
     if (form.age) data.set("age", form.age);
@@ -123,7 +142,9 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
     data.set("mainRole", form.mainRole);
     data.set("favChampion", form.favChampion);
     if (form.description) data.set("description", form.description);
-    const validStats = stats.filter((s) => s.label.trim().length > 0);
+    const validStats: ParticipantStat[] = stats
+      .filter((s) => s.label.trim().length > 0)
+      .map(({ _key, ...s }) => s);
     if (validStats.length > 0) data.set("stats", JSON.stringify(validStats));
     if (photoFile) data.set("photo", photoFile);
 
@@ -136,13 +157,14 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
     }
 
     setStatus({ type: "success", text: PARTICIPANT_MANAGER.successSaved(form.name) });
+    setIsFormOpen(false);
 
     setParticipants((prev) => {
       const next = prev.filter((p) => p.id !== result.id);
       return [
         ...next,
         {
-          id: form.id,
+          id: participantId,
           name: form.name,
           nickname: form.nickname,
           age: form.age ? Number(form.age) : undefined,
@@ -195,24 +217,42 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
         </div>
       )}
 
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={openNewForm}
+          className="py-3 px-6 bg-lol-gold text-black font-bold uppercase tracking-wide hover:bg-yellow-400 transition-all"
+        >
+          {PARTICIPANT_MANAGER.newParticipant}
+        </button>
+      </div>
+
+      {isFormOpen && (
+      <div
+        className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/70 p-4 overflow-y-auto"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) closeForm();
+        }}
+      >
       <form
         onSubmit={handleSubmit}
-        className="bg-lol-cardBg border border-lol-border p-6 rounded-xl space-y-4"
+        className="bg-lol-cardBg border border-lol-border p-6 rounded-xl space-y-4 w-full max-w-3xl my-8"
       >
-        <h2 className="font-display text-xl font-bold text-white uppercase mb-2">
-          {editingId ? PARTICIPANT_MANAGER.editingParticipant(editingId) : PARTICIPANT_MANAGER.newParticipant}
-        </h2>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="font-display text-xl font-bold text-white uppercase">
+            {editingId ? PARTICIPANT_MANAGER.editingParticipant(editingId) : PARTICIPANT_MANAGER.newParticipant}
+          </h2>
+          <button
+            type="button"
+            onClick={closeForm}
+            className="text-slate-400 hover:text-white text-xl leading-none px-2"
+            aria-label={PARTICIPANT_MANAGER.cancelCta}
+          >
+            &times;
+          </button>
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label={PARTICIPANT_MANAGER.fields.id}>
-            <input
-              value={form.id}
-              disabled={!!editingId}
-              onChange={(e) => setForm({ ...form, id: e.target.value })}
-              className="input"
-              placeholder={PARTICIPANT_MANAGER.placeholders.id}
-            />
-          </Field>
           <Field label={PARTICIPANT_MANAGER.fields.name}>
             <input
               value={form.name}
@@ -341,11 +381,11 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
             <p className="text-slate-500 text-xs">{PARTICIPANT_MANAGER.statsEmptyHint}</p>
           )}
           <div className="space-y-2">
-            {stats.map((stat, index) => (
-              <div key={index} className="flex gap-2 items-center">
+            {stats.map((stat) => (
+              <div key={stat._key} className="flex gap-2 items-center">
                 <input
                   value={stat.label}
-                  onChange={(e) => updateStat(index, { label: e.target.value })}
+                  onChange={(e) => updateStat(stat._key, { label: e.target.value })}
                   className="input flex-1"
                   placeholder={PARTICIPANT_MANAGER.placeholders.statLabel}
                 />
@@ -354,12 +394,12 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
                   min={0}
                   max={100}
                   value={stat.value}
-                  onChange={(e) => updateStat(index, { value: Number(e.target.value) })}
+                  onChange={(e) => updateStat(stat._key, { value: Number(e.target.value) })}
                   className="input w-24"
                 />
                 <button
                   type="button"
-                  onClick={() => removeStat(index)}
+                  onClick={() => removeStat(stat._key)}
                   className="text-red-400 hover:underline font-bold uppercase text-xs whitespace-nowrap"
                 >
                   {PARTICIPANT_MANAGER.removeStatCta}
@@ -387,17 +427,17 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
           >
             {editingId ? PARTICIPANT_MANAGER.submitEditCta : PARTICIPANT_MANAGER.submitNewCta}
           </button>
-          {editingId && (
-            <button
-              type="button"
-              onClick={resetForm}
-              className="py-3 px-6 border border-lol-border text-slate-300 uppercase text-sm font-bold"
-            >
-              {PARTICIPANT_MANAGER.cancelCta}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={closeForm}
+            className="py-3 px-6 border border-lol-border text-slate-300 uppercase text-sm font-bold"
+          >
+            {PARTICIPANT_MANAGER.cancelCta}
+          </button>
         </div>
       </form>
+      </div>
+      )}
 
       <div className="bg-lol-cardBg border border-lol-border p-6 rounded-xl">
         <h3 className="font-display text-xl font-bold text-white uppercase mb-4">

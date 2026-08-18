@@ -110,7 +110,6 @@ export const PARTICIPANT_MANAGER = {
   newParticipant: "Nuevo participante",
   editingParticipant: (id: string) => `Editando: ${id}`,
   fields: {
-    id: "ID unico *",
     name: "Nombre *",
     nickname: "Apodo *",
     mainRole: "Rol principal *",
@@ -125,7 +124,6 @@ export const PARTICIPANT_MANAGER = {
     photo: "Foto (desde archivos o camara del celular)"
   },
   placeholders: {
-    id: "p11",
     weight: "75 kg",
     height: "178 cm",
     lolUsername: "Nombre#TAG",

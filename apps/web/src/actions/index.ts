@@ -231,8 +231,9 @@ export const server = {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: "Supabase admin no configurado." });
       }
 
-      const { error } = await admin.from("participants").delete().eq("id", id);
+      const { error, status, statusText } = await admin.from("participants").delete().eq("id", id);
       if (error) {
+        console.log(`[debug] deleteParticipant error: id=${id} status=${status} statusText=${statusText} error=${JSON.stringify(error)}`);
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: error.message });
       }
 
