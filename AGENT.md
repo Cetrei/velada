@@ -357,6 +357,30 @@ era el de arriba, no whitelist).
   `bun`/`wrangler`/`gh` sobre el proyecto real en esta sesion (solo
   filesystem MCP + context7 + web search, sin bash sobre esta ruta).
 
+## Sesion 2026-08-18 (3): iconos de rol reemplazados por assets reales del wiki de LoL
+- Los SVG dibujados a mano de la sesion anterior (2) tampoco se leian bien
+  (confirmado por el usuario con captura: "no se parecen en nada"). En vez
+  de seguir iterando geometria a mano, se cambio de enfoque: usar los
+  iconos de posicion REALES de
+  https://wiki.leagueoflegends.com/en-us/Category:Role_icons como assets
+  estaticos, a pedido del usuario.
+- `ChampionSelectGrid.tsx`: `ROLE_FILTERS` ya no tiene paths SVG, apunta a
+  `/images/roles/{top,jungle,middle,bottom,support}.png`. El grid renderiza
+  `<img>` con `onError` que oculta el icono si el archivo no esta puesto
+  (mismo patron que `rankIcon.ts` para los PNGs de rango). Estilo con
+  `filter` CSS para tintear el PNG gris/blanco original: dorado en reposo,
+  mas claro en hover, cyan + `scale(1.1)` cuando el filtro de rol esta
+  activo (clase `.role-filter-icon-active`).
+- Carpeta creada: `apps/web/public/images/roles/` con un `README.md` que
+  documenta que archivo bajar de que pagina del wiki (5 PNGs, nombres
+  exactos en minuscula: top/jungle/middle/bottom/support). **El usuario
+  baja los PNGs el mismo** (no se pudo/debio scrapear binarios de un sitio
+  de terceros como parte del codigo) y los coloca en esa carpeta.
+- Pendiente: usuario descarga los 5 PNGs y confirma visualmente que el
+  `filter` CSS (invert/sepia/hue-rotate aproximados a ojo, sin ver el PNG
+  real) da un tinte razonable; si no, ajustar esos valores en el `<style>`
+  de `ChampionSelectGrid.tsx` es mas facil que tocar los PNGs.
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.

@@ -11,54 +11,24 @@ type RoleFilter = Participant["mainRole"];
 type SortDirection = "asc" | "desc";
 
 /**
- * SVGs inline propios, no Font Awesome. fa-bow-arrow y fa-staff-snake son
- * iconos Pro (no existen en el set free 6.4.0, confirmado contra
- * fontawesome.com) y se renderizaban como <i> vacios con ancho
- * inconsistente entre navegadores, causando el gap irregular visible en el
- * grid de filtro de rol. SVG propio con viewBox/tamano fijo elimina esa
- * dependencia fragil de un CDN externo y garantiza espaciado uniforme via
- * el `gap` del flexbox, sin variacion por glyph.
- *
- * Pictogramas solidos (fill, no stroke delgado), verificados visualmente a
- * 40px antes de fijarlos (el primer intento con paths a mano alzada no se
- * leia como nada reconocible a 18px, sobre todo Jungle y Mid). Geometria
- * inspirada en el selector de posicion real del client de LoL: daga con
- * guarda (Top), daga vertical con guarda ancha (Jungle, distinta de Top en
- * proporcion para no confundirse), rombo hueco tipo orbe arcano (Mid),
- * punta de flecha con asta (ADC), escudo con cruz (Support).
+ * Iconos de rol reales del wiki de LoL, no dibujados a mano. Los intentos
+ * anteriores (Font Awesome fa-bow-arrow/fa-staff-snake, despues paths SVG
+ * propios) no se leian bien o directamente no existian en el set free.
+ * El usuario descarga los 5 PNG de
+ * https://wiki.leagueoflegends.com/en-us/Category:Role_icons (paginas
+ * File:Top_icon.png, File:Jungle_icon.png, File:Middle_icon.png,
+ * File:Bottom_icon.png, File:Support_icon.png -> boton "Original file",
+ * 136x136) y los coloca en apps/web/public/images/roles/ con estos
+ * nombres exactos. Si un archivo todavia no esta, onError en el <img>
+ * oculta el icono en vez de mostrar el roto del navegador (mismo patron
+ * que ya usa rankIcon.ts para los PNGs de rango).
  */
-const ROLE_FILTERS: Array<{ role: RoleFilter; label: string; path: string; fillRule?: "evenodd" }> = [
-  // Top: espada vertical con guarda cruzada
-  {
-    role: "Top",
-    label: "Top",
-    path: "M11 1h2v13h-2zM7 6h10v2H7zM9 14h6l-1 3h-1v6h-2v-6H10z"
-  },
-  // Jungle: daga vertical con guarda ancha (silueta compacta, se distingue de Top)
-  {
-    role: "Jungle",
-    label: "Jungle",
-    path: "M9 3h6v9h-6zM7 5h2v2H7zM15 5h2v2h-2zM10 14h4l-1 3h-1v6h-1v-6h-1z"
-  },
-  // Mid: rombo hueco tipo orbe arcano
-  {
-    role: "Mid",
-    label: "Mid",
-    path: "M12 2 2 12l10 10 10-10z M12 6l6 6-6 6-6-6z",
-    fillRule: "evenodd"
-  },
-  // ADC: punta de flecha con asta
-  {
-    role: "ADC",
-    label: "ADC",
-    path: "M12 1 3 10h5v12h8V10h5z"
-  },
-  // Support: escudo con cruz
-  {
-    role: "Support",
-    label: "Support",
-    path: "M12 1 4 4v6c0 5.2 3.4 9.6 8 11 4.6-1.4 8-5.8 8-11V4zM11 7h2v4h4v2h-4v4h-2v-4H7v-2h4z"
-  }
+const ROLE_FILTERS: Array<{ role: RoleFilter; label: string; icon: string }> = [
+  { role: "Top", label: "Top", icon: "/images/roles/top.png" },
+  { role: "Jungle", label: "Jungle", icon: "/images/roles/jungle.png" },
+  { role: "Mid", label: "Mid", icon: "/images/roles/middle.png" },
+  { role: "ADC", label: "ADC", icon: "/images/roles/bottom.png" },
+  { role: "Support", label: "Support", icon: "/images/roles/support.png" }
 ];
 
 function fallbackPhoto(p: Participant): string {
@@ -143,19 +113,25 @@ export default function ChampionSelectGrid({
             
             <div className="controls-bar w-full max-w-2xl flex flex-wrap justify-between items-center gap-3 mb-2 px-2 sm:px-[20px] pb-[10px] border-b border-[#c8aa6e]/30">
                 <div className="role-filters flex flex-nowrap items-center gap-2.5 sm:gap-[15px] text-[#a09b8c] text-base sm:text-base order-2 sm:order-1 flex-shrink-0">
-                    {ROLE_FILTERS.map(({ role, label, path, fillRule }) => (
+                    {ROLE_FILTERS.map(({ role, label, icon }) => (
                         <button
                             key={role}
                             type="button"
-                            className={`role-filter-icon flex-shrink-0 bg-transparent border-0 p-0 cursor-pointer transition-colors ${roleFilter === role ? 'text-[#0bd4d4] drop-shadow-[0_0_6px_rgba(11,212,212,0.6)]' : 'text-[#a09b8c] hover:text-[#c8aa6e]'}`}
+                            className={`role-filter-icon flex-shrink-0 bg-transparent border-0 p-0 cursor-pointer transition-all ${roleFilter === role ? 'role-filter-icon-active' : ''}`}
                             title={label}
                             aria-label={label}
                             aria-pressed={roleFilter === role}
                             onClick={() => setRoleFilter((current) => (current === role ? null : role))}
                         >
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                                <path d={path} fillRule={fillRule} />
-                            </svg>
+                            <img
+                                src={icon}
+                                alt={label}
+                                width={18}
+                                height={18}
+                                onError={(e) => {
+                                    e.currentTarget.style.display = "none";
+                                }}
+                            />
                         </button>
                     ))}
                 </div>
@@ -325,6 +301,23 @@ export default function ChampionSelectGrid({
             align-items: center;
             justify-content: center;
             line-height: 0;
+        }
+
+        .role-filter-icon img {
+            filter: brightness(0) saturate(100%) invert(66%) sepia(11%) saturate(383%) hue-rotate(191deg) brightness(94%) contrast(87%);
+            opacity: 0.85;
+            transition: filter 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
+        }
+
+        .role-filter-icon:hover img {
+            filter: brightness(0) saturate(100%) invert(85%) sepia(21%) saturate(526%) hue-rotate(357deg) brightness(96%) contrast(92%);
+            opacity: 1;
+        }
+
+        .role-filter-icon-active img {
+            filter: brightness(0) saturate(100%) invert(70%) sepia(66%) saturate(2476%) hue-rotate(140deg) brightness(97%) contrast(96%);
+            opacity: 1;
+            transform: scale(1.1);
         }
 
         .search-input-wrap {
