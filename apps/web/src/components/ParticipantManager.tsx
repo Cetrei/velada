@@ -229,14 +229,14 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
 
       {isFormOpen && (
       <div
-        className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/70 p-4 overflow-y-auto"
+        className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/70 p-2 sm:p-4 overflow-y-auto"
         onClick={(e) => {
           if (e.target === e.currentTarget) closeForm();
         }}
       >
       <form
         onSubmit={handleSubmit}
-        className="bg-lol-cardBg border border-lol-border p-6 rounded-xl space-y-4 w-full max-w-3xl my-8"
+        className="bg-lol-cardBg border border-lol-border p-4 sm:p-6 rounded-xl space-y-4 w-full max-w-3xl min-w-0 my-4 sm:my-8 box-border"
       >
         <div className="flex items-center justify-between mb-2">
           <h2 className="font-display text-xl font-bold text-white uppercase">
@@ -338,11 +338,11 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
               </select>
             </Field>
             <Field label={PARTICIPANT_MANAGER.fields.lolRank}>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <input
                   value={form.lolRank}
                   onChange={(e) => setForm({ ...form, lolRank: e.target.value })}
-                  className="input"
+                  className="input flex-1 min-w-[8rem]"
                   placeholder={PARTICIPANT_MANAGER.placeholders.lolRank}
                 />
                 <button
@@ -382,11 +382,11 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
           )}
           <div className="space-y-2">
             {stats.map((stat) => (
-              <div key={stat._key} className="flex gap-2 items-center">
+              <div key={stat._key} className="flex flex-wrap gap-2 items-center">
                 <input
                   value={stat.label}
                   onChange={(e) => updateStat(stat._key, { label: e.target.value })}
-                  className="input flex-1"
+                  className="input flex-1 min-w-[8rem]"
                   placeholder={PARTICIPANT_MANAGER.placeholders.statLabel}
                 />
                 <input
@@ -395,7 +395,7 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
                   max={100}
                   value={stat.value}
                   onChange={(e) => updateStat(stat._key, { value: Number(e.target.value) })}
-                  className="input w-24"
+                  className="input w-20 sm:w-24"
                 />
                 <button
                   type="button"

@@ -103,7 +103,14 @@ export const ADMIN_CONTROL = {
   lockRaffle: "Bloquear sorteo",
   unlockRaffle: "Desbloquear sorteo",
   emitRandomMatch: "Emitir sorteo aleatorio en vivo",
-  loadedFighters: (count: number) => `Participantes cargados (${count})`
+  loadedFighters: (count: number) => `Participantes cargados (${count})`,
+  startTimeTitle: "Fecha de inicio",
+  startTimeLabel: "Fecha y hora de inicio del evento",
+  saveStartTimeCta: "Guardar fecha",
+  errorStartTimeEmpty: "Elegi una fecha valida.",
+  successStartTimeUpdated: "Fecha de inicio actualizada.",
+  errorNotConnected: "Supabase no esta configurado. Corre bun run setup:supabase.",
+  errorUnexpected: (detail: string) => `Error inesperado: ${detail}`
 };
 
 export const PARTICIPANT_MANAGER = {
