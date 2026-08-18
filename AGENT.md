@@ -381,6 +381,34 @@ era el de arriba, no whitelist).
   real) da un tinte razonable; si no, ajustar esos valores en el `<style>`
   de `ChampionSelectGrid.tsx` es mas facil que tocar los PNGs.
 
+## Sesion 2026-08-18 (5): `lib/env.ts` en verdad NUNCA se escribio en el filesystem real (error de herramienta, no de codigo)
+- La entrada de sesion (4) de abajo afirmaba haber creado
+  `apps/web/src/lib/env.ts` y lo daba por resuelto. Era falso: el CI
+  siguio fallando con `Could not resolve "../lib/env" from
+  "src/actions/index.ts"` porque esa sesion uso la tool `create_file`
+  (que escribe en un sandbox de ejecucion de bash descartable, no en el
+  proyecto real del usuario) en vez de la tool de filesystem MCP
+  (`write_file`, que si apunta a `~/Proyectos/Personal/velada_lol` real).
+  El resultado "exitoso" de esa escritura era del archivo sandbox, nunca
+  del repo del usuario — nunca se commiteo porque nunca existio para git.
+  **Leccion para sesiones futuras**: en este proyecto NO se tiene bash
+  real sobre la ruta del repo (confirmado repetidas veces en sesiones
+  anteriores); `create_file`/`str_replace`/`bash_tool` operan sobre un
+  sandbox aislado que no es el filesystem del usuario. Cualquier archivo
+  nuevo o edicion tiene que hacerse con las tools de filesystem MCP
+  (`write_file`, `edit_file`) apuntando a la ruta real bajo
+  `/home/cetrei/Proyectos/...`, y despues confirmarse con un `read_text_file`
+  posterior en esa misma ruta antes de darlo por hecho — no alcanza con que
+  la tool call devuelva "success", hay que releer el archivo real.
+- Fix real esta vez: `apps/web/src/lib/env.ts` escrito con
+  `filesystem:write_file` (mismo contenido que se penso en la sesion (4):
+  `getServerEnv(context, key)` con fallback `locals.runtime.env` ->
+  `import.meta.env`) y confirmado releyendolo desde la ruta real.
+- Pendiente: usuario tiene que hacer commit + push de `lib/env.ts` (este
+  seguia sin existir en el working tree hasta ahora, asi que ni siquiera
+  estaba como cambio sin commitear) y confirmar que el build de CI/deploy.yml
+  pasa. Seguimos sin bash real sobre el proyecto en esta sesion tampoco.
+
 ## Sesion 2026-08-18 (4): `lib/env.ts` faltante (import roto) + ultimo call-site sin `locals`
 - **Bug critico de build**: la sesion anterior (documentada en el chat que
   trajo el usuario, no en este AGENT.md) dejo `supabaseServer.ts` y
