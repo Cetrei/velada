@@ -64,6 +64,17 @@ export default function ChampionSelectGrid({
       return sortDirection === "asc" ? cmp : -cmp;
     });
 
+  // Elige un participante al azar dentro de los resultados filtrados actuales
+  // (respeta busqueda + filtro de rol activos), igual que el boton de
+  // random del cliente real de LoL.
+  function pickRandom() {
+    if (isLockedIn || filteredParticipants.length === 0) return;
+    const pool = filteredParticipants.filter((p) => p.id !== selectedId);
+    const candidates = pool.length > 0 ? pool : filteredParticipants;
+    const random = candidates[Math.floor(Math.random() * candidates.length)];
+    setSelectedId(random.id);
+  }
+
   return (
     <div className="relative w-full bg-[#010a13] text-[#f0e6d2] flex flex-col items-center overflow-hidden lol-main-bg py-2 sm:py-3 px-3 sm:px-6">
       <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
@@ -160,6 +171,18 @@ export default function ChampionSelectGrid({
             </div>
 
             <div className="champ-grid-scroll grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 gap-1 auto-rows-[64px]">
+                {/* Boton de seleccion al azar dentro de los resultados filtrados actuales */}
+                <button
+                    type="button"
+                    onClick={pickRandom}
+                    disabled={filteredParticipants.length === 0}
+                    className="champ-portrait champ-portrait-random"
+                    aria-label="Elegir al azar"
+                    title="Elegir al azar"
+                >
+                    <i className="fa-solid fa-question random-icon" aria-hidden="true"></i>
+                    <div className="champ-name">Random</div>
+                </button>
                 {/* Mapeo de TUS participantes reales */}
                 {filteredParticipants.map(p => {
                     const isSelected = selectedId === p.id;
@@ -215,12 +238,6 @@ export default function ChampionSelectGrid({
                     </div>
                     
                     <div className="skin-name">Perfil Principal de {selected?.nickname || selected?.name}</div>
-
-                    <div className="skin-thumbnails">
-                        <div className="skin-thumb active">
-                            {selected && <img src={selected.photo ?? fallbackPhoto(selected)} alt="skin thumbnail" />}
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -294,6 +311,10 @@ export default function ChampionSelectGrid({
             margin-bottom: 8px;
             letter-spacing: 2px;
             font-family: 'Beaufort for LOL', serif;
+        }
+
+        .role-filters {
+            padding-top: 6px;
         }
 
         .role-filter-icon {
@@ -398,8 +419,30 @@ export default function ChampionSelectGrid({
         }
 
         .champ-portrait.no-photo {
-            background-color: transparent;
-            background-image: radial-gradient(circle at center, rgba(0, 0, 0, 0.15) 0%, rgba(0, 0, 0, 0.75) 100%);
+            background-color: #0a2530;
+            background-image: radial-gradient(circle at center, rgba(11, 212, 212, 0.08) 0%, rgba(5, 20, 25, 0.85) 100%);
+        }
+
+        .champ-portrait-random {
+            background-color: #0a2530;
+            background-image: radial-gradient(circle at center, rgba(11, 212, 212, 0.12) 0%, rgba(5, 20, 25, 0.9) 100%);
+        }
+
+        .champ-portrait-random:disabled {
+            cursor: not-allowed;
+            opacity: 0.4;
+        }
+
+        .random-icon {
+            color: #4dd8d8;
+            font-size: 1.4rem;
+            text-shadow: 0 0 8px rgba(11, 212, 212, 0.5);
+            transition: color 0.2s ease, text-shadow 0.2s ease;
+        }
+
+        .champ-portrait-random:hover:not(:disabled) .random-icon {
+            color: #e0f8f8;
+            text-shadow: 0 0 12px rgba(11, 212, 212, 0.9);
         }
 
         .champ-portrait:hover, .champ-portrait.selected {
@@ -554,41 +597,6 @@ export default function ChampionSelectGrid({
             font-style: italic;
             margin-bottom: 15px;
             text-shadow: 0 2px 4px rgba(0,0,0,0.8);
-        }
-
-        .skin-thumbnails {
-            display: flex;
-            gap: 5px;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .skin-thumb {
-            width: 64px;
-            height: 64px;
-            border: 1px solid #3c3c41;
-            position: relative;
-            cursor: pointer;
-            filter: grayscale(0.5);
-            background-color: #1e2328;
-            overflow: hidden;
-            flex-shrink: 0;
-        }
-        
-        .skin-thumb.active {
-            border-color: #c8aa6e;
-            width: 72px;
-            height: 72px;
-            filter: grayscale(0);
-        }
-
-        .skin-thumb img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            display: block;
-            font-size: 0;
-            color: transparent;
         }
 
         .action-bar {

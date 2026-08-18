@@ -78,6 +78,12 @@ async function fetchRiotRank(lolUsername: string, lolServer: string): Promise<{ 
   if (accountResponse.status === 404) {
     throw new ActionError({ code: "NOT_FOUND", message: "Riot ID no encontrado." });
   }
+  if (accountResponse.status === 429 || accountResponse.status === 403) {
+    throw new ActionError({
+      code: "TOO_MANY_REQUESTS",
+      message: `Riot API (account) rate-limited o key invalida: ${accountResponse.status}`
+    });
+  }
   if (!accountResponse.ok) {
     throw new ActionError({
       code: "INTERNAL_SERVER_ERROR",
@@ -92,6 +98,12 @@ async function fetchRiotRank(lolUsername: string, lolServer: string): Promise<{ 
     { headers: { "X-Riot-Token": riotApiKey } }
   );
 
+  if (leagueResponse.status === 429 || leagueResponse.status === 403) {
+    throw new ActionError({
+      code: "TOO_MANY_REQUESTS",
+      message: `Riot API (league) rate-limited o key invalida: ${leagueResponse.status}`
+    });
+  }
   if (!leagueResponse.ok) {
     throw new ActionError({
       code: "INTERNAL_SERVER_ERROR",
@@ -663,7 +675,16 @@ export const server = {
         if (err instanceof ActionError && err.code === "BAD_REQUEST") {
           return { status: "invalid" as const, reason: "format" as const };
         }
-        throw err;
+        if (err instanceof ActionError && err.code === "TOO_MANY_REQUESTS") {
+          console.error("[checkRiotProfile] rate limited:", err.message);
+          return { status: "error" as const, reason: "rate_limited" as const };
+        }
+        if (err instanceof ActionError && err.code === "INTERNAL_SERVER_ERROR") {
+          console.error("[checkRiotProfile] infra failure:", err.message);
+          return { status: "error" as const, reason: "riot_down" as const };
+        }
+        console.error("[checkRiotProfile] unexpected error:", err);
+        return { status: "error" as const, reason: "unknown" as const };
       }
     }
   })

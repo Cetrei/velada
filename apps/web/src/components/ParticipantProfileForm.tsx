@@ -78,7 +78,9 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
   const [isBusy, setIsBusy] = useState(false);
   const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
   const [currentRank, setCurrentRank] = useState(existingParticipant?.lolRank ?? null);
-  const [riotCheck, setRiotCheck] = useState<{ status: RiotCheckStatus; rank?: string }>({ status: "idle" });
+  const [riotCheck, setRiotCheck] = useState<{ status: RiotCheckStatus; rank?: string; reason?: string }>({
+    status: "idle"
+  });
   const riotCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const riotCheckRequestId = useRef(0);
 
@@ -106,16 +108,18 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
         const { data, error } = await actions.checkRiotProfile(form2);
         if (requestId !== riotCheckRequestId.current) return;
         if (error) {
-          setRiotCheck({ status: "error" });
+          setRiotCheck({ status: "error", reason: "network" });
           return;
         }
         if (data.status === "found") {
           setRiotCheck({ status: "found", rank: data.rank });
+        } else if (data.status === "error") {
+          setRiotCheck({ status: "error", reason: data.reason });
         } else {
           setRiotCheck({ status: data.status });
         }
       } catch {
-        if (requestId === riotCheckRequestId.current) setRiotCheck({ status: "error" });
+        if (requestId === riotCheckRequestId.current) setRiotCheck({ status: "error", reason: "network" });
       }
     }, 600);
 
@@ -324,7 +328,7 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
                 <RiotCheckIcon status={riotCheck.status} />
               </span>
             </div>
-            <RiotCheckHint status={riotCheck.status} rank={riotCheck.rank} />
+            <RiotCheckHint status={riotCheck.status} rank={riotCheck.rank} reason={riotCheck.reason} />
           </Field>
           <Field label={PARTICIPANT_MANAGER.fields.lolServer}>
             <select
@@ -525,8 +529,24 @@ function RiotCheckIcon({ status }: { status: RiotCheckStatus }) {
   );
 }
 
-function RiotCheckHint({ status, rank }: { status: RiotCheckStatus; rank?: string }) {
+function RiotCheckHint({
+  status,
+  rank,
+  reason
+}: {
+  status: RiotCheckStatus;
+  rank?: string;
+  reason?: string;
+}) {
   if (status === "idle") return null;
+  const errorText =
+    reason === "rate_limited"
+      ? "Riot esta limitando las consultas ahora mismo. Se reintentará al guardar."
+      : reason === "riot_down"
+        ? "Riot no esta respondiendo ahora. Se reintentará al guardar."
+        : reason === "network"
+          ? "No se pudo conectar para verificar. Se reintentará al guardar."
+          : "No se pudo verificar ahora. Se reintentará al guardar.";
   const text =
     status === "checking"
       ? "Buscando el perfil en Riot..."
@@ -536,7 +556,7 @@ function RiotCheckHint({ status, rank }: { status: RiotCheckStatus; rank?: strin
           ? "No encontramos ese Riot ID en ese servidor."
           : status === "invalid"
             ? 'Formato invalido. Usa "NombreDeInvocador#TAG".'
-            : "No se pudo verificar ahora. Se reintentará al guardar.";
+            : errorText;
   const color =
     status === "found" ? "text-green-400" : status === "checking" ? "text-slate-500" : "text-red-400";
   return <p className={`text-xs mt-1.5 ${color}`}>{text}</p>;
