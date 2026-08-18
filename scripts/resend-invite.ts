@@ -80,7 +80,8 @@ async function fetchServiceRoleKey(projectRef: string, accessToken: string): Pro
 
 interface GenerateLinkResponse {
   action_link?: string;
-  properties?: { action_link?: string };
+  hashed_token?: string;
+  properties?: { action_link?: string; hashed_token?: string };
 }
 
 interface GenerateLinkErrorBody {
@@ -95,11 +96,23 @@ interface GenerateLinkErrorBody {
  *
  * type "invite" only works for users that do NOT exist yet (it creates
  * them) - Supabase rejects it with 422 email_exists for anyone already in
- * auth.users, which includes admins invited before but who never accepted.
- * For those, "magiclink" is the right type: it works on existing users
+ * auth.users, including admins invited before but who never accepted. For
+ * those, "magiclink" is the right type: it works on existing users
  * (confirmed or not) and still returns action_link directly instead of
  * emailing it. So: try invite first (covers brand-new admins), and on
  * email_exists fall back to magiclink (covers already-invited admins).
+ *
+ * IMPORTANT: we never return generate_link's own action_link/redirect_to
+ * as-is. Supabase has a known bug (supabase/auth#1738) where
+ * generate_link's response ignores the redirect_to we pass and falls back
+ * to Site URL for existing users - the action_link comes back pointing at
+ * the bare Site URL even though we asked for /panel-login. But the
+ * /auth/v1/verify endpoint itself reads redirect_to from the actual query
+ * string of the request the user's browser makes when they click the link
+ * - not from anything baked into generate_link's response - so we rebuild
+ * the verify URL ourselves from hashed_token and stick our redirectTo on
+ * it directly. This sidesteps the bug entirely instead of waiting on
+ * Supabase to fix it.
  */
 async function generateLink(
   endpoint: string,
@@ -108,12 +121,6 @@ async function generateLink(
   redirectTo: string | undefined
 ): Promise<{ link: string; type: "invite" | "magiclink" }> {
   const requestLink = async (type: "invite" | "magiclink") => {
-    const requestBody = {
-      type,
-      email,
-      ...(redirectTo ? { options: { redirect_to: redirectTo } } : {})
-    };
-    console.log(`  [debug] request body: ${JSON.stringify(requestBody)}`);
     const response = await fetch(`${endpoint}/auth/v1/admin/generate_link`, {
       method: "POST",
       headers: {
@@ -121,21 +128,35 @@ async function generateLink(
         Authorization: `Bearer ${serviceRoleKey}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify({
+        type,
+        email,
+        ...(redirectTo ? { options: { redirect_to: redirectTo } } : {})
+      })
     });
     return response;
+  };
+
+  const buildVerifyUrl = (data: GenerateLinkResponse, type: "invite" | "magiclink"): string => {
+    const hashedToken = data.hashed_token ?? data.properties?.hashed_token;
+    if (!hashedToken) {
+      throw new Error(
+        `Supabase no devolvio hashed_token para ${email}. Respuesta: ${JSON.stringify(data)}`
+      );
+    }
+
+    const verifyUrl = new URL(`${endpoint}/auth/v1/verify`);
+    verifyUrl.searchParams.set("token", hashedToken);
+    verifyUrl.searchParams.set("type", type === "invite" ? "invite" : "magiclink");
+    if (redirectTo) verifyUrl.searchParams.set("redirect_to", redirectTo);
+    return verifyUrl.toString();
   };
 
   const inviteResponse = await requestLink("invite");
 
   if (inviteResponse.ok) {
     const data = (await inviteResponse.json()) as GenerateLinkResponse;
-    console.log(`  [debug] invite response body: ${JSON.stringify(data)}`);
-    const link = data.action_link ?? data.properties?.action_link;
-    if (!link) {
-      throw new Error(`Supabase no devolvio action_link para ${email}. Respuesta: ${JSON.stringify(data)}`);
-    }
-    return { link, type: "invite" };
+    return { link: buildVerifyUrl(data, "invite"), type: "invite" };
   }
 
   const inviteErrorBody = (await inviteResponse.json().catch(() => null)) as GenerateLinkErrorBody | null;
@@ -156,15 +177,7 @@ async function generateLink(
   }
 
   const magicLinkData = (await magicLinkResponse.json()) as GenerateLinkResponse;
-  console.log(`  [debug] magiclink response body: ${JSON.stringify(magicLinkData)}`);
-  const magicLink = magicLinkData.action_link ?? magicLinkData.properties?.action_link;
-  if (!magicLink) {
-    throw new Error(
-      `Supabase no devolvio action_link (magiclink) para ${email}. Respuesta: ${JSON.stringify(magicLinkData)}`
-    );
-  }
-
-  return { link: magicLink, type: "magiclink" };
+  return { link: buildVerifyUrl(magicLinkData, "magiclink"), type: "magiclink" };
 }
 
 async function main() {
@@ -187,7 +200,6 @@ async function main() {
   }
 
   const redirectTo = siteUrl ? `${siteUrl.replace(/\/$/, "")}/panel-login` : undefined;
-  console.log(`  [debug] siteUrl=${JSON.stringify(siteUrl)} redirectTo=${JSON.stringify(redirectTo)}`);
 
   console.log(`Generando link de invitacion para ${email}...`);
   const [endpoint, serviceRoleKey] = await Promise.all([
