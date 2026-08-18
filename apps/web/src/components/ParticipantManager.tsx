@@ -46,12 +46,14 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
   const [isLookingUpRank, setIsLookingUpRank] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
 
   function resetForm() {
     setForm(EMPTY_FORM);
     setStats([]);
     setPhotoFile(null);
     setEditingId(null);
+    setInvalidFields(new Set());
   }
 
   function openNewForm() {
@@ -96,6 +98,17 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
     setIsFormOpen(true);
   }
 
+  function updateField<K extends keyof typeof EMPTY_FORM>(key: K, value: (typeof EMPTY_FORM)[K]) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    if (invalidFields.has(key)) {
+      setInvalidFields((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
+  }
+
   async function handleLookupRank() {
     if (!form.lolUsername || !form.lolServer) {
       setStatus({ type: "error", text: PARTICIPANT_MANAGER.errorLookupMissingFields });
@@ -121,10 +134,17 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name || !form.nickname || !form.lolRank || !form.favChampion) {
+    const missing = new Set<string>();
+    if (!form.name) missing.add("name");
+    if (!form.nickname) missing.add("nickname");
+    if (!form.lolRank) missing.add("lolRank");
+    if (!form.favChampion) missing.add("favChampion");
+    if (missing.size > 0) {
+      setInvalidFields(missing);
       setStatus({ type: "error", text: PARTICIPANT_MANAGER.errorRequiredFields });
       return;
     }
+    setInvalidFields(new Set());
 
     const participantId = editingId ?? crypto.randomUUID();
 
@@ -253,18 +273,18 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label={PARTICIPANT_MANAGER.fields.name}>
+          <Field label={PARTICIPANT_MANAGER.fields.name} invalid={invalidFields.has("name")}>
             <input
               value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="input"
+              onChange={(e) => updateField("name", e.target.value)}
+              className={`input ${invalidFields.has("name") ? "input-invalid" : ""}`}
             />
           </Field>
-          <Field label={PARTICIPANT_MANAGER.fields.nickname}>
+          <Field label={PARTICIPANT_MANAGER.fields.nickname} invalid={invalidFields.has("nickname")}>
             <input
               value={form.nickname}
-              onChange={(e) => setForm({ ...form, nickname: e.target.value })}
-              className="input"
+              onChange={(e) => updateField("nickname", e.target.value)}
+              className={`input ${invalidFields.has("nickname") ? "input-invalid" : ""}`}
             />
           </Field>
           <Field label={PARTICIPANT_MANAGER.fields.mainRole}>
@@ -280,11 +300,11 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
               ))}
             </select>
           </Field>
-          <Field label={PARTICIPANT_MANAGER.fields.favChampion}>
+          <Field label={PARTICIPANT_MANAGER.fields.favChampion} invalid={invalidFields.has("favChampion")}>
             <input
               value={form.favChampion}
-              onChange={(e) => setForm({ ...form, favChampion: e.target.value })}
-              className="input"
+              onChange={(e) => updateField("favChampion", e.target.value)}
+              className={`input ${invalidFields.has("favChampion") ? "input-invalid" : ""}`}
             />
           </Field>
           <Field label={PARTICIPANT_MANAGER.fields.age}>
@@ -337,12 +357,12 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
                 ))}
               </select>
             </Field>
-            <Field label={PARTICIPANT_MANAGER.fields.lolRank}>
+            <Field label={PARTICIPANT_MANAGER.fields.lolRank} invalid={invalidFields.has("lolRank")}>
               <div className="flex flex-wrap gap-2">
                 <input
                   value={form.lolRank}
-                  onChange={(e) => setForm({ ...form, lolRank: e.target.value })}
-                  className="input flex-1 min-w-[8rem]"
+                  onChange={(e) => updateField("lolRank", e.target.value)}
+                  className={`input flex-1 min-w-[8rem] ${invalidFields.has("lolRank") ? "input-invalid" : ""}`}
                   placeholder={PARTICIPANT_MANAGER.placeholders.lolRank}
                 />
                 <button
@@ -488,15 +508,31 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
           outline: none;
           border-color: #C8AA6E;
         }
+        .input-invalid {
+          border-color: rgba(248, 113, 113, 0.5);
+        }
+        .input-invalid:focus {
+          border-color: rgba(248, 113, 113, 0.7);
+        }
       `}</style>
     </div>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+  invalid = false
+}: {
+  label: string;
+  children: React.ReactNode;
+  invalid?: boolean;
+}) {
   return (
     <label className="block">
-      <span className="block text-xs uppercase text-slate-400 mb-2">{label}</span>
+      <span className={`block text-xs uppercase mb-2 ${invalid ? "text-red-400/80" : "text-slate-400"}`}>
+        {label}
+      </span>
       {children}
     </label>
   );

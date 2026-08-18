@@ -231,24 +231,32 @@ export const server = {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: "Supabase admin no configurado." });
       }
 
-      const { error, status, statusText, count } = await admin
-        .from("participants")
-        .delete({ count: "exact" })
-        .eq("id", id);
+      try {
+        const { error, status, statusText, count } = await admin
+          .from("participants")
+          .delete({ count: "exact" })
+          .eq("id", id);
 
-      if (error) {
-        const detail = `[deleteParticipant] id=${id} status=${status} statusText=${statusText} code=${error.code ?? "?"} details=${error.details ?? "?"} hint=${error.hint ?? "?"} message=${error.message}`;
+        if (error) {
+          const detail = `[deleteParticipant] id=${id} status=${status} statusText=${statusText} code=${error.code ?? "?"} details=${error.details ?? "?"} hint=${error.hint ?? "?"} message=${error.message}`;
+          console.log(detail);
+          throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: detail });
+        }
+
+        if (count === 0) {
+          const detail = `[deleteParticipant] id=${id} no matcheo ninguna fila (ya borrado o id incorrecto).`;
+          console.log(detail);
+          throw new ActionError({ code: "NOT_FOUND", message: detail });
+        }
+
+        return { success: true };
+      } catch (err) {
+        if (err instanceof ActionError) throw err;
+        const raw = err instanceof Error ? `${err.name}: ${err.message}` : JSON.stringify(err);
+        const detail = `[deleteParticipant] id=${id} excepcion no capturada: ${raw}`;
         console.log(detail);
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: detail });
       }
-
-      if (count === 0) {
-        const detail = `[deleteParticipant] id=${id} no matcheo ninguna fila (ya borrado o id incorrecto).`;
-        console.log(detail);
-        throw new ActionError({ code: "NOT_FOUND", message: detail });
-      }
-
-      return { success: true };
     }
   }),
 
