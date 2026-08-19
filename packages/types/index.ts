@@ -7,5 +7,7 @@ export type {
   Match,
   Prediction,
   PredictionTally,
-  SpinStartPayload
+  SpinStartPayload,
+  TeamMatch,
+  MmradarPerformanceScores
 } from "@velada/core";

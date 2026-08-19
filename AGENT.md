@@ -832,6 +832,100 @@ era el de arriba, no whitelist).
   tampoco — todo via filesystem MCP, no se pudo correr `bun install` /
   `bun run dev` / el test nuevo para confirmar en caliente.
 
+## Sesion 2026-08-18 (12): terminado el sistema de combates por equipos (5v5/4v4/3v3 con matchmaking) que habia quedado a medias
+- Retomando una sesion anterior (documentada solo en el chat que trajo el
+  usuario, no en este AGENT.md) que dejo `packages/core/mmradarScraper.ts`,
+  `skillRating.ts`, `teamBalancer.ts`, `schemas.ts` (`TeamMatchSchema`),
+  `apps/web/src/lib/teamMatches.ts`, y el DDL de `team_matches` +
+  columnas `performance_rank`/`performance_scores`/`titles` en
+  `participants` (en `scripts/setup-supabase.ts`) ya completos, pero
+  cortada exactamente en el paso 8 (wiring de `actions/index.ts` y de la
+  UI del panel). Revisado todo el codigo existente via filesystem MCP real
+  antes de tocar nada — todo lo anterior estaba correcto y completo, no
+  hizo falta reescribir ningun modulo de `packages/core/`.
+- **`apps/web/src/lib/loadParticipants.ts`**: no seleccionaba ni mapeaba
+  `performance_rank`/`performance_scores`/`titles` de Supabase (ni en
+  `loadParticipants` ni en `findParticipantByOwner`) — el balanceador
+  jamas hubiera visto datos de mmradar aunque estuvieran guardados.
+  Agregadas las 3 columnas a ambos `select()` y al mapeo `toParticipant`.
+- **`actions/index.ts`** (el archivo que quedo cortado a mitad de leer
+  `fetchRiotRank` en la sesion anterior):
+  - Nueva `fetchMmradarData(lolUsername)`: wrapper sobre
+    `fetchMmradarProfile` que NUNCA lanza (a diferencia de
+    `fetchRiotRank`) — mmradar es una fuente opcional/secundaria (el
+    fallback a `lolRank` en `skillRating.ts` ya cubre la ausencia de
+    datos), asi que un bloqueo anti-bot o un jugador sin perfil ahi no
+    puede romper el guardado de nadie. Solo loguea un warning.
+  - `saveOwnParticipant`: ahora llama `fetchRiotRank` y `fetchMmradarData`
+    en paralelo (`Promise.all`) y guarda `performance_rank`/
+    `performance_scores`/`titles` en el upsert.
+  - `saveParticipant` (panel): mismo guardado, pero la consulta a mmradar
+    es condicional a que `input.lolUsername` este presente (el panel
+    permite crear/editar participantes sin Riot ID a mano, a diferencia
+    del auto-registro).
+  - 3 actions nuevas al final: `saveTeamMatch` (crea/edita un team match a
+    mano, valida que ambos equipos tengan el mismo tamano y no se pisen
+    jugadores), `deleteTeamMatch`, y `generateTeamMatchesAction` (recibe
+    `participantIds` ya filtrados de excluidos por el cliente + `mode`,
+    trae `lol_rank`/`performance_scores` de esos participantes, llama
+    `generateTeamMatches` de `packages/core/teamBalancer.ts`, e inserta
+    todos los bloques generados en un solo insert a `team_matches`).
+- **Copy nuevo en `packages/core/content.ts`**: `tabTeams: "Equipos"` en
+  `PAGES.rosterManager`, y un bloque `TEAM_MATCH_MANAGER` completo
+  (titulos, mensajes de error/exito, labels de modo de generacion) para
+  el componente nuevo.
+- **`apps/web/src/components/TeamMatchManager.tsx` (nuevo)**: pestana de
+  panel con (1) checklist de participantes con "marcar/desmarcar todos"
+  pre-poblado via `participantIdsInTeamMatches` (ya existia en
+  `lib/teamMatches.ts`) — sin exclusion automatica por resultado
+  pendiente, coincide con la decision explicita del usuario en la
+  transcripcion original; (2) selector de modo (`random`/`balanced`/
+  `unfair`) + boton "Generar combates" que llama
+  `generateTeamMatchesAction` y recarga la pagina al terminar (la action
+  solo devuelve `created`/`leftOverIds`, no las filas insertadas — un
+  reload es mas simple que shape-ear la respuesta solo para esto); (3)
+  editor manual (crear/editar un team match eligiendo jugadores a mano por
+  equipo, marcar equipo ganador) va `saveTeamMatch`; (4) lista de combates
+  existentes con boton "marcar ganador" por equipo. Wireado en
+  `AdminTabs.tsx` (pestana `"teams"` nueva, copy `tabTeams`) y
+  `gestion-roster-x9f2.astro` (`fetchTeamMatches()` -> `initialTeamMatches`
+  pasado a `AdminTabs`).
+- **`packages/types/index.ts`**: le faltaban `TeamMatch` y
+  `MmradarPerformanceScores` en el re-export (el resto de tipos de
+  `@velada/core` ya se reexportaban, estos dos son nuevos de la feature).
+- **Error propio cometido y corregido en esta misma sesion**: escribi
+  `TeamMatchManager.tsx` por primera vez con la tool `create_file`
+  (sandbox de ejecucion, no el filesystem real) — el mismo error de
+  herramienta ya documentado como leccion en la sesion (5) de mas arriba.
+  Lo note al intentar releerlo con `view` (sandbox) vs `read_text_file`
+  (MCP real): el archivo no existia en la ruta real. Corregido escribiendo
+  el contenido completo con `filesystem:write_file` sobre la ruta real y
+  confirmado con `read_text_file` posterior. Releidos ademas, desde el
+  filesystem real (no el sandbox), todos los demas archivos tocados en
+  esta sesion (`actions/index.ts`, `AdminTabs.tsx`,
+  `gestion-roster-x9f2.astro`, `packages/types/index.ts`) para confirmar
+  que las ediciones si aterrizaron en el repo del usuario.
+- **No investigado / fuera de scope de esta sesion**: el usuario menciono
+  de pasada "en panel eso se renderiza mal (el boton habilitado)" sin
+  captura de pantalla ni mas detalle. Revisados los candidatos mas
+  probables (toggle de pronosticos en `MatchManager.tsx`, boton
+  "Consultar" rank en `ParticipantManager.tsx`, botones `disabled` en
+  general) sin encontrar un bug obvio de CSS/Tailwind a simple lectura de
+  codigo — puede ser un problema de purge, de estado, o algo que solo se
+  ve en el browser real. Pendiente que el usuario mande una captura o mas
+  detalle para poder ubicarlo.
+- Pendiente para el usuario (sin bash real sobre el proyecto en esta
+  sesion tampoco, todo via filesystem MCP): correr `bun install` +
+  `bun run setup:db` (para que el proyecto Supabase real tenga la tabla
+  `team_matches` y las columnas nuevas de `participants` — el DDL ya
+  estaba escrito de la sesion anterior pero no hay forma de confirmar
+  desde aca si ya se corrio contra la base real) + `bun run dev` para
+  probar el flujo completo: cargar Riot ID de un participante real y
+  confirmar que `performance_rank`/`titles` se guardan, marcar
+  excluidos/generar combates balanceados con al menos 6 participantes, y
+  editar/borrar un team match a mano. Mandar detalle o captura del boton
+  que se renderiza mal en el panel.
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.

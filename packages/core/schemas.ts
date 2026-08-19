@@ -7,6 +7,15 @@ export const ParticipantStatSchema = z.object({
 
 export const ParticipantStatsSchema = z.array(ParticipantStatSchema);
 
+export const MmradarPerformanceScoresSchema = z.object({
+  laning: z.number(),
+  farming: z.number(),
+  objectives: z.number(),
+  combat: z.number(),
+  teamfight: z.number(),
+  vision: z.number()
+});
+
 export const ParticipantSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -28,7 +37,10 @@ export const ParticipantSchema = z.object({
   mainRole: z.enum(["Top", "Jungle", "Mid", "ADC", "Support"]),
   favChampion: z.string(),
   description: z.string().optional(),
-  stats: ParticipantStatsSchema.optional()
+  stats: ParticipantStatsSchema.optional(),
+  performanceRank: z.string().nullable().optional(),
+  performanceScores: MmradarPerformanceScoresSchema.nullable().optional(),
+  titles: z.array(z.string()).nullable().optional()
 });
 
 export const ParticipantListSchema = z.array(ParticipantSchema);
@@ -106,6 +118,26 @@ export const SpinStartPayloadSchema = z.object({
   timestamp: z.number()
 });
 
+/**
+ * Un combate por equipos (5v5, 4v4 o 3v3 -- cualquier tamano parejo entre
+ * ambos lados, no necesariamente 5v5 fijo) del evento mayor. A diferencia
+ * de Match (1v1 de la ruleta), aca el resultado es un solo ganador para
+ * TODO el equipo, como en una partida real de LoL -- no hay resultado por
+ * jugador individual. teamAIds/teamBIds son listas de participant ids;
+ * ambas listas deben tener el mismo tamano entre si (se valida en la
+ * action, no aca, porque zod no expresa bien "len(a) === len(b)" con un
+ * mensaje de error util).
+ */
+export const TeamMatchSchema = z.object({
+  id: z.string().uuid().optional(),
+  name: z.string().nullable().optional(),
+  teamAIds: z.array(z.string()).min(1),
+  teamBIds: z.array(z.string()).min(1),
+  winnerTeam: z.enum(["A", "B"]).nullable().optional(),
+  generationMode: z.enum(["manual", "random", "balanced", "unfair"]).default("manual"),
+  createdAt: z.string().datetime().optional()
+});
+
 export type Participant = z.infer<typeof ParticipantSchema>;
 export type ParticipantStat = z.infer<typeof ParticipantStatSchema>;
 export type ParticipantStats = z.infer<typeof ParticipantStatsSchema>;
@@ -116,3 +148,5 @@ export type Match = z.infer<typeof MatchSchema>;
 export type Prediction = z.infer<typeof PredictionSchema>;
 export type PredictionTally = z.infer<typeof PredictionTallySchema>;
 export type SpinStartPayload = z.infer<typeof SpinStartPayloadSchema>;
+export type TeamMatch = z.infer<typeof TeamMatchSchema>;
+export type MmradarPerformanceScores = z.infer<typeof MmradarPerformanceScoresSchema>;

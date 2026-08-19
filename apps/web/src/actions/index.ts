@@ -12,7 +12,12 @@ import {
   fetchRankFromLeagueOfGraphs,
   RankLookupError,
   RANK_SOURCE_SERVERS,
-  JudgeCardSchema
+  JudgeCardSchema,
+  fetchMmradarProfile,
+  MmradarLookupError,
+  generateTeamMatches,
+  type TeamGenerationMode,
+  type MmradarPerformanceScores
 } from "@velada/core";
 import type { AppSession } from "../lib/session";
 
@@ -102,6 +107,39 @@ async function fetchRiotRank(lolUsername: string, lolServer: string): Promise<{ 
       code: "INTERNAL_SERVER_ERROR",
       message: rankLookupErrorMessage("source_unavailable")
     });
+  }
+}
+
+interface MmradarLookupResult {
+  performanceRank: string | null;
+  performanceScores: MmradarPerformanceScores | null;
+  titles: string[] | null;
+}
+
+/**
+ * Consulta mmradar.gg para el skill rating del balanceador de equipos (ver
+ * packages/core/skillRating.ts). A diferencia de fetchRiotRank, esto NUNCA
+ * lanza: mmradar es una fuente secundaria/opcional (el fallback a lolRank
+ * ya cubre el caso sin datos), asi que si el sitio bloquea la consulta o el
+ * jugador no tiene perfil ahi, se guarda simplemente null y el balanceador
+ * usa el fallback jerarquico automaticamente. No se debe romper el guardado
+ * del perfil de nadie por una fuente opcional caida.
+ */
+async function fetchMmradarData(lolUsername: string): Promise<MmradarLookupResult> {
+  try {
+    const result = await fetchMmradarProfile(lolUsername);
+    return {
+      performanceRank: result.performanceRank,
+      performanceScores: result.performanceScores,
+      titles: result.titles.length > 0 ? result.titles : null
+    };
+  } catch (err) {
+    if (err instanceof MmradarLookupError) {
+      console.warn(`[fetchMmradarData] ${lolUsername}: ${err.reason} — ${err.message}`);
+    } else {
+      console.warn(`[fetchMmradarData] ${lolUsername}: error inesperado`, err);
+    }
+    return { performanceRank: null, performanceScores: null, titles: null };
   }
 }
 
@@ -376,7 +414,10 @@ export const server = {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
       }
 
-      const { rank } = await fetchRiotRank(input.lolUsername, input.lolServer);
+      const [{ rank }, mmradar] = await Promise.all([
+        fetchRiotRank(input.lolUsername, input.lolServer),
+        fetchMmradarData(input.lolUsername)
+      ]);
 
       const { data: existing } = await admin
         .from("participants")
@@ -454,6 +495,9 @@ export const server = {
         fav_champion: input.favChampion,
         description: input.description || null,
         stats: parsedStats ?? null,
+        performance_rank: mmradar.performanceRank,
+        performance_scores: mmradar.performanceScores,
+        titles: mmradar.titles,
         updated_at: new Date().toISOString(),
         ...(photoUrl ? { photo: photoUrl } : {}),
         ...(bannerUrl ? { banner: bannerUrl } : {})
@@ -547,6 +591,13 @@ export const server = {
         }
       }
 
+      // mmradar solo se puede consultar si hay un Riot ID cargado (el panel
+      // permite crear/editar participantes sin lolUsername a mano) -- a
+      // diferencia de saveOwnParticipant, aca no es obligatorio.
+      const mmradar = input.lolUsername
+        ? await fetchMmradarData(input.lolUsername)
+        : { performanceRank: null, performanceScores: null, titles: null };
+
       const row = {
         id: input.id,
         name: input.name,
@@ -567,6 +618,9 @@ export const server = {
         fav_champion: input.favChampion,
         description: input.description || null,
         stats: parsedStats ?? null,
+        performance_rank: mmradar.performanceRank,
+        performance_scores: mmradar.performanceScores,
+        titles: mmradar.titles,
         updated_at: new Date().toISOString(),
         ...(photoUrl ? { photo: photoUrl } : {}),
         ...(bannerUrl ? { banner: bannerUrl } : {})
@@ -759,6 +813,165 @@ export const server = {
         console.error("[checkRiotProfile] unexpected error:", err);
         return { status: "error" as const, reason: "unknown" as const };
       }
+    }
+  }),
+
+  /**
+   * Crea o edita un team match a mano desde /gestion-roster-x9f2 (pestana
+   * Equipos): usado tanto para el editor manual (elegir team A/B a mano)
+   * como para persistir el resultado (winnerTeam) de un match ya generado.
+   * Sin id -> crea (generationMode "manual" por default, ver
+   * generateTeamMatchesAction para el resto de modos); con id -> actualiza
+   * esa fila. teamAIds/teamBIds llegan como JSON (arrays de participant
+   * ids) porque FormData no serializa arrays de forma nativa util aca.
+   */
+  saveTeamMatch: defineAction({
+    accept: "form",
+    input: z.object({
+      id: z.string().uuid().optional(),
+      name: z.string().optional(),
+      teamAIds: z.string().min(1),
+      teamBIds: z.string().min(1),
+      winnerTeam: z.enum(["A", "B"]).optional(),
+      generationMode: z.enum(["manual", "random", "balanced", "unfair"]).default("manual")
+    }),
+    handler: async (input, context) => {
+      requirePanelAuth(await getSession(context.cookies, context));
+      const [admin, msg] = createSupabaseAdminClient(context.locals);
+      if (!admin) {
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
+      }
+
+      let teamAIds: string[];
+      let teamBIds: string[];
+      try {
+        teamAIds = z.array(z.string().min(1)).min(1).parse(JSON.parse(input.teamAIds));
+        teamBIds = z.array(z.string().min(1)).min(1).parse(JSON.parse(input.teamBIds));
+      } catch {
+        throw new ActionError({ code: "BAD_REQUEST", message: "Equipos invalidos." });
+      }
+
+      if (teamAIds.length !== teamBIds.length) {
+        throw new ActionError({ code: "BAD_REQUEST", message: "Ambos equipos deben tener el mismo numero de jugadores." });
+      }
+
+      const overlap = teamAIds.some((id) => teamBIds.includes(id));
+      if (overlap) {
+        throw new ActionError({ code: "BAD_REQUEST", message: "Un mismo jugador no puede estar en los dos equipos." });
+      }
+
+      const row = {
+        ...(input.id ? { id: input.id } : {}),
+        name: input.name || null,
+        team_a_ids: teamAIds,
+        team_b_ids: teamBIds,
+        winner_team: input.winnerTeam ?? null,
+        generation_mode: input.generationMode
+      };
+
+      const { data, error } = await admin.from("team_matches").upsert(row).select("id").single();
+      if (error || !data) {
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: error?.message ?? "No se pudo guardar el combate por equipos." });
+      }
+
+      return { success: true, id: data.id };
+    }
+  }),
+
+  deleteTeamMatch: defineAction({
+    accept: "form",
+    input: z.object({ id: z.string().uuid() }),
+    handler: async ({ id }, context) => {
+      requirePanelAuth(await getSession(context.cookies, context));
+      const [admin, msg] = createSupabaseAdminClient(context.locals);
+      if (!admin) {
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
+      }
+
+      const { error } = await admin.from("team_matches").delete().eq("id", id);
+      if (error) {
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: error.message });
+      }
+
+      return { success: true };
+    }
+  }),
+
+  /**
+   * Genera uno o mas team matches de una sola vez a partir de los
+   * participantes disponibles (el cliente ya filtro los excluidos via el
+   * checklist de /gestion-roster-x9f2 antes de llamar esto -- ver decision
+   * del usuario: no hay exclusion automatica por resultado pendiente, es
+   * el admin quien marca a mano). Trae el skill rating de cada uno desde
+   * participants (performance_scores / lol_rank) para que
+   * generateTeamMatches (packages/core/teamBalancer.ts) pueda balancear
+   * balanced/unfair, arma los bloques (5v5, o mezclas de 4v4/3v3 si el
+   * total no es multiplo de 10 -- ver planTeamBlockSizes), y persiste cada
+   * bloque como una fila de team_matches en un solo insert.
+   */
+  generateTeamMatchesAction: defineAction({
+    accept: "form",
+    input: z.object({
+      participantIds: z.string().min(1),
+      mode: z.enum(["random", "balanced", "unfair"])
+    }),
+    handler: async (input, context) => {
+      requirePanelAuth(await getSession(context.cookies, context));
+      const [admin, msg] = createSupabaseAdminClient(context.locals);
+      if (!admin) {
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
+      }
+
+      let participantIds: string[];
+      try {
+        participantIds = z.array(z.string().min(1)).min(1).parse(JSON.parse(input.participantIds));
+      } catch {
+        throw new ActionError({ code: "BAD_REQUEST", message: "Lista de participantes invalida." });
+      }
+
+      const { data: rows, error: fetchError } = await admin
+        .from("participants")
+        .select("id, lol_rank, performance_scores")
+        .in("id", participantIds);
+
+      if (fetchError || !rows) {
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: fetchError?.message ?? "No se pudieron cargar los participantes." });
+      }
+
+      const balancerInput = rows.map((r) => ({
+        id: r.id as string,
+        lolRank: (r.lol_rank as string | null) ?? undefined,
+        performanceScores: (r.performance_scores as MmradarPerformanceScores | null) ?? undefined
+      }));
+
+      const mode = input.mode as TeamGenerationMode;
+      const { matches, leftOverIds } = generateTeamMatches(balancerInput, mode);
+
+      if (matches.length === 0) {
+        throw new ActionError({
+          code: "BAD_REQUEST",
+          message: "No hay suficientes participantes disponibles (se necesitan al menos 6, para un 3v3)."
+        });
+      }
+
+      const rowsToInsert = matches.map((m) => ({
+        name: null,
+        team_a_ids: m.teamAIds,
+        team_b_ids: m.teamBIds,
+        winner_team: null,
+        generation_mode: mode
+      }));
+
+      const { data: inserted, error: insertError } = await admin
+        .from("team_matches")
+        .insert(rowsToInsert)
+        .select("id, team_a_ids, team_b_ids, generation_mode, name, winner_team, created_at");
+
+      if (insertError || !inserted) {
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: insertError?.message ?? "No se pudieron crear los combates por equipos." });
+      }
+
+      return { success: true, created: inserted.length, leftOverIds };
     }
   })
 };

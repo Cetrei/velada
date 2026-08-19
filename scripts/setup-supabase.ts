@@ -132,6 +132,28 @@ ALTER TABLE participants ADD COLUMN IF NOT EXISTS instagram_handle TEXT;
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS instagram_followers TEXT;
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS x_handle TEXT;
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS x_followers TEXT;
+-- Datos de mmradar.gg (performance rank, los 6 scores, titulos) usados
+-- para mostrar en el perfil publico del peleador Y como fuente del skill
+-- rating del balanceador de equipos (ver packages/core/skillRating.ts).
+-- Se re-consultan al mismo tiempo que el rango de liga (fetchRiotRank),
+-- nunca escritos a mano.
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS performance_rank TEXT;
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS performance_scores JSONB;
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS titles JSONB;
+
+-- Combates por equipos (5v5 o mezclas de 4v4/3v3) del evento mayor,
+-- separados de matches (que es siempre 1v1, de la ruleta). Un solo
+-- ganador por equipo completo, como una partida real de LoL -- no hay
+-- resultado por jugador individual aca.
+CREATE TABLE IF NOT EXISTS team_matches (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT DEFAULT NULL,
+  team_a_ids JSONB NOT NULL,
+  team_b_ids JSONB NOT NULL,
+  winner_team TEXT DEFAULT NULL,
+  generation_mode TEXT NOT NULL DEFAULT 'manual',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
 DO $$
 BEGIN
@@ -166,6 +188,7 @@ END $$;
 -- en las Astro Actions, que ya hace sus propios checks de permisos.
 ALTER TABLE event_state DISABLE ROW LEVEL SECURITY;
 ALTER TABLE matches DISABLE ROW LEVEL SECURITY;
+ALTER TABLE team_matches DISABLE ROW LEVEL SECURITY;
 ALTER TABLE participants DISABLE ROW LEVEL SECURITY;
 ALTER TABLE participant_users DISABLE ROW LEVEL SECURITY;
 ALTER TABLE sessions DISABLE ROW LEVEL SECURITY;

@@ -38,6 +38,9 @@ interface ParticipantRow {
   fav_champion: string;
   description: string | null;
   stats: Participant["stats"] | null;
+  performance_rank: string | null;
+  performance_scores: Participant["performanceScores"] | null;
+  titles: string[] | null;
 }
 
 function toParticipant(row: ParticipantRow): Participant {
@@ -62,7 +65,10 @@ function toParticipant(row: ParticipantRow): Participant {
     mainRole: row.main_role,
     favChampion: row.fav_champion,
     description: row.description ?? undefined,
-    stats: row.stats ?? undefined
+    stats: row.stats ?? undefined,
+    performanceRank: row.performance_rank ?? undefined,
+    performanceScores: row.performance_scores ?? undefined,
+    titles: row.titles ?? undefined
   };
 }
 
@@ -81,7 +87,7 @@ export async function loadParticipants(): Promise<Participant[]> {
   const { data, error } = await supabase
     .from("participants")
     .select(
-      "id, name, nickname, photo, banner, age, weight, height, country, country_flag, instagram_handle, instagram_followers, x_handle, x_followers, lol_rank, lol_username, lol_server, main_role, fav_champion, description, stats"
+      "id, name, nickname, photo, banner, age, weight, height, country, country_flag, instagram_handle, instagram_followers, x_handle, x_followers, lol_rank, lol_username, lol_server, main_role, fav_champion, description, stats, performance_rank, performance_scores, titles"
     )
     .order("created_at", { ascending: true });
 
@@ -120,7 +126,7 @@ export async function findParticipantByOwner(
   const { data, error } = await admin
     .from("participants")
     .select(
-      "id, name, nickname, photo, banner, age, weight, height, country, country_flag, instagram_handle, instagram_followers, x_handle, x_followers, lol_rank, lol_username, lol_server, main_role, fav_champion, description, stats"
+      "id, name, nickname, photo, banner, age, weight, height, country, country_flag, instagram_handle, instagram_followers, x_handle, x_followers, lol_rank, lol_username, lol_server, main_role, fav_champion, description, stats, performance_rank, performance_scores, titles"
     )
     .eq("owner_user_id", ownerUserId)
     .maybeSingle();

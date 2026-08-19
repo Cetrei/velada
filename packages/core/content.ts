@@ -150,7 +150,8 @@ export const PAGES = {
     logoutCta: "Cerrar sesion",
     tabParticipants: "Participantes",
     tabEvent: "Evento",
-    tabMatches: "Combates"
+    tabMatches: "Combates",
+    tabTeams: "Equipos"
   },
 
   admin: {
@@ -263,6 +264,42 @@ export const ADMIN_CONTROL = {
   successMatchDeleted: "Combate eliminado.",
   confirmDeleteMatch: "¿Borrar este combate? Se borran también sus pronósticos.",
   errorNeedTwoDifferent: "Elegí dos peleadores distintos."
+};
+
+export const TEAM_MATCH_MANAGER = {
+  title: "Combates por equipos",
+  hint: "Marca quien ya tiene equipo asignado antes de generar (no se excluye automaticamente, ni siquiera si el combate ya termino).",
+  excludeListTitle: "Participantes disponibles",
+  markAllCta: "Marcar todos",
+  unmarkAllCta: "Desmarcar todos",
+  excludedHint: (excluded: number, total: number) => `${excluded} de ${total} marcados como ya asignados (excluidos de la proxima generacion).`,
+  modeLabel: "Modo de generacion",
+  modeRandom: "Aleatorio",
+  modeBalanced: "Balanceado",
+  modeUnfair: "Desparejo (fuertes vs debiles)",
+  generateCta: "Generar combates",
+  generateCtaBusy: "Generando...",
+  manualCta: "Crear manualmente",
+  newTeamMatchTitle: "Nuevo combate por equipos",
+  teamALabel: "Equipo A",
+  teamBLabel: "Equipo B",
+  winnerLabel: "Equipo ganador",
+  noWinnerYet: "Sin definir",
+  saveCta: "Guardar",
+  cancelCta: "Cancelar",
+  deleteCta: "Borrar",
+  editCta: "Editar",
+  emptyState: "Todavia no hay combates por equipos.",
+  successGenerated: (count: number) => `${count} combate(s) generado(s).`,
+  successSaved: "Combate por equipos guardado.",
+  successDeleted: "Combate por equipos eliminado.",
+  confirmDelete: "¿Borrar este combate por equipos?",
+  leftOverHint: (names: string) => `Quedaron sin asignar (no alcanzan para otro equipo): ${names}.`,
+  errorNeedEvenTeams: "Ambos equipos deben tener el mismo numero de jugadores.",
+  errorNoOverlap: "Un mismo jugador no puede estar en los dos equipos.",
+  errorNotEnoughPlayers: "Se necesitan al menos 6 participantes disponibles (para un 3v3).",
+  ratingLabel: "Rating",
+  vsLabel: "vs"
 };
 
 export const PARTICIPANT_MANAGER = {

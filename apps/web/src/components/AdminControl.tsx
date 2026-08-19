@@ -331,9 +331,8 @@ function EventFlagToggle({
           }`}
         >
           <span
-            className={`absolute top-0.5 w-4 h-4 rounded-full bg-black transition-transform ${
-              checked ? "translate-x-5" : "translate-x-0.5"
-            }`}
+            className="absolute top-0.5 w-4 h-4 rounded-full bg-black transition-[left] duration-200"
+            style={{ left: checked ? "22px" : "2px" }}
           />
         </span>
       </span>

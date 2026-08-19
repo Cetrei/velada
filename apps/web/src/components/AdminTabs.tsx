@@ -1,17 +1,19 @@
 import { useState } from "react";
-import type { Participant, EventState, Match } from "@velada/core";
+import type { Participant, EventState, Match, TeamMatch } from "@velada/core";
 import { PAGES } from "@velada/core";
 import ParticipantManager from "./ParticipantManager";
 import AdminControl from "./AdminControl";
 import MatchManager from "./MatchManager";
+import TeamMatchManager from "./TeamMatchManager";
 
 interface AdminTabsProps {
   initialParticipants: Participant[];
   eventState: EventState;
   initialMatches: Match[];
+  initialTeamMatches: TeamMatch[];
 }
 
-type Tab = "participants" | "event" | "matches";
+type Tab = "participants" | "event" | "matches" | "teams";
 
 const copy = PAGES.rosterManager;
 
@@ -24,7 +26,7 @@ const copy = PAGES.rosterManager;
  * archivo es solo el layout de pestanas que lo conecta junto a
  * ParticipantManager, sin tocar la logica interna de ninguno de los dos.
  */
-export default function AdminTabs({ initialParticipants, eventState, initialMatches }: AdminTabsProps) {
+export default function AdminTabs({ initialParticipants, eventState, initialMatches, initialTeamMatches }: AdminTabsProps) {
   const [tab, setTab] = useState<Tab>("participants");
 
   return (
@@ -38,6 +40,9 @@ export default function AdminTabs({ initialParticipants, eventState, initialMatc
         </TabButton>
         <TabButton active={tab === "matches"} onClick={() => setTab("matches")}>
           {copy.tabMatches}
+        </TabButton>
+        <TabButton active={tab === "teams"} onClick={() => setTab("teams")}>
+          {copy.tabTeams}
         </TabButton>
       </div>
 
@@ -54,6 +59,9 @@ export default function AdminTabs({ initialParticipants, eventState, initialMatc
       )}
       {tab === "matches" && (
         <MatchManager initialMatches={initialMatches} participants={initialParticipants} />
+      )}
+      {tab === "teams" && (
+        <TeamMatchManager initialTeamMatches={initialTeamMatches} participants={initialParticipants} />
       )}
     </div>
   );
