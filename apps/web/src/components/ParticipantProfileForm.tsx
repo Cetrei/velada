@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { actions } from "astro:actions";
 import type { Participant, ParticipantStat } from "@velada/core";
-import { PAGES, PARTICIPANT_MANAGER, COUNTRIES, flagForCountry } from "@velada/core";
+import { PAGES, PARTICIPANT_MANAGER, COUNTRIES, flagForCountry, MAX_CUSTOM_STATS } from "@velada/core";
 import { compressImageFile, PHOTO_COMPRESSION, BANNER_COMPRESSION } from "@velada/core/imageCompression";
 import PlayerCard from "./PlayerCard";
 
@@ -178,7 +178,7 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
   }
 
   function addStat() {
-    setStats((prev) => [...prev, { ...EMPTY_STAT, _key: makeStatKey() }]);
+    setStats((prev) => (prev.length >= MAX_CUSTOM_STATS ? prev : [...prev, { ...EMPTY_STAT, _key: makeStatKey() }]));
   }
 
   // Comprime la foto/banner elegida en el navegador antes de guardarla en
@@ -455,10 +455,17 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
 
       <div className="border-t border-lol-border/50 pt-4">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm uppercase text-slate-400">{PARTICIPANT_MANAGER.statsTitle}</h3>
-          <button type="button" onClick={addStat} className="text-lol-gold hover:underline font-bold uppercase text-xs">
-            {PARTICIPANT_MANAGER.addStatCta}
-          </button>
+          <h3 className="text-sm uppercase text-slate-400">
+            {PARTICIPANT_MANAGER.statsTitle}{" "}
+            <span className="text-slate-600 normal-case">
+              ({stats.length}/{MAX_CUSTOM_STATS})
+            </span>
+          </h3>
+          {stats.length < MAX_CUSTOM_STATS && (
+            <button type="button" onClick={addStat} className="text-lol-gold hover:underline font-bold uppercase text-xs">
+              {PARTICIPANT_MANAGER.addStatCta}
+            </button>
+          )}
         </div>
         {stats.length === 0 && <p className="text-slate-500 text-xs">{PARTICIPANT_MANAGER.statsEmptyHint}</p>}
         <div className="space-y-2">

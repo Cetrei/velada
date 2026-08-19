@@ -202,7 +202,15 @@ export default function RouletteWheel({ participants, rouletteUnlocked }: Roulet
     if (isSpinningRef.current || participants.length < 2) return;
 
     const shuffled = [...participants].sort(() => Math.random() - 0.5);
-    const [player1, player2] = shuffled;
+    const player1 = shuffled[0];
+    const player2 = shuffled[1];
+    // TS no puede inferir el largo de un array via destructuring, asi que
+    // shuffled[0]/[1] tipan como Participant | undefined pese al guard de
+    // participants.length < 2 de arriba (ver linea 194 en el reporte del
+    // IDE: setWinnerPair exige la tupla [Participant, Participant] sin
+    // undefined). Guard explicito para que el resto de la funcion trabaje
+    // con Participant ya angosto.
+    if (!player1 || !player2) return;
 
     const payload: SpinStartPayload = {
       player1Id: player1.id,

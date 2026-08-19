@@ -1,6 +1,6 @@
 ---
 import Layout from "../../layouts/Layout.astro";
-import PlayerCard from "../../components/PlayerCard";
+import PlayerCardLive from "../../components/PlayerCardLive";
 import MmradarPanel from "../../components/MmradarPanel";
 import { getSession } from "../../lib/session";
 import { loadParticipants, findParticipantByOwner } from "../../lib/loadParticipants";
@@ -65,8 +65,9 @@ const copy = PAGES.fighterDetail;
 
       <div class="grid grid-cols-1 lg:grid-cols-5 gap-10">
         <div class="lg:col-span-2 relative">
-          <PlayerCard
+          <PlayerCardLive
             client:load
+            participantId={participant.id}
             data={{
               name: participant.name,
               nickname: participant.nickname,
@@ -75,9 +76,9 @@ const copy = PAGES.fighterDetail;
               lolRank: participant.lolRank,
               photo: participant.photo,
               banner: participant.banner,
-              stats: participant.stats,
-              performanceRank: participant.performanceRank
+              stats: participant.stats
             }}
+            initialPerformanceRank={participant.performanceRank}
             className="clip-edges"
           />
           <div class="flex items-center gap-4 mt-4">
@@ -149,27 +150,25 @@ const copy = PAGES.fighterDetail;
             />
           </div>
 
-          <div class="flex items-center justify-between bg-lol-cardBg border border-lol-border p-5 mb-8">
-            <div>
-              <p class="text-slate-500 text-xs uppercase tracking-wide mb-1">{copy.rivalLabel}</p>
-              {rival ? (
+          {rival && (
+            <div class="flex items-center justify-between bg-lol-cardBg border border-lol-border p-5 mb-8">
+              <div>
+                <p class="text-slate-500 text-xs uppercase tracking-wide mb-1">{copy.rivalLabel}</p>
                 <a href={`/peleadores/${rival.id}`} class="text-lol-gold font-bold hover:underline">
                   {rival.name}
                 </a>
-              ) : (
-                <p class="text-slate-400">{copy.noRivalYet}</p>
+              </div>
+              {match?.id && (
+                <a
+                  href="/combates"
+                  class="inline-flex items-center gap-2 text-sm text-white bg-lol-gold/10 border border-lol-gold text-lol-gold px-4 py-2 hover:bg-lol-gold hover:text-lol-darkBg transition-all font-bold uppercase tracking-wide clip-edges"
+                >
+                  {copy.viewMatchCta}
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                </a>
               )}
             </div>
-            {rival && match?.id && (
-              <a
-                href="/combates"
-                class="inline-flex items-center gap-2 text-sm text-white bg-lol-gold/10 border border-lol-gold text-lol-gold px-4 py-2 hover:bg-lol-gold hover:text-lol-darkBg transition-all font-bold uppercase tracking-wide clip-edges"
-              >
-                {copy.viewMatchCta}
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-              </a>
-            )}
-          </div>
+          )}
 
           {rival && match?.predictionsOpen && !match.winnerId && (
             <div class="bg-lol-cardBg border border-lol-border p-6">

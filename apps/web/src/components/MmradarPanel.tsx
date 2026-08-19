@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { actions } from "astro:actions";
 import type { Participant, MmradarPerformanceScores } from "@velada/core";
+import { emitMmradarUpdate } from "../lib/mmradarUpdateBus";
 
 /**
  * Bloque de datos de mmradar.gg para la ficha publica del jugador
@@ -24,6 +25,15 @@ interface MmradarPanelProps {
   participant: ParticipantMmradarData;
   /** Solo el dueno del perfil o un admin de panel puede forzar una re-consulta. */
   canUpdate: boolean;
+  /**
+   * Notifica al padre cuando refreshMmradarData trae datos nuevos, para
+   * que la PlayerCard de al lado (carta izquierda de /peleadores/[id]) se
+   * actualice tambien sin recargar la pagina -- ambas leen la misma fila
+   * de participants, pero cada componente tenia su propio estado aislado
+   * antes de esto. Opcional: MmradarPanel sigue funcionando solo si nadie
+   * lo pasa.
+   */
+  onUpdated?: (data: { performanceRank: string | null; performanceScores: MmradarPerformanceScores | null }) => void;
 }
 
 type StatusMessage = { type: "success" | "error"; text: string } | null;
@@ -47,7 +57,7 @@ function errorMessage(err: unknown): string {
   }
 }
 
-export default function MmradarPanel({ participant, canUpdate }: MmradarPanelProps) {
+export default function MmradarPanel({ participant, canUpdate, onUpdated }: MmradarPanelProps) {
   const [scores, setScores] = useState(participant.performanceScores ?? null);
   const [performanceRank, setPerformanceRank] = useState(participant.performanceRank ?? null);
   const [titles, setTitles] = useState(participant.titles ?? null);
@@ -79,6 +89,8 @@ export default function MmradarPanel({ participant, canUpdate }: MmradarPanelPro
         setIconUrl(data.mmradarIconUrl ?? null);
         setServer(data.mmradarServer ?? null);
         setStatus({ type: "success", text: "Datos actualizados." });
+        onUpdated?.({ performanceRank: data.performanceRank ?? null, performanceScores: data.performanceScores ?? null });
+        emitMmradarUpdate({ participantId: participant.id, performanceRank: data.performanceRank ?? null });
       }
     } catch (err) {
       setStatus({ type: "error", text: errorMessage(err) });

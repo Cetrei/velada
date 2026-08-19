@@ -70,12 +70,13 @@ export const PAGES = {
     filterRoleAll: "Todos",
     filterEloLabel: "Elo",
     filterEloAll: "Todos",
-    sortLabel: "Ordenar por",
-    sortOptions: {
-      nameAsc: "Nombre (A-Z)",
-      votesDesc: "Más votados",
-      votesAsc: "Menos votados"
-    },
+    columnName: "Nombre",
+    columnRole: "Posición",
+    columnRank: "Rango",
+    columnVotes: "Votos",
+    columnPerformance: "Performance",
+    sortAscLabel: "Ascendente",
+    sortDescLabel: "Descendente",
     emptyState: "Ningún peleador coincide con esa búsqueda."
   },
 

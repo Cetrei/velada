@@ -125,8 +125,17 @@ export default function ChampionSelectGrid({
       )}
       <div className="timer-text">67</div>
 
-      {/* CONTENEDOR CENTRAL: Cambia entre la Grid (Cuadrícula) y el Splash Art */}
-      <div className="relative w-full max-w-4xl flex justify-center items-start min-h-[220px] sm:min-h-[260px]" style={{ perspective: '1000px' }}>
+      {/* CONTENEDOR CENTRAL: Cambia entre la Grid (Cuadricula) y el Splash Art.
+          El alto minimo crece cuando esta fijado (isLockedIn) para que el
+          banner del splash (retrato vertical) tenga espacio real donde
+          mostrarse -- antes el contenedor se quedaba en la misma altura
+          chica que usa la grilla de retratos (220-260px), y el banner
+          (mucho mas alto que ancho) se recortaba fuerte con object-cover.
+          En la vista de grid el alto se queda igual que antes. */}
+      <div
+        className={`relative w-full max-w-4xl flex justify-center items-start min-h-[220px] sm:min-h-[260px] ${isLockedIn ? 'splash-active-height' : ''}`}
+        style={{ perspective: '1000px' }}
+      >
         
         {/* VISTA 1: CUADRÍCULA (GRID) DE PARTICIPANTES */}
         <div className={`champ-grid-container w-full transition-opacity duration-400 ${isLockedIn ? 'opacity-0 pointer-events-none absolute' : 'opacity-100 relative'}`}>
@@ -519,6 +528,21 @@ export default function ChampionSelectGrid({
             filter: brightness(0.8) contrast(1.2);
         }
 
+        /* Alto real del contenedor central cuando el splash (retrato
+           vertical de banner/foto) esta activo -- bastante mas que los
+           220-260px que usa la grilla, para que el banner no se recorte
+           tan agresivo con object-cover. Se deja como min-height (no
+           height fijo) para no romper el layout si el viewport es mas
+           chico que este valor. */
+        .splash-active-height {
+            min-height: 480px;
+        }
+        @media (min-height: 820px) {
+            .splash-active-height {
+                min-height: 560px;
+            }
+        }
+
         .splash-background {
             position: absolute;
             top: 0;
@@ -527,19 +551,20 @@ export default function ChampionSelectGrid({
             height: 100%;
             z-index: 0;
             overflow: hidden;
-            opacity: 0.3;
+            opacity: 0.35;
             pointer-events: none;
             display: flex;
             justify-content: center;
             align-items: center;
-            mask-image: radial-gradient(circle at center, black 40%, transparent 80%);
-            -webkit-mask-image: radial-gradient(circle at center, black 40%, transparent 80%);
+            mask-image: radial-gradient(circle at center, black 45%, transparent 85%);
+            -webkit-mask-image: radial-gradient(circle at center, black 45%, transparent 85%);
         }
 
         .splash-background img {
             width: 100%;
             height: 100%;
             object-fit: cover;
+            object-position: center 15%;
             filter: blur(2px) brightness(0.6);
         }
 

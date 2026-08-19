@@ -8,10 +8,21 @@ interface RosterExplorerProps {
   votesById: Record<string, number>;
 }
 
-type SortMode = "nameAsc" | "votesDesc" | "votesAsc";
+type SortColumn = "name" | "mainRole" | "lolRank" | "votes" | "performance";
+type SortDirection = "asc" | "desc";
 
 const ROLES: Array<Participant["mainRole"]> = ["Top", "Jungle", "Mid", "ADC", "Support"];
 const copy = PAGES.fighters;
+
+/** Promedio de las 6 metricas de mmradar, usado para ordenar y para la
+ *  barra compacta de performance por fila -- performanceRank es texto
+ *  libre ("PLATINUM II (67LP)"), no sirve para ordenar numericamente. */
+function performanceScoreOf(p: Participant): number | null {
+  if (!p.performanceScores) return null;
+  const values = Object.values(p.performanceScores);
+  if (values.length === 0) return null;
+  return values.reduce((sum, v) => sum + v, 0) / values.length;
+}
 
 /** Ranked tiers in League of Legends, used to bucket free-text lolRank values like "Diamond II" into a filterable tier. */
 const ELO_TIER_ORDER = [
@@ -36,11 +47,47 @@ function fallbackPhoto(p: Participant): string {
   return `https://placehold.co/200x200/0A1428/C8AA6E?text=${encodeURIComponent(p.nickname[0] ?? "?")}`;
 }
 
+interface SortHeaderProps {
+  label: string;
+  column: SortColumn;
+  active: SortColumn;
+  direction: SortDirection;
+  onSort: (column: SortColumn) => void;
+  className?: string;
+}
+
+function SortHeader({ label, column, active, direction, onSort, className = "" }: SortHeaderProps) {
+  const isActive = active === column;
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(column)}
+      className={`flex items-center gap-1 text-[11px] uppercase font-bold tracking-wide transition-colors ${
+        isActive ? "text-lol-gold" : "text-slate-400 hover:text-slate-200"
+      } ${className}`}
+      aria-label={isActive ? `${label}: ${direction === "asc" ? copy.sortAscLabel : copy.sortDescLabel}` : label}
+    >
+      {label}
+      <span className="text-[10px] leading-none">{isActive ? (direction === "asc" ? "▲" : "▼") : ""}</span>
+    </button>
+  );
+}
+
 export default function RosterExplorer({ participants, votesById }: RosterExplorerProps) {
   const [query, setQuery] = useState("");
   const [role, setRole] = useState<string>("all");
   const [elo, setElo] = useState<string>("all");
-  const [sortMode, setSortMode] = useState<SortMode>("nameAsc");
+  const [sortColumn, setSortColumn] = useState<SortColumn>("name");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+
+  function toggleSort(column: SortColumn) {
+    if (column === sortColumn) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortColumn(column);
+    setSortDirection("asc");
+  }
 
   const eloTiers = useMemo(() => {
     const present = new Set(participants.map(eloTierOf));
@@ -60,14 +107,29 @@ export default function RosterExplorer({ participants, votesById }: RosterExplor
     });
 
     list = [...list].sort((a, b) => {
-      if (sortMode === "nameAsc") return a.name.localeCompare(b.name);
-      const votesA = votesById[a.id] ?? 0;
-      const votesB = votesById[b.id] ?? 0;
-      return sortMode === "votesDesc" ? votesB - votesA : votesA - votesB;
+      let cmp = 0;
+      switch (sortColumn) {
+        case "name":
+          cmp = a.name.localeCompare(b.name);
+          break;
+        case "mainRole":
+          cmp = a.mainRole.localeCompare(b.mainRole);
+          break;
+        case "lolRank":
+          cmp = eloTierOf(a).localeCompare(eloTierOf(b));
+          break;
+        case "votes":
+          cmp = (votesById[a.id] ?? 0) - (votesById[b.id] ?? 0);
+          break;
+        case "performance":
+          cmp = (performanceScoreOf(a) ?? -1) - (performanceScoreOf(b) ?? -1);
+          break;
+      }
+      return sortDirection === "asc" ? cmp : -cmp;
     });
 
     return list;
-  }, [participants, query, role, elo, sortMode, votesById]);
+  }, [participants, query, role, elo, sortColumn, sortDirection, votesById]);
 
   return (
     <div>
@@ -108,63 +170,72 @@ export default function RosterExplorer({ participants, votesById }: RosterExplor
           />
         </label>
 
-        <label className="flex items-center gap-2 text-xs uppercase text-slate-400 whitespace-nowrap">
-          {copy.sortLabel}
-          <Dropdown
-            className="w-[168px]"
-            ariaLabel={copy.sortLabel}
-            value={sortMode}
-            onChange={(v) => setSortMode(v as SortMode)}
-            options={[
-              { value: "nameAsc", label: copy.sortOptions.nameAsc },
-              { value: "votesDesc", label: copy.sortOptions.votesDesc },
-              { value: "votesAsc", label: copy.sortOptions.votesAsc }
-            ]}
-          />
-        </label>
       </div>
 
       {filtered.length === 0 ? (
         <p className="text-center text-slate-500 py-12">{copy.emptyState}</p>
       ) : (
-        <div className="bg-lol-cardBg/60 border border-lol-border rounded-lg divide-y divide-lol-border/50 overflow-hidden">
-          {filtered.map((p) => (
-            <a
-              key={p.id}
-              href={`/peleadores/${p.id}`}
-              className="flex items-center gap-4 px-4 py-3 hover:bg-lol-gold/5 transition-colors group"
-            >
-              <img
-                src={p.photo ?? fallbackPhoto(p)}
-                alt={p.name}
-                loading="lazy"
-                decoding="async"
-                className="w-12 h-12 rounded object-cover border border-lol-border group-hover:border-lol-gold transition-colors"
-              />
-              <div className="flex-1 min-w-0">
-                <p className="text-white font-bold text-sm truncate">{p.name}</p>
-                <p className="text-slate-500 text-xs truncate">"{p.nickname}"</p>
-              </div>
-              <span className="hidden sm:inline-block px-2 py-1 bg-lol-darkBg border border-lol-border text-slate-300 text-[11px] uppercase font-bold rounded-sm">
-                {p.mainRole}
-              </span>
-              <span className="hidden md:inline-flex items-center justify-end gap-1.5 text-slate-400 text-xs w-24 text-right">
-                <img
-                  src={rankIconPath(p.lolRank)}
-                  alt=""
-                  className="w-4 h-4 object-contain"
-                  loading="lazy"
-                  onError={(e) => {
-                    e.currentTarget.style.display = "none";
-                  }}
-                />
-                {p.lolRank}
-              </span>
-              <span className="text-lol-gold text-xs font-bold w-16 text-right">
-                {(votesById[p.id] ?? 0).toLocaleString("es")} 🗳
-              </span>
-            </a>
-          ))}
+        <div className="bg-lol-cardBg/60 border border-lol-border rounded-lg overflow-hidden">
+          <div className="hidden sm:flex items-center gap-4 px-4 py-2 border-b border-lol-border/50 bg-lol-darkBg/60">
+            <SortHeader className="flex-1" label={copy.columnName} column="name" active={sortColumn} direction={sortDirection} onSort={toggleSort} />
+            <SortHeader className="hidden sm:flex w-24 justify-center" label={copy.columnRole} column="mainRole" active={sortColumn} direction={sortDirection} onSort={toggleSort} />
+            <SortHeader className="hidden md:flex w-24 justify-end" label={copy.columnRank} column="lolRank" active={sortColumn} direction={sortDirection} onSort={toggleSort} />
+            <SortHeader className="hidden md:flex w-28 justify-end" label={copy.columnPerformance} column="performance" active={sortColumn} direction={sortDirection} onSort={toggleSort} />
+            <SortHeader className="w-16 justify-end" label={copy.columnVotes} column="votes" active={sortColumn} direction={sortDirection} onSort={toggleSort} />
+          </div>
+
+          <div className="divide-y divide-lol-border/50">
+            {filtered.map((p) => {
+              const score = performanceScoreOf(p);
+              return (
+                <a
+                  key={p.id}
+                  href={`/peleadores/${p.id}`}
+                  className="flex items-center gap-4 px-4 py-3 hover:bg-lol-gold/5 transition-colors group"
+                >
+                  <img
+                    src={p.photo ?? fallbackPhoto(p)}
+                    alt={p.name}
+                    loading="lazy"
+                    decoding="async"
+                    className="w-12 h-12 rounded object-cover border border-lol-border group-hover:border-lol-gold transition-colors flex-shrink-0"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white font-bold text-sm truncate">{p.name}</p>
+                    <p className="text-slate-500 text-xs truncate">"{p.nickname}"</p>
+                  </div>
+                  <span className="hidden sm:inline-block w-24 text-center px-2 py-1 bg-lol-darkBg border border-lol-border text-slate-300 text-[11px] uppercase font-bold rounded-sm">
+                    {p.mainRole}
+                  </span>
+                  <span className="hidden md:inline-flex items-center justify-end gap-1.5 text-slate-400 text-xs w-24 text-right">
+                    <img
+                      src={rankIconPath(p.lolRank)}
+                      alt=""
+                      className="w-4 h-4 object-contain"
+                      loading="lazy"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                      }}
+                    />
+                    {p.lolRank}
+                  </span>
+                  <span className="hidden md:block w-28">
+                    {score !== null && (
+                      <span className="block h-1.5 rounded-full bg-black/40 border border-lol-border/40 overflow-hidden">
+                        <span
+                          className="block h-full rounded-full bg-gradient-to-r from-lol-blue to-lol-gold"
+                          style={{ width: `${Math.min(100, score)}%` }}
+                        />
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-lol-gold text-xs font-bold w-16 text-right">
+                    {(votesById[p.id] ?? 0).toLocaleString("es")} 🗳
+                  </span>
+                </a>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

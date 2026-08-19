@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { actions } from "astro:actions";
 import type { Participant, ParticipantStat } from "@velada/core";
-import { PARTICIPANT_MANAGER, rankIconPath } from "@velada/core";
+import { PARTICIPANT_MANAGER, rankIconPath, MAX_CUSTOM_STATS } from "@velada/core";
 import { compressImageFile, PHOTO_COMPRESSION, BANNER_COMPRESSION } from "@velada/core/imageCompression";
 
 interface ParticipantManagerProps {
@@ -50,8 +50,16 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
+  // Skipea el auto-lookup en el primer render de loadIntoForm/reset -- solo
+  // debe dispararse cuando el ADMIN escribe un lolUsername nuevo, no cada
+  // vez que se abre el modal con un valor ya cargado del participante
+  // (eso pegaria a mmradar en cada click de "Editar" sin necesidad).
+  const skipNextLookup = useRef(false);
+  const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lookupRequestId = useRef(0);
 
   function resetForm() {
+    skipNextLookup.current = true;
     setForm(EMPTY_FORM);
     setStats([]);
     setPhotoFile(null);
@@ -66,7 +74,7 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
   }
 
   function addStat() {
-    setStats((prev) => [...prev, { ...EMPTY_STAT, _key: makeStatKey() }]);
+    setStats((prev) => (prev.length >= MAX_CUSTOM_STATS ? prev : [...prev, { ...EMPTY_STAT, _key: makeStatKey() }]));
   }
 
   // Mismo criterio que ParticipantProfileForm.tsx: comprime en el
@@ -106,6 +114,7 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
   }
 
   function loadIntoForm(p: Participant) {
+    skipNextLookup.current = true;
     setForm({
       name: p.name,
       nickname: p.nickname,
@@ -137,26 +146,62 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
     }
   }
 
+  async function runLookup(lolUsername: string) {
+    setIsLookingUpRank(true);
+    const requestId = ++lookupRequestId.current;
+    const data = new FormData();
+    data.set("lolUsername", lolUsername);
+
+    try {
+      const { data: result, error } = await actions.lookupRank(data);
+      if (requestId !== lookupRequestId.current) return;
+      setIsLookingUpRank(false);
+
+      if (error) {
+        setStatus({ type: "error", text: error.message });
+        return;
+      }
+
+      setForm((prev) => ({ ...prev, lolRank: `${result.rank} (${result.lp} LP)` }));
+      setStatus({ type: "success", text: PARTICIPANT_MANAGER.successRankUpdated });
+    } catch {
+      if (requestId === lookupRequestId.current) setIsLookingUpRank(false);
+    }
+  }
+
+  // Auto-consulta el rango ~600ms despues de que el admin termina de
+  // escribir el Riot ID, mismo patron que el debounce de
+  // checkRiotProfile en ParticipantProfileForm.tsx (self-service) -- antes
+  // el panel exigia apretar "Consultar" a mano, un flujo distinto al de
+  // inscripcion que quedo desactualizado. El boton manual se deja ademas
+  // por si el admin quiere forzar un reintento sin editar el campo.
+  useEffect(() => {
+    if (lookupTimer.current) clearTimeout(lookupTimer.current);
+
+    if (skipNextLookup.current) {
+      skipNextLookup.current = false;
+      return;
+    }
+
+    const username = form.lolUsername.trim();
+    if (!username) return;
+
+    lookupTimer.current = setTimeout(() => {
+      runLookup(username);
+    }, 600);
+
+    return () => {
+      if (lookupTimer.current) clearTimeout(lookupTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.lolUsername]);
+
   async function handleLookupRank() {
     if (!form.lolUsername) {
       setStatus({ type: "error", text: PARTICIPANT_MANAGER.errorLookupMissingFields });
       return;
     }
-
-    setIsLookingUpRank(true);
-    const data = new FormData();
-    data.set("lolUsername", form.lolUsername);
-
-    const { data: result, error } = await actions.lookupRank(data);
-    setIsLookingUpRank(false);
-
-    if (error) {
-      setStatus({ type: "error", text: error.message });
-      return;
-    }
-
-    setForm((prev) => ({ ...prev, lolRank: `${result.rank} (${result.lp} LP)` }));
-    setStatus({ type: "success", text: PARTICIPANT_MANAGER.successRankUpdated });
+    await runLookup(form.lolUsername);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -394,6 +439,9 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
                   {isLookingUpRank ? PARTICIPANT_MANAGER.lookupCtaBusy : PARTICIPANT_MANAGER.lookupCta}
                 </button>
               </div>
+              {isLookingUpRank && (
+                <p className="text-xs mt-1.5 text-slate-500">Consultando rango automaticamente...</p>
+              )}
             </Field>
           </div>
         </div>
@@ -408,14 +456,21 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
 
         <div className="border-t border-lol-border/50 pt-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm uppercase text-slate-400">{PARTICIPANT_MANAGER.statsTitle}</h3>
-            <button
-              type="button"
-              onClick={addStat}
-              className="text-lol-gold hover:underline font-bold uppercase text-xs"
-            >
-              {PARTICIPANT_MANAGER.addStatCta}
-            </button>
+            <h3 className="text-sm uppercase text-slate-400">
+              {PARTICIPANT_MANAGER.statsTitle}{" "}
+              <span className="text-slate-600 normal-case">
+                ({stats.length}/{MAX_CUSTOM_STATS})
+              </span>
+            </h3>
+            {stats.length < MAX_CUSTOM_STATS && (
+              <button
+                type="button"
+                onClick={addStat}
+                className="text-lol-gold hover:underline font-bold uppercase text-xs"
+              >
+                {PARTICIPANT_MANAGER.addStatCta}
+              </button>
+            )}
           </div>
           {stats.length === 0 && (
             <p className="text-slate-500 text-xs">{PARTICIPANT_MANAGER.statsEmptyHint}</p>

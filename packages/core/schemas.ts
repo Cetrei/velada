@@ -5,7 +5,18 @@ export const ParticipantStatSchema = z.object({
   value: z.number().min(0).max(100)
 });
 
-export const ParticipantStatsSchema = z.array(ParticipantStatSchema);
+/**
+ * Maximo de stats custom por peleador. Definido como constante exportada
+ * (no un numero hardcodeado repetido en cada formulario) para que el
+ * limite del schema (fuente de verdad server-side) y los inputs del
+ * cliente (ParticipantProfileForm.tsx, ParticipantManager.tsx) usen
+ * exactamente el mismo valor. 4 es el maximo visual razonable segun el
+ * render de la carta (PlayerCard.tsx) -- mas de 4 barras no entra bien en
+ * el espacio disponible bajo el header.
+ */
+export const MAX_CUSTOM_STATS = 4;
+
+export const ParticipantStatsSchema = z.array(ParticipantStatSchema).min(0).max(MAX_CUSTOM_STATS);
 
 export const MmradarPerformanceScoresSchema = z.object({
   laning: z.number(),

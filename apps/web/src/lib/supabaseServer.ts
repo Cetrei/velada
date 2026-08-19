@@ -21,14 +21,26 @@ import { getServerEnv } from "./env";
  */
 export function createSupabaseAdminClient(
   locals?: Pick<APIContext, "locals">["locals"]
-): [ReturnType<typeof createClient> | null, string] {
+): [ReturnType<typeof createClient<any>> | null, string] {
   const ctx = { locals: locals ?? {} } as Pick<APIContext, "locals">;
   const url = getServerEnv(ctx, "PUBLIC_SUPABASE_URL");
   const serviceRoleKey = getServerEnv(ctx, "SUPABASE_SERVICE_ROLE_KEY");
 
   if (!url || !serviceRoleKey) return [null, "Supabase URL or service role key not set in environment variables."];
 
-  return [createClient(url, serviceRoleKey, {
+  // createClient<any> a proposito: no hay tipos generados de la DB en este
+  // proyecto (no hay acceso de red a la Management API de Supabase desde
+  // las sesiones de este agente para correr `supabase gen types`). Sin un
+  // generic explicito, supabase-js infiere el Database generico como
+  // `never`, lo que rompe CADA `.from("tabla").select()/.insert()/...` en
+  // todo actions/index.ts con errores "Property 'x' does not exist on type
+  // 'never'" (ver historial de errores del IDE). `any` devuelve el
+  // comportamiento pre-tipado normal de la libreria (permisivo, sin
+  // autocompletado de columnas) en vez de bloquear todo el archivo.
+  // TODO: si en algun momento hay acceso a `supabase gen types
+  // typescript --project-id <ref>`, reemplazar `any` por el tipo generado
+  // real para recuperar el chequeo de columnas.
+  return [createClient<any>(url, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false }
   }), "Supabase admin client created successfully."];
 }

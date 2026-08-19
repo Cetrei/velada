@@ -72,7 +72,7 @@ export interface MmradarCurrentRank {
 
 export interface MmradarProfileResult {
   currentRank: MmradarCurrentRank | null;
-  performanceRank: string;
+  performanceRank: string | null;
   performanceScores: MmradarPerformanceScores | null;
   titles: string[];
   /** URL del icono de invocador (id="summoner-icon"). null si no se encontro -- no es un error, el componente que lo consume simplemente no lo muestra. */
@@ -158,15 +158,28 @@ function parseCurrentRank(html: string): MmradarCurrentRank | null {
 }
 
 /**
- * El bloque de "Performance Rank" en el HTML real se ve como:
+ * El bloque de "Performance Rank" en el HTML real originalmente se veia
+ * como:
  *   <div id="performance-rank" class="rank-box">
  *     ...
  *     <h4 style="...">Performance<img ... data-tooltip="..."></h4>
  *     <p style="color: rgb(73, 177, 111);">EMERALD IV</p>
  *   </div>
- * Se busca el marcador de texto "Performance</h4>" y se toma una ventana
- * despues de el — por patrones de texto, no por nombres de clase CSS
- * (fragiles ante cambios del sitio de terceros).
+ * pero mmradar.gg cambio ese bloque (confirmado 2026-08-19 comparando
+ * contra el HTML/markdown real de varios perfiles): el tier ya no aparece
+ * como texto plano cerca del header "Performance" -- en su lugar hay una
+ * imagen (badge visual del tier, ej. <img alt="Emerald" src="...">) antes
+ * del header, seguida de "Recent Winrate"/"Account Health"/etc sin ningun
+ * tier legible en texto. Se intenta primero el patron de texto original
+ * (por si mmradar lo revierte o solo cambio para algunos perfiles), y si
+ * no aparece se intenta un fallback leyendo el atributo alt/data-tooltip
+ * de una imagen de badge cercana al marcador -- varios sitios ponen el
+ * nombre del tier ahi aunque el texto visible sea solo el icono. Si
+ * ninguno de los dos funciona, se devuelve null: el performance rank es
+ * un dato SECUNDARIO/opcional (ver MmradarProfileResult), asi que su
+ * ausencia no debe abortar el resto de la consulta (currentRank, scores,
+ * titulos, icono siguen funcionando perfecto aunque este bloque haya
+ * cambiado de formato del lado de mmradar).
  */
 function parsePerformanceRank(html: string): string | null {
   const marker = "Performance</h4>";
@@ -177,12 +190,24 @@ function parsePerformanceRank(html: string): string | null {
   const text = stripTags(window);
 
   const tierPattern = new RegExp(`\\b(${TIER_WORDS.join("|")})\\b\\s*(I{1,3}|IV)?`, "i");
-  const match = text.match(tierPattern);
-  if (!match) return null;
+  const textMatch = text.match(tierPattern);
+  if (textMatch) {
+    const tier = textMatch[1].charAt(0).toUpperCase() + textMatch[1].slice(1).toLowerCase();
+    const division = textMatch[2] ? ` ${textMatch[2].toUpperCase()}` : "";
+    return `${tier}${division}`;
+  }
 
-  const tier = match[1].charAt(0).toUpperCase() + match[1].slice(1).toLowerCase();
-  const division = match[2] ? ` ${match[2].toUpperCase()}` : "";
-  return `${tier}${division}`;
+  // Fallback: buscar el alt/data-tooltip de una imagen de badge en una
+  // ventana ANTES del marcador (el badge visual aparece antes del header
+  // "Performance" en el HTML actual, no despues).
+  const beforeWindow = html.slice(Math.max(0, idx - 400), idx);
+  const altPattern = new RegExp(`(?:alt|data-tooltip)="(${TIER_WORDS.join("|")})[^"]*"`, "i");
+  const altMatch = beforeWindow.match(altPattern);
+  if (altMatch) {
+    return altMatch[1].charAt(0).toUpperCase() + altMatch[1].slice(1).toLowerCase();
+  }
+
+  return null;
 }
 
 /**
@@ -380,17 +405,14 @@ export async function fetchMmradarProfile(lolUsername: string): Promise<MmradarP
   }
 
   try {
-    const performanceRank = parsePerformanceRank(html);
-    if (!performanceRank) {
-      throw new MmradarLookupError(
-        "unexpected_format",
-        "mmradar.gg cambio su formato (no se encontro el Performance Rank)."
-      );
-    }
-
+    // performanceRank es opcional: mmradar cambio su HTML y en muchos
+    // perfiles ya no expone el tier como texto (ver comentario de
+    // parsePerformanceRank). Antes esto abortaba TODA la consulta con
+    // unexpected_format, tirando tambien el currentRank oficial que si
+    // funciona perfecto -- ahora simplemente se guarda null y se sigue.
     return {
       currentRank: parseCurrentRank(html),
-      performanceRank,
+      performanceRank: parsePerformanceRank(html),
       performanceScores: parsePerformanceScores(html),
       titles: parseTitles(html),
       iconUrl: parseIconUrl(html),
