@@ -406,7 +406,6 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
             </select>
           </Field>
         </div>
-        <p className="text-slate-500 text-xs mt-2">{copy.rankPendingHint}</p>
         {currentRank && (
           <p className="text-sm mt-2">
             <span className="text-slate-400 uppercase text-xs">{copy.currentRankLabel}: </span>

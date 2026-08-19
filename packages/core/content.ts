@@ -5,11 +5,11 @@
  */
 
 export const SITE = {
-  name: "La Venida del Año",
+  name: "La Follada del Año",
   shortName: "VL",
   logoText: "VL",
-  defaultDescription: "La Venida del Año",
-  footer: (year: number) => `© ${year} La Venida del Año. Todos los derechos reservados.`
+  defaultDescription: "La Follada del Año",
+  footer: (year: number) => `© ${year} La Follada del Año. Todos los derechos reservados.`
 };
 
 export const NAV = {
@@ -27,7 +27,7 @@ export const NAV = {
 
 export const PAGES = {
   home: {
-    tabTitle: "La Venida del Año",
+    tabTitle: "La Follada del Año",
     hero: {
       eyebrow: "La corrida de la decada",
       titleLine1: "",
@@ -36,9 +36,6 @@ export const PAGES = {
       subtitle: () => ""
     },
     overview: {
-      title: "Los Peleadores",
-      subtitle: (fighterCount: number) =>
-        `${fighterCount} combatientes confirmados. Adelanto del roster completo.`,
       cta: "Ver el roster completo"
     },
     predictions: {
@@ -63,7 +60,7 @@ export const PAGES = {
   },
 
   fighters: {
-    tabTitle: "Peleadores - La Venida en LoL",
+    tabTitle: "Peleadores - La Follada en LoL",
     title: "Roster Completo",
     subtitle: (fighterCount: number) => `${fighterCount} combatientes listos para la Grieta del Invocador.`,
     searchPlaceholder: "Buscar por nombre o apodo...",
@@ -81,7 +78,7 @@ export const PAGES = {
   },
 
   fighterDetail: {
-    tabTitle: (name: string) => `${name} - La Venida del Año`,
+    tabTitle: (name: string) => `${name} - La Follada del Año`,
     backCta: "Volver al roster",
     followersLabel: "Seguidores",
     countryLabel: "País",
@@ -98,9 +95,9 @@ export const PAGES = {
   },
 
   matches: {
-    tabTitle: "Combates - La Venida del Año",
+    tabTitle: "Combates - La Follada del Año",
     title: "Combates",
-    subtitle: "Resultados oficiales y tarjetas de los jueces de La Venida del Año.",
+    subtitle: "Resultados oficiales y tarjetas de los jueces de La Follada del Año.",
     officialResultsLabel: "Resultados oficiales",
     winnerLabel: "Ganadora",
     winnerLabelMasc: "Ganador",
@@ -110,9 +107,9 @@ export const PAGES = {
   },
 
   predictions: {
-    tabTitle: "Pronósticos - La Venida del Año",
+    tabTitle: "Pronósticos - La Follada del Año",
     title: "Pronósticos",
-    subtitle: "Así pronosticó la comunidad los combates de La Venida del Año.",
+    subtitle: "Así pronosticó la comunidad los combates de La Follada del Año.",
     communityLabel: "Pronóstico de la comunidad",
     votesLabel: (count: number) => `${count.toLocaleString("es")} votos`,
     votedLabel: "Ya votaste",
@@ -124,13 +121,13 @@ export const PAGES = {
   },
 
   raffle: {
-    tabTitle: "Sorteo en Vivo - La Venida del Año",
+    tabTitle: "Sorteo en Vivo - La Follada del Año",
     title: "Sorteo Oficial",
     subtitle: "La suerte decidira quien folla a quien. En vivo para todo el mundo."
   },
 
   panelLogin: {
-    tabTitle: "Acceso al Panel - La Venida del Año",
+    tabTitle: "Acceso al Panel - La Follada del Año",
     title: "Acceso al Panel",
     emailLabel: "Email",
     passwordLabel: "Contraseña",
@@ -139,7 +136,7 @@ export const PAGES = {
   },
 
   panelPassphrase: {
-    tabTitle: "Gestion de Participantes - La Venida del Año",
+    tabTitle: "Gestion de Participantes - La Follada del Año",
     title: "Clave del panel",
     subtitle: (email: string) => `Sesion iniciada como ${email}. Ingresa la clave adicional del panel.`,
     label: "Clave",
@@ -148,19 +145,21 @@ export const PAGES = {
   },
 
   rosterManager: {
-    title: "Gestion de Participantes",
+    title: "Panel del Host",
     subtitle: "Edita o elimina los perfiles que cada peleador cargo desde /mi-perfil.",
-    logoutCta: "Cerrar sesion"
+    logoutCta: "Cerrar sesion",
+    tabParticipants: "Participantes",
+    tabEvent: "Evento"
   },
 
   admin: {
-    tabTitle: "Panel Admin - La Venida del Año",
+    tabTitle: "Panel Admin - La Follada del Año",
     title: "Panel del Host",
     subtitle: "Control de fase del evento, combates y sorteo."
   },
 
   inscripcion: {
-    tabTitle: "Inscripción - La Venida del Año",
+    tabTitle: "Inscripción - La Follada del Año",
     title: "Inscripción",
     subtitleAuth: "Ingresá tu email para crear tu cuenta o iniciar sesión.",
     emailLabel: "Email",
@@ -187,7 +186,7 @@ export const PAGES = {
   },
 
   miPerfil: {
-    tabTitle: "Mi Perfil - La Venida del Año",
+    tabTitle: "Mi Perfil - La Follada del Año",
     title: "Mi Perfil",
     titleIncomplete: "Completá tu ficha",
     closedTitle: "Inscripciones cerradas",
@@ -195,7 +194,6 @@ export const PAGES = {
     subtitleNewProfile: "Falta poco. Completá estos datos para aparecer en el roster.",
     subtitleEditProfile: "Este es tu perfil. Podés editarlo cuando quieras.",
     logoutCta: "Cerrar sesión",
-    rankPendingHint: "Tu rango se consulta automáticamente desde Riot al guardar — no se puede escribir a mano.",
     currentRankLabel: "Rango actual",
     submitCreateCta: "Crear mi perfil",
     submitUpdateCta: "Guardar cambios",

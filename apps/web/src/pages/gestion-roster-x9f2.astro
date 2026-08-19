@@ -5,7 +5,8 @@ import Layout from "../layouts/Layout.astro";
 import { actions, isInputError } from "astro:actions";
 import { getSession } from "../lib/session";
 import { loadParticipants } from "../lib/loadParticipants";
-import ParticipantManager from "../components/ParticipantManager";
+import { fetchEventState } from "../lib/eventState";
+import AdminTabs from "../components/AdminTabs";
 import { PAGES } from "@velada/core";
 
 const session = await getSession(Astro.cookies, Astro);
@@ -19,6 +20,7 @@ if (passphraseResult && !passphraseResult.error) {
 }
 
 const initialParticipants = await loadParticipants();
+const eventState = await fetchEventState();
 const copy = PAGES.panelPassphrase;
 const managerCopy = PAGES.rosterManager;
 ---
@@ -94,7 +96,7 @@ const managerCopy = PAGES.rosterManager;
                 </a>
               </p>
             </div>
-            <ParticipantManager client:load initialParticipants={initialParticipants} />
+            <AdminTabs client:load initialParticipants={initialParticipants} eventState={eventState} />
           </>
         )
       }

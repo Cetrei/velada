@@ -12,6 +12,6 @@
     "setup:db": "bun run scripts/setup-supabase.ts",
     "setup:cf-secrets": "bun run scripts/setup-cloudflare-secrets.ts",
     "resend-invite": "bun run scripts/resend-invite.ts",
-    "test:scrapping": "bun test scripts/test-rank-scraper.ts"
+    "test:scrapping": "bun test scripts/test-rank-scraper.test.ts"
   }
 }

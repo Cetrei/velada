@@ -6,7 +6,7 @@ import type { APIContext } from "astro";
  *
  * With @astrojs/cloudflare + output: "server", `import.meta.env` only ever
  * reflects PUBLIC_* vars inlined at build time. Non-public secrets
- * (SUPABASE_SERVICE_ROLE_KEY, RIOT_API_KEY) configured as Cloudflare
+ * (SUPABASE_SERVICE_ROLE_KEY, PANEL_PASSPHRASE) configured as Cloudflare
  * Workers Secrets/Variables are NOT visible through import.meta.env at
  * runtime — they're only exposed via the request-scoped
  * `context.locals.runtime.env` binding the adapter attaches to every
