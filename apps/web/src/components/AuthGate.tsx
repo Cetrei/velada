@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { actions } from "astro:actions";
 import { PAGES, checkPasswordRules, type PasswordRuleCheck } from "@velada/core";
 
-type Step = "email" | "login" | "register" | "admin";
+type Step = "email" | "login" | "register";
 type StatusMessage = { type: "success" | "error"; text: string } | null;
-type EmailCheckStatus = "idle" | "checking" | "new" | "existing" | "admin" | "invalid";
+type EmailCheckStatus = "idle" | "checking" | "new" | "existing" | "invalid";
 
 const copy = PAGES.inscripcion;
 
@@ -73,7 +73,7 @@ export default function AuthGate() {
           setEmailCheck("invalid");
           return;
         }
-        setEmailCheck(data.isAdmin ? "admin" : data.exists ? "existing" : "new");
+        setEmailCheck(data.exists ? "existing" : "new");
       } catch {
         if (requestId === emailCheckRequestId.current) setEmailCheck("invalid");
       }
@@ -95,12 +95,12 @@ export default function AuthGate() {
       return;
     }
 
-    // El check en vivo (emailCheck) ya resolvio exists/isAdmin mientras el
+    // El check en vivo (emailCheck) ya resolvio exists mientras el
     // usuario escribia — si ese resultado sigue vigente (mismo email, no
     // "checking"/"invalid"), se reusa en vez de volver a llamar
     // checkEmailExists una segunda vez al hacer click.
-    if (emailCheck === "admin" || emailCheck === "existing" || emailCheck === "new") {
-      setStep(emailCheck === "admin" ? "admin" : emailCheck === "existing" ? "login" : "register");
+    if (emailCheck === "existing" || emailCheck === "new") {
+      setStep(emailCheck === "existing" ? "login" : "register");
       return;
     }
 
@@ -114,39 +114,7 @@ export default function AuthGate() {
         setStatus({ type: "error", text: errorMessage(error) });
         return;
       }
-      if (data.isAdmin) {
-        setStep("admin");
-      } else {
-        setStep(data.exists ? "login" : "register");
-      }
-    } catch (err) {
-      setStatus({ type: "error", text: errorMessage(err) });
-    } finally {
-      setIsBusy(false);
-    }
-  }
-
-  /**
-   * Admin emails (ADMIN_EMAILS) skip the password entirely — the shared
-   * `login` action authenticates them by email alone. They still hit the
-   * separate PANEL_PASSPHRASE gate once inside /gestion-roster-x9f2.
-   * Redirects to the landing page on success, same as fighter login/
-   * register below — the nav's "Mi Perfil" link (or, for admins, the
-   * host-panel link shown from /mi-perfil) is how they get to editing
-   * from there, not an automatic redirect out of /inscripcion.
-   */
-  async function handleAdminLogin() {
-    setStatus(null);
-    setIsBusy(true);
-    try {
-      const form = new FormData();
-      form.set("email", email);
-      const { error } = await actions.login(form);
-      if (error) {
-        setStatus({ type: "error", text: errorMessage(error) });
-        return;
-      }
-      window.location.href = "/";
+      setStep(data.exists ? "login" : "register");
     } catch (err) {
       setStatus({ type: "error", text: errorMessage(err) });
     } finally {
@@ -219,7 +187,6 @@ export default function AuthGate() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (step === "email") handleEmailContinue();
-    else if (step === "admin") handleAdminLogin();
     else if (step === "login") handleLogin();
     else handleRegister();
   }
@@ -261,12 +228,6 @@ export default function AuthGate() {
           </div>
           {step === "email" && <EmailCheckHint status={emailCheck} />}
         </label>
-
-        {step === "admin" && (
-          <p className="text-xs text-slate-500">
-            Esta cuenta tiene acceso de host. Segui para entrar sin contrasena.
-          </p>
-        )}
 
         {step === "login" && (
           <label className="block">
@@ -329,11 +290,9 @@ export default function AuthGate() {
         >
           {step === "email"
             ? copy.continueCta
-            : step === "admin"
+            : step === "login"
               ? copy.loginCta
-              : step === "login"
-                ? copy.loginCta
-                : copy.registerCta}
+              : copy.registerCta}
         </button>
 
         {step !== "email" && (
@@ -425,7 +384,7 @@ function EmailCheckHint({ status }: { status: EmailCheckStatus }) {
     return status === "checking" ? <p className="text-xs mt-1.5 text-slate-500">{copy.emailCheckingHint}</p> : null;
   }
   if (status === "invalid") return <p className="text-xs mt-1.5 text-red-400">{copy.errorEmailInvalid}</p>;
-  const text = status === "admin" ? copy.emailAdminHint : status === "existing" ? copy.emailExistingAccountHint : copy.emailNewAccountHint;
+  const text = status === "existing" ? copy.emailExistingAccountHint : copy.emailNewAccountHint;
   return <p className="text-xs mt-1.5 text-green-400">{text}</p>;
 }
 

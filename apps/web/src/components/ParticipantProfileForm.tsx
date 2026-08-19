@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { actions } from "astro:actions";
 import type { Participant, ParticipantStat } from "@velada/core";
-import { PAGES, PARTICIPANT_MANAGER, COUNTRIES, flagForCountry, MAX_CUSTOM_STATS } from "@velada/core";
+import { PAGES, PARTICIPANT_MANAGER, COUNTRIES, flagForCountry, UNKNOWN_COUNTRY_FLAG, MAX_CUSTOM_STATS } from "@velada/core";
 import { compressImageFile, PHOTO_COMPRESSION, BANNER_COMPRESSION } from "@velada/core/imageCompression";
 import PlayerCard from "./PlayerCard";
 
@@ -362,25 +362,27 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
             placeholder={PARTICIPANT_MANAGER.placeholders.height}
           />
         </Field>
-        <Field label="País">
-          <div className="relative">
-            <input
-              value={form.country}
-              onChange={(e) => setForm({ ...form, country: e.target.value })}
-              className="input pl-9"
-              list="country-options"
-              placeholder="Escribí tu país"
-              autoComplete="off"
-            />
-            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-base pointer-events-none" aria-hidden="true">
-              {flagForCountry(form.country)}
+        <Field
+          label={
+            <span className="inline-flex items-center gap-1.5">
+              País
+              <CountryFlagBadge country={form.country} />
             </span>
-            <datalist id="country-options">
-              {COUNTRIES.map((c) => (
-                <option key={c.name} value={c.name} />
-              ))}
-            </datalist>
-          </div>
+          }
+        >
+          <input
+            value={form.country}
+            onChange={(e) => setForm({ ...form, country: e.target.value })}
+            className="input"
+            list="country-options"
+            placeholder="Escribí tu país"
+            autoComplete="off"
+          />
+          <datalist id="country-options">
+            {COUNTRIES.map((c) => (
+              <option key={c.name} value={c.name} />
+            ))}
+          </datalist>
         </Field>
       </div>
 
@@ -585,7 +587,7 @@ function Field({
   children,
   invalid = false
 }: {
-  label: string;
+  label: React.ReactNode;
   children: React.ReactNode;
   invalid?: boolean;
 }) {
@@ -596,6 +598,46 @@ function Field({
       </span>
       {children}
     </label>
+  );
+}
+
+/**
+ * Bandera del pais escrito, mostrada al lado de la etiqueta "Pais" en vez
+ * de superpuesta dentro del input (ahi se pisaba con el texto escrito --
+ * algunas banderas emoji regional-indicator se renderizan mas anchas que
+ * el padding reservado, ver captura del usuario con China). Cuando el
+ * texto no matchea ningun pais conocido, en vez del emoji de bandera
+ * blanca generico (UNKNOWN_COUNTRY_FLAG, "poco lindo" segun el pedido) se
+ * muestra un globo en SVG propio, y directamente no se muestra nada si el
+ * campo todavia esta vacio.
+ */
+function CountryFlagBadge({ country }: { country: string }) {
+  if (!country.trim()) return null;
+  const flag = flagForCountry(country);
+  if (flag === UNKNOWN_COUNTRY_FLAG) {
+    return (
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="text-slate-500"
+        aria-label="País no reconocido"
+      >
+        <circle cx="12" cy="12" r="10" />
+        <path d="M2 12h20M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20Z" />
+      </svg>
+    );
+  }
+  return (
+    <span className="text-sm normal-case" aria-hidden="true">
+      {flag}
+    </span>
   );
 }
 

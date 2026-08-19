@@ -3,15 +3,15 @@ export const prerender = false;
 
 import Layout from "../layouts/Layout.astro";
 import { actions, isInputError } from "astro:actions";
-import { getSession } from "../lib/session";
+import { getAdminSession } from "../lib/session";
 import { PAGES } from "@velada/core";
 
-const session = await getSession(Astro.cookies, Astro);
-if (session?.isAdmin) {
+const adminSession = await getAdminSession(Astro.cookies);
+if (adminSession) {
   return Astro.redirect("/gestion-roster-x9f2");
 }
 
-const result = Astro.getActionResult(actions.login);
+const result = Astro.getActionResult(actions.adminLogin);
 if (result && !result.error) {
   return Astro.redirect("/gestion-roster-x9f2");
 }
@@ -28,8 +28,7 @@ const copy = PAGES.panelLogin;
         </h1>
         <div class="h-1 w-16 bg-lol-gold mx-auto mt-4"></div>
         <p class="text-slate-400 mt-4 text-sm">
-          Ingresa el email autorizado como host. Despues te vamos a pedir la
-          clave del panel.
+          Acceso exclusivo del host. Necesitas el email y la clave del panel.
         </p>
       </div>
 
@@ -44,7 +43,7 @@ const copy = PAGES.panelLogin;
       <form
         id="login-form"
         method="POST"
-        action={actions.login}
+        action={actions.adminLogin}
         class="bg-lol-cardBg border border-lol-border p-6 rounded-xl space-y-4"
       >
         <div>
@@ -53,6 +52,16 @@ const copy = PAGES.panelLogin;
             type="email"
             id="email"
             name="email"
+            required
+            class="w-full bg-lol-darkBg border border-lol-border rounded px-4 py-3 text-white focus:border-lol-gold outline-none"
+          />
+        </div>
+        <div>
+          <label class="block text-xs uppercase text-slate-400 mb-2" for="passphrase">{copy.passwordLabel}</label>
+          <input
+            type="password"
+            id="passphrase"
+            name="passphrase"
             required
             class="w-full bg-lol-darkBg border border-lol-border rounded px-4 py-3 text-white focus:border-lol-gold outline-none"
           />

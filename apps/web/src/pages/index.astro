@@ -31,14 +31,14 @@ const { predictions, matches, home } = PAGES;
 ---
 
 <Layout title={home.tabTitle}>
-  <div class="snap-y snap-proximity overflow-y-auto h-screen scroll-smooth" style="scroll-padding-top: 4rem;">
+  <div class="snap-y snap-mandatory overflow-y-auto h-screen scroll-smooth" style="scroll-padding-top: 4rem;">
     <HeroBanner participants={participants} hero={home.hero}>
       <Countdown client:load targetIso={eventState.startTime} />
     </HeroBanner>
 
-    <section id="roster" class="h-screen snap-start flex flex-col items-center justify-center bg-lol-darkBg border-y border-lol-border overflow-hidden py-4">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full h-full flex flex-col items-center justify-center gap-2 sm:gap-3">
-        <div class="w-full flex-1 min-h-0 flex items-center justify-center overflow-y-auto sm:overflow-visible">
+    <section id="roster" class="h-screen snap-start snap-always flex flex-col items-center justify-center bg-lol-darkBg border-y border-lol-border py-4 overflow-y-auto">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full min-h-full flex flex-col items-center justify-center gap-4">
+        <div class="w-full flex items-center justify-center">
           <ChampionSelectGrid client:load participants={participants} rivalByParticipantId={rivalByParticipantId} />
         </div>
 
@@ -55,7 +55,7 @@ const { predictions, matches, home } = PAGES;
 
     {
       predictionMatches.length > 0 && (
-        <section id="pronosticos" class="h-screen snap-start flex items-center justify-center bg-black overflow-hidden">
+        <section id="pronosticos" class="h-screen snap-start snap-always flex items-center justify-center bg-black overflow-hidden">
           <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 w-full max-h-full overflow-y-auto">
             <div class="text-center mb-10">
               <h2 class="font-display text-4xl md:text-5xl font-bold text-white uppercase tracking-wider">
@@ -87,7 +87,7 @@ const { predictions, matches, home } = PAGES;
 
     {
       officialMatches.length > 0 && (
-        <section id="combates" class="h-screen snap-start flex items-center justify-center bg-lol-darkBg border-y border-lol-border overflow-hidden">
+        <section id="combates" class="h-screen snap-start snap-always flex items-center justify-center bg-lol-darkBg border-y border-lol-border overflow-hidden">
           <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full max-h-full overflow-y-auto">
             <div class="text-center mb-10">
               <h2 class="font-display text-4xl md:text-5xl font-bold text-white uppercase tracking-wider">
@@ -112,7 +112,7 @@ const { predictions, matches, home } = PAGES;
       )
     }
 
-    <section class="h-screen snap-start flex items-center justify-center relative bg-gradient-to-b from-lol-darkBg to-black overflow-hidden">
+    <section class="h-screen snap-start snap-always flex items-center justify-center relative bg-gradient-to-b from-lol-darkBg to-black overflow-hidden">
       <div
         class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-lol-gold/5 rounded-full blur-[100px] pointer-events-none"
       />

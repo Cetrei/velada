@@ -2,114 +2,51 @@
 export const prerender = false;
 
 import Layout from "../layouts/Layout.astro";
-import { actions, isInputError } from "astro:actions";
-import { getSession } from "../lib/session";
+import { getAdminSession } from "../lib/session";
 import { loadParticipants } from "../lib/loadParticipants";
 import { fetchEventState } from "../lib/eventState";
 import { fetchMatches } from "../lib/matches";
 import { fetchTeamMatches } from "../lib/teamMatches";
+import { actions } from "astro:actions";
 import AdminTabs from "../components/AdminTabs";
 import { PAGES } from "@velada/core";
 
-const session = await getSession(Astro.cookies, Astro);
-if (!session || !session.isAdmin) {
+const adminSession = await getAdminSession(Astro.cookies);
+if (!adminSession) {
   return Astro.redirect("/panel-login?error=forbidden");
-}
-
-const passphraseResult = Astro.getActionResult(actions.verifyPassphrase);
-if (passphraseResult && !passphraseResult.error) {
-  return Astro.redirect("/gestion-roster-x9f2");
 }
 
 const initialParticipants = await loadParticipants();
 const eventState = await fetchEventState();
 const initialMatches = await fetchMatches();
 const initialTeamMatches = await fetchTeamMatches();
-const copy = PAGES.panelPassphrase;
 const managerCopy = PAGES.rosterManager;
 ---
 
-<Layout title={copy.tabTitle}>
+<Layout title={managerCopy.title}>
   <section class="pt-32 pb-24 bg-lol-darkBg min-h-screen">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-      {
-        !session.passphraseVerified ? (
-          <div class="max-w-md mx-auto">
-            <div class="text-center mb-10">
-              <h1 class="font-display text-3xl font-bold text-white uppercase tracking-wider">
-                {copy.title}
-              </h1>
-              <div class="h-1 w-16 bg-lol-gold mx-auto mt-4" />
-              <p class="text-slate-400 mt-4 text-sm">
-                {copy.subtitle(session.email)}
-              </p>
-            </div>
-
-            {passphraseResult?.error && (
-              <div class="text-sm p-3 rounded mb-6 bg-red-900/30 text-red-400 border border-red-800">
-                {isInputError(passphraseResult.error)
-                  ? copy.errorEmpty
-                  : passphraseResult.error.message}
-              </div>
-            )}
-
-            <form
-              method="POST"
-              action={actions.verifyPassphrase}
-              class="bg-lol-cardBg border border-lol-border p-6 rounded-xl space-y-4"
-            >
-              <div>
-                <label class="block text-xs uppercase text-slate-400 mb-2" for="passphrase">
-                  {copy.label}
-                </label>
-                <input
-                  type="password"
-                  id="passphrase"
-                  name="passphrase"
-                  required
-                  class="w-full bg-lol-darkBg border border-lol-border rounded px-4 py-3 text-white focus:border-lol-gold outline-none"
-                />
-              </div>
-              <button
-                type="submit"
-                class="w-full py-3 px-6 bg-lol-gold text-black font-bold uppercase tracking-wide hover:bg-yellow-400 transition-all"
-              >
-                {copy.submitCta}
-              </button>
-            </form>
-          </div>
-        ) : (
-          <>
-            <div class="text-center mb-12">
-              <h1 class="font-display text-4xl font-bold text-white uppercase tracking-wider">
-                {managerCopy.title}
-              </h1>
-              <div class="h-1 w-24 bg-lol-gold mx-auto mt-6" />
-              <p class="text-slate-400 mt-4 text-sm flex items-center justify-center gap-2">
-                {session.email}
-                <form method="POST" action={actions.logout} class="inline">
-                  <button type="submit" class="text-lol-blue hover:underline">
-                    {managerCopy.logoutCta}
-                  </button>
-                </form>
-              </p>
-              <p class="text-xs text-slate-500 mt-1">
-                Sesion de host —{" "}
-                <a href="/inscripcion" class="underline hover:text-lol-gold">
-                  ver mi perfil de peleador
-                </a>
-              </p>
-            </div>
-            <AdminTabs
-              client:load
-              initialParticipants={initialParticipants}
-              eventState={eventState}
-              initialMatches={initialMatches}
-              initialTeamMatches={initialTeamMatches}
-            />
-          </>
-        )
-      }
+      <div class="text-center mb-12">
+        <h1 class="font-display text-4xl font-bold text-white uppercase tracking-wider">
+          {managerCopy.title}
+        </h1>
+        <div class="h-1 w-24 bg-lol-gold mx-auto mt-6" />
+        <p class="text-slate-400 mt-4 text-sm flex items-center justify-center gap-2">
+          {adminSession.email}
+          <form method="POST" action={actions.adminLogout} class="inline">
+            <button type="submit" class="text-lol-blue hover:underline">
+              {managerCopy.logoutCta}
+            </button>
+          </form>
+        </p>
+      </div>
+      <AdminTabs
+        client:load
+        initialParticipants={initialParticipants}
+        eventState={eventState}
+        initialMatches={initialMatches}
+        initialTeamMatches={initialTeamMatches}
+      />
     </div>
   </section>
 </Layout>

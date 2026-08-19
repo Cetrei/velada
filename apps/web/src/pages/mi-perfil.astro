@@ -22,9 +22,6 @@ if (!session) {
 const existingParticipant = await findParticipantByOwner(session.userId, Astro.locals);
 const eventState = await fetchEventState();
 
-// isAdmin ya viene resuelto en la sesion unificada (ADMIN_EMAILS).
-const isAlsoAdmin = session.isAdmin;
-
 /**
  * Cerrar inscripciones solo bloquea la creacion de una ficha nueva (sin
  * fila en participants todavia). Alguien que ya tiene ficha sigue pudiendo
@@ -62,15 +59,7 @@ const pageTitle = existingParticipant ? copy.title : copy.titleIncomplete;
           </button>
         </form>
       </p>
-      {isAlsoAdmin && (
-        <p class="text-center text-xs text-lol-gold/80 mb-8">
-          Esta cuenta tambien tiene acceso de host —{" "}
-          <a href="/gestion-roster-x9f2" class="underline hover:text-lol-gold">
-            ir al panel
-          </a>
-        </p>
-      )}
-      {!isAlsoAdmin && <div class="mb-8" />}
+      <div class="mb-8" />
 
       {
         registrationsClosedForNewSignup ? null : (

@@ -1,9 +1,16 @@
 import { defineAction, ActionError } from "astro:actions";
 import { z } from "astro:schema";
 import { createSupabaseAdminClient } from "../lib/supabaseServer";
-import { getSession, createSession, destroySession, markPassphraseVerified, isAdminEmail } from "../lib/session";
+import {
+  getSession,
+  createSession,
+  destroySession,
+  getAdminSession,
+  createAdminSession,
+  destroyAdminSession,
+  panelPassphraseMatches
+} from "../lib/session";
 import { hashPassword, verifyPassword } from "../lib/password";
-import { getServerEnv } from "../lib/env";
 import { fetchEventState } from "../lib/eventState";
 import {
   ParticipantStatsSchema,
@@ -17,7 +24,7 @@ import {
   type MmradarPerformanceScores,
   type MmradarProfileResult
 } from "@velada/core";
-import type { AppSession } from "../lib/session";
+import type { AppSession, AdminSession } from "../lib/session";
 
 function requireSession(session: AppSession | null): AppSession {
   if (!session) {
@@ -27,21 +34,20 @@ function requireSession(session: AppSession | null): AppSession {
 }
 
 /**
- * Panel auth = logged in + email listed in ADMIN_EMAILS + passphrase gate
- * already passed this session. Replaces the old getPanelSession +
- * `admins` table lookup: admin-ness is now derived purely from
- * ADMIN_EMAILS (env), not a DB row, since there's no Supabase Auth user id
- * to key a table on anymore.
+ * Panel auth ya NO deriva de la sesion de jugador (participant_users) ni
+ * de ADMIN_EMAILS + passphrase-como-paso-aparte. Es una sesion propia
+ * (ver lib/session.ts, createAdminSession/getAdminSession) que se obtiene
+ * SOLO en /panel-login, pidiendo email + PANEL_PASSPHRASE juntos en el
+ * mismo formulario -- antes admitAsAdmin en el login unificado dejaba
+ * pasar a cualquier email listado en ADMIN_EMAILS sin pedir nada, y la
+ * passphrase quedaba como gate posterior opcional. Cuenta de admin !=
+ * cuenta de inscripcion: una no otorga la otra.
  */
-function requirePanelAuth(session: AppSession | null): AppSession {
-  const s = requireSession(session);
-  if (!s.isAdmin) {
-    throw new ActionError({ code: "FORBIDDEN", message: "Tu cuenta no tiene acceso al panel." });
+function requirePanelAuth(session: AdminSession | null): AdminSession {
+  if (!session) {
+    throw new ActionError({ code: "FORBIDDEN", message: "No autenticado como host." });
   }
-  if (!s.passphraseVerified) {
-    throw new ActionError({ code: "FORBIDDEN", message: "Falta verificar la clave del panel." });
-  }
-  return s;
+  return session;
 }
 
 /**
@@ -179,115 +185,48 @@ const ownParticipantFields = {
 
 export const server = {
   /**
-   * Unified login for BOTH fighters and admins. Admin emails (ADMIN_EMAILS
-   * env) skip the password check entirely — they authenticate with just
-   * their email, then still have to clear the separate PANEL_PASSPHRASE
-   * gate (verifyPassphrase) before actually reaching the panel. A row in
-   * `participant_users` is created on the fly for a first-time admin login
-   * (no self-registration flow needed for them, unlike fighters).
+   * Login de HOST unicamente, usado solo desde /panel-login. Pide email +
+   * PANEL_PASSPHRASE (clave global) juntos en el mismo paso -- antes el
+   * login unificado dejaba pasar a cualquier email en ADMIN_EMAILS sin
+   * pedir nada, y la passphrase quedaba como gate posterior opcional que
+   * en la practica dejaba a un admin "a medio loguear" en el sitio. No
+   * toca participant_users/sessions en absoluto: ver
+   * createAdminSession en lib/session.ts. El email no necesita estar en
+   * ADMIN_EMAILS para intentar el login -- conocer PANEL_PASSPHRASE es
+   * el unico secreto real; ADMIN_EMAILS ya no se usa en ningun lado (ver
+   * nota mas abajo).
    */
-  login: defineAction({
+  adminLogin: defineAction({
     accept: "form",
     input: z.object({
       email: z.string().email(),
-      password: z.string().min(6).optional()
+      passphrase: z.string().min(1)
     }),
-    handler: async ({ email, password }, context) => {
-      const [admin, msg] = createSupabaseAdminClient(context.locals);
-      if (!admin) {
-        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
+    handler: async ({ email, passphrase }, context) => {
+      if (!panelPassphraseMatches(context, passphrase)) {
+        throw new ActionError({ code: "UNAUTHORIZED", message: "Credenciales invalidas." });
       }
 
-      const normalizedEmail = email.trim().toLowerCase();
-      const admitAsAdmin = isAdminEmail(context, normalizedEmail);
-
-      const { data: existing } = await admin
-        .from("participant_users")
-        .select("id, password_hash")
-        .eq("email", normalizedEmail)
-        .maybeSingle();
-
-      let userId: string;
-
-      if (admitAsAdmin) {
-        // Admins never need a password of their own; if they don't have a
-        // row yet (first login), create one with a random unusable hash so
-        // the column stays NOT NULL without granting a real password.
-        if (existing) {
-          userId = existing.id;
-        } else {
-          const placeholderHash = await hashPassword(crypto.randomUUID());
-          const { data: created, error } = await admin
-            .from("participant_users")
-            .insert({ email: normalizedEmail, password_hash: placeholderHash })
-            .select("id")
-            .single();
-          if (error || !created) {
-            throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: error?.message ?? "No se pudo crear la cuenta." });
-          }
-          userId = created.id;
-        }
-      } else {
-        if (!existing) {
-          throw new ActionError({ code: "UNAUTHORIZED", message: "Credenciales invalidas." });
-        }
-        if (!password) {
-          throw new ActionError({ code: "BAD_REQUEST", message: "Falta la contrasena." });
-        }
-        const valid = await verifyPassword(password, existing.password_hash);
-        if (!valid) {
-          throw new ActionError({ code: "UNAUTHORIZED", message: "Credenciales invalidas." });
-        }
-        userId = existing.id;
-      }
-
-      const sessionId = await createSession(context.cookies, context.locals, userId);
-      if (!sessionId) {
-        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: "No se pudo crear la sesion." });
-      }
-
-      return { success: true, isAdmin: admitAsAdmin };
-    }
-  }),
-
-  logout: defineAction({
-    handler: async (_input, context) => {
-      await destroySession(context.cookies, context.locals);
+      await createAdminSession(context.cookies, email.trim().toLowerCase());
       return { success: true };
     }
   }),
 
-  verifyPassphrase: defineAction({
-    accept: "form",
-    input: z.object({ passphrase: z.string().min(1) }),
-    handler: async ({ passphrase }, context) => {
-      const session = requireSession(await getSession(context.cookies, context));
-      if (!session.isAdmin) {
-        throw new ActionError({ code: "FORBIDDEN", message: "Tu cuenta no tiene acceso al panel." });
-      }
-
-      const expected = getServerEnv(context, "PANEL_PASSPHRASE");
-      if (!expected) {
-        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: "PANEL_PASSPHRASE no configurada en el servidor." });
-      }
-
-      if (passphrase !== expected) {
-        throw new ActionError({ code: "FORBIDDEN", message: "Clave incorrecta." });
-      }
-
-      markPassphraseVerified(context.cookies);
+  adminLogout: defineAction({
+    handler: async (_input, context) => {
+      destroyAdminSession(context.cookies);
       return { success: true };
     }
   }),
 
   /**
-   * Step 1 of the unified email-first auth flow on /inscripcion: given just
-   * an email, tells the client whether an account already exists so the UI
-   * can ask for "tu contrasena" (login) vs "crea una contrasena" (register)
-   * without a separate tabs/toggle the user has to pick themselves.
-   * Also flags isAdmin (ADMIN_EMAILS) so AuthGate can skip the
-   * password field entirely for host accounts, even on their very first
-   * login (before they have a participant_users row at all).
+   * Step 1 of the email-first auth flow on /inscripcion: given just an
+   * email, tells the client whether an account already exists so the UI
+   * can ask for "tu contrasena" (login) vs "crea una contrasena"
+   * (register). /inscripcion es 100% para jugadores -- ya no hay ninguna
+   * rama de admin aca, un email listado en ADMIN_EMAILS no recibe ningun
+   * trato especial (esa deteccion se saco por completo, cuenta de admin
+   * != cuenta de inscripcion).
    */
   checkEmailExists: defineAction({
     accept: "form",
@@ -305,7 +244,7 @@ export const server = {
         .eq("email", normalizedEmail)
         .maybeSingle();
 
-      return { exists: !!data, isAdmin: isAdminEmail(context, normalizedEmail) };
+      return { exists: !!data };
     }
   }),
 
@@ -557,7 +496,7 @@ export const server = {
       banner: z.instanceof(File).optional()
     }),
     handler: async (input, context) => {
-      requirePanelAuth(await getSession(context.cookies, context));
+      requirePanelAuth(await getAdminSession(context.cookies));
       const [admin, msg] = createSupabaseAdminClient(context.locals);
       if (!admin) {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
@@ -660,7 +599,7 @@ export const server = {
     accept: "form",
     input: z.object({ id: z.string().min(1) }),
     handler: async ({ id }, context) => {
-      requirePanelAuth(await getSession(context.cookies, context));
+      requirePanelAuth(await getAdminSession(context.cookies));
       const [admin, msg] = createSupabaseAdminClient(context.locals);
       if (!admin) {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
@@ -711,7 +650,19 @@ export const server = {
     accept: "form",
     input: z.object({ id: z.string().min(1) }),
     handler: async ({ id }, context) => {
-      const session = requireSession(await getSession(context.cookies, context));
+      // El dueno del perfil se resuelve con la sesion de jugador; un admin
+      // (sesion separada, ver lib/session.ts) tambien puede forzar el
+      // refresh de cualquier perfil. Ninguna de las dos otorga la otra —
+      // se piden ambas por separado en vez de una sola sesion con flags.
+      const [playerSession, adminSession] = await Promise.all([
+        getSession(context.cookies, context),
+        getAdminSession(context.cookies)
+      ]);
+
+      if (!playerSession && !adminSession) {
+        throw new ActionError({ code: "UNAUTHORIZED", message: "No autenticado." });
+      }
+
       const [admin, msg] = createSupabaseAdminClient(context.locals);
       if (!admin) {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
@@ -727,8 +678,8 @@ export const server = {
         throw new ActionError({ code: "NOT_FOUND", message: "Participante no encontrado." });
       }
 
-      const isOwner = existing.owner_user_id === session.userId;
-      if (!isOwner && !(session.isAdmin && session.passphraseVerified)) {
+      const isOwner = playerSession ? existing.owner_user_id === playerSession.userId : false;
+      if (!isOwner && !adminSession) {
         throw new ActionError({ code: "FORBIDDEN", message: "No podes actualizar el perfil de otro jugador." });
       }
 
@@ -774,7 +725,7 @@ export const server = {
       lolUsername: z.string().min(1)
     }),
     handler: async ({ lolUsername }, context) => {
-      requirePanelAuth(await getSession(context.cookies, context));
+      requirePanelAuth(await getAdminSession(context.cookies));
       return fetchOfficialRank(lolUsername);
     }
   }),
@@ -803,7 +754,7 @@ export const server = {
       predictionsOpen: z.coerce.boolean().default(false)
     }),
     handler: async (input, context) => {
-      requirePanelAuth(await getSession(context.cookies, context));
+      requirePanelAuth(await getAdminSession(context.cookies));
       const [admin, msg] = createSupabaseAdminClient(context.locals);
       if (!admin) {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
@@ -848,7 +799,7 @@ export const server = {
     accept: "form",
     input: z.object({ id: z.string().uuid() }),
     handler: async ({ id }, context) => {
-      requirePanelAuth(await getSession(context.cookies, context));
+      requirePanelAuth(await getAdminSession(context.cookies));
       const [admin, msg] = createSupabaseAdminClient(context.locals);
       if (!admin) {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
@@ -925,7 +876,7 @@ export const server = {
       generationMode: z.enum(["manual", "random", "balanced", "unfair"]).default("manual")
     }),
     handler: async (input, context) => {
-      requirePanelAuth(await getSession(context.cookies, context));
+      requirePanelAuth(await getAdminSession(context.cookies));
       const [admin, msg] = createSupabaseAdminClient(context.locals);
       if (!admin) {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
@@ -971,7 +922,7 @@ export const server = {
     accept: "form",
     input: z.object({ id: z.string().uuid() }),
     handler: async ({ id }, context) => {
-      requirePanelAuth(await getSession(context.cookies, context));
+      requirePanelAuth(await getAdminSession(context.cookies));
       const [admin, msg] = createSupabaseAdminClient(context.locals);
       if (!admin) {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
@@ -1005,7 +956,7 @@ export const server = {
       mode: z.enum(["random", "balanced", "unfair"])
     }),
     handler: async (input, context) => {
-      requirePanelAuth(await getSession(context.cookies, context));
+      requirePanelAuth(await getAdminSession(context.cookies));
       const [admin, msg] = createSupabaseAdminClient(context.locals);
       if (!admin) {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });

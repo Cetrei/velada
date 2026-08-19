@@ -126,14 +126,19 @@ export default function ChampionSelectGrid({
       <div className="timer-text">67</div>
 
       {/* CONTENEDOR CENTRAL: Cambia entre la Grid (Cuadricula) y el Splash Art.
-          El alto minimo crece cuando esta fijado (isLockedIn) para que el
-          banner del splash (retrato vertical) tenga espacio real donde
-          mostrarse -- antes el contenedor se quedaba en la misma altura
-          chica que usa la grilla de retratos (220-260px), y el banner
-          (mucho mas alto que ancho) se recortaba fuerte con object-cover.
-          En la vista de grid el alto se queda igual que antes. */}
+          Ambas vistas viven superpuestas (position: absolute, inset: 0)
+          dentro de este contenedor -- el contenedor en si NO cambia de
+          alto entre estados, solo el hijo activo. Antes se le agregaba
+          min-height extra a este div compartido cuando isLockedIn era
+          true (para darle mas "lienzo" al splash), pero como el mismo
+          div tambien envuelve la grilla en el flujo normal del layout,
+          crecerlo empujaba TODO lo que viene despues (titulo, action bar)
+          fuera de la vista -- eso es el descuadre de las imagenes. El
+          alto real que necesita el splash ahora vive en
+          .splash-view (min-height propio, position: absolute dentro de
+          este contenedor), no en el contenedor compartido. */}
       <div
-        className={`relative w-full max-w-4xl flex justify-center items-start min-h-[220px] sm:min-h-[260px] ${isLockedIn ? 'splash-active-height' : ''}`}
+        className="relative w-full max-w-4xl flex justify-center items-start min-h-[220px] sm:min-h-[260px]"
         style={{ perspective: '1000px' }}
       >
         
@@ -236,8 +241,13 @@ export default function ChampionSelectGrid({
             </div>
         </div>
 
-        {/* VISTA 2: LOADOUT / SPLASH BACKGROUND */}
-        <div className={`absolute inset-0 w-full h-full transition-all duration-500 ${isLockedIn ? 'opacity-100 z-10' : 'opacity-0 pointer-events-none -z-10'}`}>
+        {/* VISTA 2: LOADOUT / SPLASH BACKGROUND. position: absolute saca
+            este bloque del flujo del documento, asi que darle su propio
+            min-height (splash-view-active) no empuja nada del contenedor
+            padre ni de lo que viene despues -- a diferencia del intento
+            anterior (min-height en el contenedor compartido de mas
+            arriba), que si empujaba todo por seguir en flujo normal. */}
+        <div className={`absolute inset-x-0 top-0 w-full transition-all duration-500 ${isLockedIn ? 'splash-view-active opacity-100 z-10' : 'h-full opacity-0 pointer-events-none -z-10'}`}>
             
             <div className="splash-background">
                  {selected && (
@@ -528,17 +538,18 @@ export default function ChampionSelectGrid({
             filter: brightness(0.8) contrast(1.2);
         }
 
-        /* Alto real del contenedor central cuando el splash (retrato
-           vertical de banner/foto) esta activo -- bastante mas que los
-           220-260px que usa la grilla, para que el banner no se recorte
-           tan agresivo con object-cover. Se deja como min-height (no
-           height fijo) para no romper el layout si el viewport es mas
-           chico que este valor. */
-        .splash-active-height {
-            min-height: 480px;
+        /* Alto real del bloque de splash (retrato vertical de banner/foto)
+           cuando esta activo -- bastante mas que los 220-260px que usa la
+           grilla, para que el banner no se recorte tan agresivo con
+           object-cover. Vive en este elemento (position: absolute, fuera
+           del flujo) en vez de en el contenedor compartido de arriba, asi
+           que crecerlo no empuja el titulo/action-bar que vienen despues
+           en el layout -- ese era el bug del descuadre. */
+        .splash-view-active {
+            min-height: min(480px, 46dvh);
         }
         @media (min-height: 820px) {
-            .splash-active-height {
+            .splash-view-active {
                 min-height: 560px;
             }
         }

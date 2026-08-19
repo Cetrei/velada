@@ -1,16 +1,16 @@
 import type { AstroCookies, APIContext } from "astro";
 import { createSupabaseAdminClient } from "./supabaseServer";
+import { getServerEnv } from "./env";
 
 export interface AppSession {
   userId: string;
   email: string;
-  isAdmin: boolean;
-  passphraseVerified: boolean;
 }
 
 const SESSION_COOKIE = "velada_session";
-const PASSPHRASE_COOKIE = "velada_panel_unlocked";
+const ADMIN_COOKIE = "velada_admin_session";
 const SESSION_TTL_DAYS = 30;
+const ADMIN_SESSION_TTL_HOURS = 4;
 
 function adminEmails(context: Pick<APIContext, "locals">): Set<string> {
   const raw = (context.locals as { runtime?: { env?: Record<string, unknown> } } | undefined)
@@ -69,7 +69,6 @@ export async function destroySession(
 ): Promise<void> {
   const sessionId = cookies.get(SESSION_COOKIE)?.value;
   cookies.delete(SESSION_COOKIE, { path: "/" });
-  cookies.delete(PASSPHRASE_COOKIE, { path: "/" });
 
   if (!sessionId) return;
 
@@ -80,16 +79,15 @@ export async function destroySession(
 }
 
 /**
- * Resolves the current session by looking up the cookie's session id in
- * the `sessions` table (joined to `participant_users` for email). Returns
- * null for no cookie, an unknown/expired session id, or infra failure —
- * callers treat null as "not logged in".
+ * Resolves the current FIGHTER session by looking up the cookie's session
+ * id in the `sessions` table (joined to `participant_users` for email).
+ * Returns null for no cookie, an unknown/expired session id, or infra
+ * failure — callers treat null as "not logged in".
  *
- * isAdmin is derived from ADMIN_EMAILS (env), not stored on the user row:
- * an admin is just a participant_users row whose email happens to be
- * listed, so the same login covers both /inscripcion and the panel.
- * passphraseVerified is a separate short-lived cookie set after
- * verifyPassphrase, same as before.
+ * Fighter accounts (participant_users/sessions, /inscripcion) and admin
+ * access (see getAdminSession below) are now two completely separate
+ * systems: an admin email gets no special treatment here, and a fighter
+ * session never grants panel access, no matter what email it belongs to.
  */
 export async function getSession(
   cookies: AstroCookies,
@@ -116,27 +114,69 @@ export async function getSession(
   const userRow = data.participant_users as unknown as { email: string } | null;
   if (!userRow?.email) return null;
 
-  const emails = adminEmails(context);
-  const passphraseVerified = cookies.get(PASSPHRASE_COOKIE)?.value === "true";
-
   return {
     userId: data.user_id,
-    email: userRow.email,
-    isAdmin: emails.has(userRow.email.toLowerCase()),
-    passphraseVerified
+    email: userRow.email
   };
 }
 
-export function markPassphraseVerified(cookies: AstroCookies): void {
-  cookies.set(PASSPHRASE_COOKIE, "true", {
+export interface AdminSession {
+  email: string;
+}
+
+/**
+ * Cuenta de admin != cuenta de inscripcion: el panel ya NO reutiliza
+ * participant_users/sessions ni ADMIN_EMAILS + password opcional de un
+ * jugador. Es su propio sistema, mas simple a proposito: una cookie
+ * firmada por el conocimiento de PANEL_PASSPHRASE + el email quedando
+ * adentro del payload solo para mostrarlo en la UI ("sesion iniciada
+ * como..."), sin ninguna fila en DB ni passwords por jugador. El unico
+ * secreto real es PANEL_PASSPHRASE (env), igual que antes -- lo que
+ * cambia es que ahora se pide en el login mismo (ver actions.adminLogin),
+ * no como un paso separado despues de "iniciar sesion" solo con el email.
+ */
+export async function createAdminSession(cookies: AstroCookies, email: string): Promise<void> {
+  const payload = JSON.stringify({ email, exp: Date.now() + ADMIN_SESSION_TTL_HOURS * 60 * 60 * 1000 });
+  cookies.set(ADMIN_COOKIE, btoa(payload), {
     path: "/",
     httpOnly: true,
     secure: true,
     sameSite: "lax",
-    maxAge: 60 * 60 * 4
+    maxAge: ADMIN_SESSION_TTL_HOURS * 60 * 60
   });
+}
+
+export function destroyAdminSession(cookies: AstroCookies): void {
+  cookies.delete(ADMIN_COOKIE, { path: "/" });
+}
+
+/**
+ * No hay DB de por medio: la cookie es HttpOnly + Secure + SameSite=lax
+ * (no legible ni forgeable desde JS del cliente) y expira sola a las
+ * ADMIN_SESSION_TTL_HOURS horas. Alcanza como sesion de servidor corta
+ * para un panel de un solo evento -- no hace falta el aparato de
+ * sessions/participant_users que si necesitan las cuentas de jugador
+ * (que viven mucho mas tiempo y necesitan poder cerrarse remotamente
+ * borrando la fila).
+ */
+export async function getAdminSession(cookies: AstroCookies): Promise<AdminSession | null> {
+  const raw = cookies.get(ADMIN_COOKIE)?.value;
+  if (!raw) return null;
+
+  try {
+    const payload = JSON.parse(atob(raw)) as { email?: string; exp?: number };
+    if (!payload.email || !payload.exp || payload.exp < Date.now()) return null;
+    return { email: payload.email };
+  } catch {
+    return null;
+  }
 }
 
 export function isAdminEmail(context: Pick<APIContext, "locals">, email: string): boolean {
   return adminEmails(context).has(email.trim().toLowerCase());
+}
+
+export function panelPassphraseMatches(context: Pick<APIContext, "locals">, passphrase: string): boolean {
+  const expected = getServerEnv(context, "PANEL_PASSPHRASE");
+  return !!expected && passphrase === expected;
 }

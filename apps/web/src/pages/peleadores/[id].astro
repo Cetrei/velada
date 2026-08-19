@@ -2,7 +2,7 @@
 import Layout from "../../layouts/Layout.astro";
 import PlayerCardLive from "../../components/PlayerCardLive";
 import MmradarPanel from "../../components/MmradarPanel";
-import { getSession } from "../../lib/session";
+import { getSession, getAdminSession } from "../../lib/session";
 import { loadParticipants, findParticipantByOwner } from "../../lib/loadParticipants";
 import { fetchMatches, fetchPredictionTallies } from "../../lib/matches";
 import { PAGES, flagForCountry } from "@velada/core";
@@ -18,19 +18,20 @@ if (!participant) {
 
 // El boton "Actualizar" de MmradarPanel solo se muestra si el visitante es
 // el dueno de este perfil o un admin de panel ya autenticado (mismo
-// criterio de permisos que refreshMmradarData en actions/index.ts). No se
-// expone ownerUserId al cliente: se re-consulta el perfil propio del
-// visitante (si hay sesion) y se compara el id, igual que hace
-// /mi-perfil para saber si ya existe una ficha.
-const session = await getSession(Astro.cookies, Astro);
-let canUpdateMmradar = false;
-if (session) {
-  if (session.isAdmin && session.passphraseVerified) {
-    canUpdateMmradar = true;
-  } else {
-    const ownProfile = await findParticipantByOwner(session.userId, Astro.locals);
-    canUpdateMmradar = ownProfile?.id === participant.id;
-  }
+// criterio de permisos que refreshMmradarData en actions/index.ts). La
+// sesion de admin es completamente separada de la de jugador (ver
+// lib/session.ts) -- se consultan ambas por separado, ninguna otorga la
+// otra. No se expone ownerUserId al cliente: se re-consulta el perfil
+// propio del visitante (si hay sesion de jugador) y se compara el id,
+// igual que hace /mi-perfil para saber si ya existe una ficha.
+const [session, adminSession] = await Promise.all([
+  getSession(Astro.cookies, Astro),
+  getAdminSession(Astro.cookies)
+]);
+let canUpdateMmradar = !!adminSession;
+if (!canUpdateMmradar && session) {
+  const ownProfile = await findParticipantByOwner(session.userId, Astro.locals);
+  canUpdateMmradar = ownProfile?.id === participant.id;
 }
 
 const participantsById = Object.fromEntries(participants.map((p) => [p.id, p]));
