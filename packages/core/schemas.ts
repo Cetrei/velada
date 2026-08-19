@@ -40,7 +40,9 @@ export const ParticipantSchema = z.object({
   stats: ParticipantStatsSchema.optional(),
   performanceRank: z.string().nullable().optional(),
   performanceScores: MmradarPerformanceScoresSchema.nullable().optional(),
-  titles: z.array(z.string()).nullable().optional()
+  titles: z.array(z.string()).nullable().optional(),
+  mmradarIconUrl: z.string().nullable().optional(),
+  mmradarServer: z.string().nullable().optional()
 });
 
 export const ParticipantListSchema = z.array(ParticipantSchema);

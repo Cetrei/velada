@@ -9,15 +9,13 @@ import {
   ParticipantStatsSchema,
   isPasswordValid,
   PASSWORD_MIN_LENGTH,
-  fetchRankFromLeagueOfGraphs,
-  RankLookupError,
-  RANK_SOURCE_SERVERS,
   JudgeCardSchema,
   fetchMmradarProfile,
   MmradarLookupError,
   generateTeamMatches,
   type TeamGenerationMode,
-  type MmradarPerformanceScores
+  type MmradarPerformanceScores,
+  type MmradarProfileResult
 } from "@velada/core";
 import type { AppSession } from "../lib/session";
 
@@ -49,17 +47,15 @@ function requirePanelAuth(session: AppSession | null): AppSession {
 /**
  * Mensajes de error pensados para el jugador que llena el formulario, sin
  * mencionar de donde viene el dato ni como se obtiene (nada de "scraping",
- * "HTML", "Riot API", nombres de sitios de terceros, etc.) — solo lo que
- * puede hacer al respecto.
+ * "HTML", nombres de sitios de terceros, etc.) — solo lo que puede hacer
+ * al respecto.
  */
-function rankLookupErrorMessage(reason: RankLookupError["reason"]): string {
+function mmradarErrorMessage(reason: MmradarLookupError["reason"]): string {
   switch (reason) {
     case "not_found":
-      return "No encontramos ese Riot ID en ese servidor. Revisa que este bien escrito.";
+      return "No encontramos ese Riot ID. Revisa que este bien escrito.";
     case "invalid_riot_id":
       return 'Formato invalido. Usa "NombreDeInvocador#TAG" (Riot ID).';
-    case "invalid_server":
-      return `Servidor no reconocido. Usa: ${Object.keys(RANK_SOURCE_SERVERS).join(", ")}.`;
     case "source_unavailable":
       return "No pudimos consultar tu rango ahora mismo. Se reintentara al guardar.";
     case "unexpected_format":
@@ -69,69 +65,85 @@ function rankLookupErrorMessage(reason: RankLookupError["reason"]): string {
   }
 }
 
-function actionErrorCodeForRankLookup(reason: RankLookupError["reason"]): "NOT_FOUND" | "BAD_REQUEST" | "INTERNAL_SERVER_ERROR" {
+function actionErrorCodeForMmradarLookup(reason: MmradarLookupError["reason"]): "NOT_FOUND" | "BAD_REQUEST" | "INTERNAL_SERVER_ERROR" {
   switch (reason) {
     case "not_found":
       return "NOT_FOUND";
     case "invalid_riot_id":
-    case "invalid_server":
       return "BAD_REQUEST";
     default:
       return "INTERNAL_SERVER_ERROR";
   }
 }
 
+interface OfficialRankResult {
+  rank: string;
+  lp: number;
+}
+
 /**
- * Looks up a player's current rank. Shared by the admin lookupRank action
- * (manual "Consultar" button) and saveOwnParticipant (self-service profile
- * save, where the rank is always re-derived server-side so nobody can type
- * in "Challenger" by hand). Consulta un sitio externo de estadisticas de
- * LoL (ver packages/core/rankScraper.ts para el detalle tecnico y por que
- * se eligio esa fuente) — no la Riot API directamente.
+ * Fuente unica del rango "oficial" de un peleador (el que se guarda como
+ * lolRank y se muestra en las fichas): el Current Rank de mmradar.gg (ver
+ * packages/core/mmradarScraper.ts). LeagueOfGraphs/rankScraper.ts se
+ * elimino por completo — decision explicita del usuario 2026-08-18, ya no
+ * se consulta ningun servidor/region para esto, mmradar lo resuelve solo.
+ * Lanza ActionError solo para fallas reales (Riot ID invalido, no
+ * encontrado, fuente caida) — usada por lookupRank/checkRiotProfile que
+ * si necesitan distinguir esos casos del usuario.
  */
-async function fetchRiotRank(lolUsername: string, lolServer: string): Promise<{ rank: string; lp: number }> {
+async function fetchOfficialRank(lolUsername: string): Promise<OfficialRankResult> {
   try {
-    const result = await fetchRankFromLeagueOfGraphs(lolUsername, lolServer);
-    if (!result) {
+    const result = await fetchMmradarProfile(lolUsername);
+    if (!result.currentRank) {
       return { rank: "Sin clasificar", lp: 0 };
     }
-    return { rank: result.rank, lp: result.leaguePoints };
+    return { rank: result.currentRank.rank, lp: result.currentRank.leaguePoints };
   } catch (err) {
-    if (err instanceof RankLookupError) {
+    if (err instanceof MmradarLookupError) {
       throw new ActionError({
-        code: actionErrorCodeForRankLookup(err.reason),
-        message: rankLookupErrorMessage(err.reason)
+        code: actionErrorCodeForMmradarLookup(err.reason),
+        message: mmradarErrorMessage(err.reason)
       });
     }
     throw new ActionError({
       code: "INTERNAL_SERVER_ERROR",
-      message: rankLookupErrorMessage("source_unavailable")
+      message: mmradarErrorMessage("source_unavailable")
     });
   }
 }
 
 interface MmradarLookupResult {
+  rank: string | null;
+  lp: number;
   performanceRank: string | null;
   performanceScores: MmradarPerformanceScores | null;
   titles: string[] | null;
+  iconUrl: string | null;
+  server: string | null;
 }
 
 /**
- * Consulta mmradar.gg para el skill rating del balanceador de equipos (ver
- * packages/core/skillRating.ts). A diferencia de fetchRiotRank, esto NUNCA
- * lanza: mmradar es una fuente secundaria/opcional (el fallback a lolRank
- * ya cubre el caso sin datos), asi que si el sitio bloquea la consulta o el
- * jugador no tiene perfil ahi, se guarda simplemente null y el balanceador
- * usa el fallback jerarquico automaticamente. No se debe romper el guardado
- * del perfil de nadie por una fuente opcional caida.
+ * Consulta mmradar.gg una sola vez y devuelve TODO lo que se guarda de ahi
+ * (rango oficial, performance rank, scores, titulos) — reemplaza los dos
+ * fetches separados que habia antes (uno para el rango "oficial" via
+ * LeagueOfGraphs, otro para performance/scores via mmradar). A diferencia
+ * de fetchOfficialRank, esto NUNCA lanza: se usa en el flujo de guardado,
+ * donde una fuente externa caida no debe romper el guardado del perfil de
+ * nadie — si falla, se guardan nulls y el peleador puede reintentar mas
+ * tarde (el rango previo en la fila no se pisa con un valor invalido
+ * gracias a esto).
  */
 async function fetchMmradarData(lolUsername: string): Promise<MmradarLookupResult> {
   try {
-    const result = await fetchMmradarProfile(lolUsername);
+    const result: MmradarProfileResult = await fetchMmradarProfile(lolUsername);
     return {
+      rank: result.currentRank?.rank ?? null,
+      lp: result.currentRank?.leaguePoints ?? 0,
       performanceRank: result.performanceRank,
       performanceScores: result.performanceScores,
-      titles: result.titles.length > 0 ? result.titles : null
+      titles: result.titles.length > 0 ? result.titles : null,
+      iconUrl: result.iconUrl,
+      server: result.server
     };
   } catch (err) {
     if (err instanceof MmradarLookupError) {
@@ -139,7 +151,7 @@ async function fetchMmradarData(lolUsername: string): Promise<MmradarLookupResul
     } else {
       console.warn(`[fetchMmradarData] ${lolUsername}: error inesperado`, err);
     }
-    return { performanceRank: null, performanceScores: null, titles: null };
+    return { rank: null, lp: 0, performanceRank: null, performanceScores: null, titles: null, iconUrl: null, server: null };
   }
 }
 
@@ -400,9 +412,11 @@ export const server = {
   /**
    * Creates or updates the caller's own participant profile. The row is
    * matched by owner_user_id (never by a client-supplied id), and lolRank is
-   * always re-derived from the Riot API here — the form only ever sends
-   * lolUsername + lolServer, never a free-text rank, so nobody can claim
-   * Challenger by typing it in.
+   * always re-derived server-side here (mmradar.gg, ver fetchMmradarData) —
+   * the form only ever sends lolUsername, never a free-text rank, so
+   * nobody can claim Challenger by typing it in. Una sola consulta a
+   * mmradar cubre tanto el rango oficial como performance/scores/titulos
+   * (antes eran dos fetches a fuentes distintas).
    */
   saveOwnParticipant: defineAction({
     accept: "form",
@@ -414,16 +428,19 @@ export const server = {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
       }
 
-      const [{ rank }, mmradar] = await Promise.all([
-        fetchRiotRank(input.lolUsername, input.lolServer),
-        fetchMmradarData(input.lolUsername)
-      ]);
-
       const { data: existing } = await admin
         .from("participants")
-        .select("id, photo, banner")
+        .select("id, photo, banner, lol_rank")
         .eq("owner_user_id", session.userId)
         .maybeSingle();
+
+      const mmradar = await fetchMmradarData(input.lolUsername);
+      // Si mmradar no devolvio rango (fuente caida, bloqueo anti-bot, etc.)
+      // se conserva el rango ya guardado en vez de pisarlo con "Sin
+      // clasificar" — eso confundiria a un jugador que si tiene rango real
+      // pero la fuente fallo momentaneamente. Solo se usa "Sin clasificar"
+      // cuando no hay ningun valor previo (alta nueva) ni nuevo.
+      const rank = mmradar.rank ?? existing?.lol_rank ?? "Sin clasificar";
 
       const participantId = existing?.id ?? session.userId;
 
@@ -498,6 +515,8 @@ export const server = {
         performance_rank: mmradar.performanceRank,
         performance_scores: mmradar.performanceScores,
         titles: mmradar.titles,
+        mmradar_icon_url: mmradar.iconUrl,
+        mmradar_server: mmradar.server,
         updated_at: new Date().toISOString(),
         ...(photoUrl ? { photo: photoUrl } : {}),
         ...(bannerUrl ? { banner: bannerUrl } : {})
@@ -596,7 +615,7 @@ export const server = {
       // diferencia de saveOwnParticipant, aca no es obligatorio.
       const mmradar = input.lolUsername
         ? await fetchMmradarData(input.lolUsername)
-        : { performanceRank: null, performanceScores: null, titles: null };
+        : { performanceRank: null, performanceScores: null, titles: null, iconUrl: null, server: null };
 
       const row = {
         id: input.id,
@@ -621,6 +640,8 @@ export const server = {
         performance_rank: mmradar.performanceRank,
         performance_scores: mmradar.performanceScores,
         titles: mmradar.titles,
+        mmradar_icon_url: mmradar.iconUrl,
+        mmradar_server: mmradar.server,
         updated_at: new Date().toISOString(),
         ...(photoUrl ? { photo: photoUrl } : {}),
         ...(bannerUrl ? { banner: bannerUrl } : {})
@@ -674,15 +695,86 @@ export const server = {
     }
   }),
 
+  /**
+   * Re-consulta mmradar.gg para un participante ya guardado y actualiza
+   * SOLO los campos que vienen de ahi (lol_rank/performance_*/titles/
+   * mmradar_icon_url/mmradar_server) -- pensada para el boton "Update" en
+   * la ficha publica del jugador (/peleadores/[id]), que tambien mueve la
+   * barra de performance de la carta izquierda porque toca la misma fila.
+   * Permitido al dueno del perfil o a un admin de panel; nadie mas puede
+   * forzar una re-consulta de un perfil ajeno. Igual que
+   * saveOwnParticipant, si mmradar no responde se conserva el lol_rank ya
+   * guardado en vez de pisarlo con "Sin clasificar".
+   */
+  refreshMmradarData: defineAction({
+    accept: "form",
+    input: z.object({ id: z.string().min(1) }),
+    handler: async ({ id }, context) => {
+      const session = requireSession(await getSession(context.cookies, context));
+      const [admin, msg] = createSupabaseAdminClient(context.locals);
+      if (!admin) {
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
+      }
+
+      const { data: existing, error: fetchError } = await admin
+        .from("participants")
+        .select("id, owner_user_id, lol_username, lol_rank")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (fetchError || !existing) {
+        throw new ActionError({ code: "NOT_FOUND", message: "Participante no encontrado." });
+      }
+
+      const isOwner = existing.owner_user_id === session.userId;
+      if (!isOwner && !(session.isAdmin && session.passphraseVerified)) {
+        throw new ActionError({ code: "FORBIDDEN", message: "No podes actualizar el perfil de otro jugador." });
+      }
+
+      if (!existing.lol_username) {
+        throw new ActionError({ code: "BAD_REQUEST", message: "Este perfil no tiene un Riot ID cargado." });
+      }
+
+      const mmradar = await fetchMmradarData(existing.lol_username);
+      const rank = mmradar.rank ?? existing.lol_rank ?? "Sin clasificar";
+
+      const { error } = await admin
+        .from("participants")
+        .update({
+          lol_rank: rank,
+          performance_rank: mmradar.performanceRank,
+          performance_scores: mmradar.performanceScores,
+          titles: mmradar.titles,
+          mmradar_icon_url: mmradar.iconUrl,
+          mmradar_server: mmradar.server,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", id);
+
+      if (error) {
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: error.message });
+      }
+
+      return {
+        success: true,
+        lolRank: rank,
+        performanceRank: mmradar.performanceRank,
+        performanceScores: mmradar.performanceScores,
+        titles: mmradar.titles,
+        mmradarIconUrl: mmradar.iconUrl,
+        mmradarServer: mmradar.server
+      };
+    }
+  }),
+
   lookupRank: defineAction({
     accept: "form",
     input: z.object({
-      lolUsername: z.string().min(1),
-      lolServer: z.string().min(1)
+      lolUsername: z.string().min(1)
     }),
-    handler: async ({ lolUsername, lolServer }, context) => {
+    handler: async ({ lolUsername }, context) => {
       requirePanelAuth(await getSession(context.cookies, context));
-      return fetchRiotRank(lolUsername, lolServer);
+      return fetchOfficialRank(lolUsername);
     }
   }),
 
@@ -771,33 +863,29 @@ export const server = {
   }),
 
   /**
-   * Live-check for the Riot ID + server as the fighter types it in
-   * /inscripcion, driving the green check / yellow spinner / red X
-   * indicator next to the field before they submit. Requires a logged-in
-   * session (not full panel auth) so it stays usable by fighters
-   * self-registering. Never throws for the expected "still typing" or
-   * "typo" states (not_found / invalid) — only real infra failures
-   * (fuente externa caida/formato inesperado) throw, matching
-   * fetchRiotRank's own error semantics.
+   * Live-check for the Riot ID as the fighter types it in /inscripcion,
+   * driving the green check / yellow spinner / red X indicator next to
+   * the field before they submit. Ya no recibe/valida lolServer — mmradar
+   * no lo necesita (resuelve la region del lado de ellos). Requires a
+   * logged-in session (not full panel auth) so it stays usable by
+   * fighters self-registering. Never throws for the expected "still
+   * typing" or "typo" states (not_found / invalid) — only real infra
+   * failures (fuente externa caida/formato inesperado) throw, matching
+   * fetchOfficialRank's own error semantics.
    */
   checkRiotProfile: defineAction({
     accept: "form",
     input: z.object({
-      lolUsername: z.string().min(1),
-      lolServer: z.string().min(1)
+      lolUsername: z.string().min(1)
     }),
-    handler: async ({ lolUsername, lolServer }) => {
-      const serverKey = lolServer.toUpperCase();
-      if (!RANK_SOURCE_SERVERS[serverKey]) {
-        return { status: "invalid" as const, reason: "server" as const };
-      }
+    handler: async ({ lolUsername }) => {
       const [gameName, tagLine] = lolUsername.split("#");
       if (!gameName || !tagLine) {
         return { status: "invalid" as const, reason: "format" as const };
       }
 
       try {
-        const { rank } = await fetchRiotRank(lolUsername, lolServer);
+        const { rank } = await fetchOfficialRank(lolUsername);
         return { status: "found" as const, rank };
       } catch (err) {
         if (err instanceof ActionError && err.code === "NOT_FOUND") {

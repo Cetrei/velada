@@ -47,7 +47,9 @@ export const PAGES = {
     matches: {
       title: "Combates",
       subtitle: "Resultados oficiales y tarjetas de los jueces.",
-      cta: "Ver todos los combates"
+      cta: "Ver todos los combates",
+      teamsSubtitle: "Combates por equipos de La Follada del Año.",
+      teamsCta: "Ver todos los combates por equipos"
     },
     raffle: {
       title: "Sorteo Oficial",
@@ -103,7 +105,13 @@ export const PAGES = {
     winnerLabelMasc: "Ganador",
     decisionLabel: "Decisión",
     pendingResult: "Resultado pendiente",
-    emptyState: "Todavía no hay combates cargados."
+    emptyState: "Todavía no hay combates cargados.",
+    tab1v1: "1 vs 1",
+    tabTeams: "Por equipos",
+    teamsEmptyState: "Todavía no hay combates por equipos cargados.",
+    teamALabel: "Equipo A",
+    teamBLabel: "Equipo B",
+    teamWinnerLabel: "Equipo ganador"
   },
 
   predictions: {
@@ -330,8 +338,8 @@ export const PARTICIPANT_MANAGER = {
     statLabel: "Nombre del stat"
   },
   errorRequiredFields: "Completa los campos obligatorios.",
-  errorLookupMissingFields: "Completa usuario de LoL y servidor primero.",
-  successRankUpdated: "Elo actualizado desde Riot API.",
+  errorLookupMissingFields: "Completa el usuario de LoL primero.",
+  successRankUpdated: "Rango actualizado.",
   successSaved: (name: string) => `${name} guardado correctamente.`,
   successDeleted: "Participante eliminado.",
   confirmDelete: "¿Borrar este participante?",

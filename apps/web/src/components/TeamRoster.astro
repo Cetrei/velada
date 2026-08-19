@@ -1,0 +1,35 @@
+---
+import type { Participant } from "@velada/core";
+import { rankIconPath } from "@velada/core";
+
+interface Props {
+  team: Participant[];
+  label: string;
+  isWinner: boolean;
+}
+
+const { team, label, isWinner } = Astro.props;
+---
+
+<div class={`bg-lol-cardBg p-3 sm:p-4 ${isWinner ? "ring-1 ring-inset ring-lol-gold/60" : ""}`}>
+  <p class={`text-xs uppercase tracking-wide mb-2 ${isWinner ? "text-lol-gold" : "text-slate-500"}`}>
+    {label}
+    {isWinner && <span class="ml-1">★</span>}
+  </p>
+  <ul class="space-y-1.5">
+    {
+      team.map((p) => (
+        <li class="flex items-center gap-2 min-w-0">
+          <img
+            src={rankIconPath(p.lolRank)}
+            alt=""
+            class="w-4 h-4 object-contain flex-shrink-0"
+            loading="lazy"
+            onerror="this.style.display='none'"
+          />
+          <span class={`truncate text-sm ${isWinner ? "text-white font-bold" : "text-slate-300"}`}>{p.name}</span>
+        </li>
+      ))
+    }
+  </ul>
+</div>

@@ -108,7 +108,7 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
   }
 
   async function handleLookupRank() {
-    if (!form.lolUsername || !form.lolServer) {
+    if (!form.lolUsername) {
       setStatus({ type: "error", text: PARTICIPANT_MANAGER.errorLookupMissingFields });
       return;
     }
@@ -116,7 +116,6 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
     setIsLookingUpRank(true);
     const data = new FormData();
     data.set("lolUsername", form.lolUsername);
-    data.set("lolServer", form.lolServer);
 
     const { data: result, error } = await actions.lookupRank(data);
     setIsLookingUpRank(false);

@@ -1,19 +1,44 @@
 /**
  * Consulta el perfil publico de un jugador en mmradar.gg via scraping del
- * HTML servidor (mismo enfoque que rankScraper.ts con LeagueOfGraphs: sin
- * navegador headless, solo fetch + parseo de texto).
+ * HTML servidor (sin navegador headless, solo fetch + parseo de texto).
+ * Fuente unica del rango de un jugador en este proyecto — ver decision
+ * del usuario 2026-08-18: se elimino LeagueOfGraphs/rankScraper.ts por
+ * completo, mmradar es lo unico que se consulta.
  *
- * A diferencia de LeagueOfGraphs, mmradar.gg expone en el mismo HTML:
- * - Un "Performance Rank" (tier+division) separado del rango oficial de
- *   Riot — es un ranking propio de mmradar basado en desempeno real, no
- *   en LP.
+ * mmradar.gg expone en el mismo HTML (confirmado contra un HTML real de
+ * ejemplo del perfil "OneShotOneKill#sigma", LAN):
+ * - Un "Current Rank" (tier+division+LP): el rango oficial de Riot
+ *   (Solo/Duo), igual al que mostraria el cliente del juego. Es lo que se
+ *   guarda como `lolRank`/rango "oficial" de cada peleador.
+ *   <div id="current-rank" class="rank-box">...<h4>Current Rank</h4>
+ *   <p>PLATINUM II <span class="rank-lp">(67LP)</span></p></div>
+ * - Un "Performance Rank" (tier+division) separado: un ranking propio de
+ *   mmradar basado en desempeno real reciente, no en LP.
+ *   <div id="performance-rank" class="rank-box">...
+ *   <h4>Performance<img ... data-tooltip="..."></h4>
+ *   <p>EMERALD IV</p></div>
  * - 6 scores individuales (Laning, Farming, Objectives, Combat, Teamfight,
- *   Vision) en escala 0-100 aprox, promedio de las ultimas partidas.
- * - Titulos otorgados por el sitio (ej. "OTP Kindred", "Duelist", "MVP").
+ *   Vision), escala real de cientos/miles (ej. 1780, 2220 -- NO 0-100,
+ *   pese a lo que sugeria un comentario viejo de este archivo), promedio
+ *   de las ultimas partidas. Viven en <p id="player-average-{stat}-score">.
+ *   OJO: tambien existe un <p id="player-average-score"> (SIN sufijo de
+ *   stat) que es el score total/general del jugador, no uno de los 6
+ *   stats -- el patron de parsePerformanceScores exige el sufijo para no
+ *   confundirlo con ese.
+ * - Titulos otorgados por el sitio (ej. "OTP Kindred", "Duelist", "MVP"),
+ *   en <div id="player-titles"><p class="player-title ...">TEXTO</p>...
+ * - Icono de invocador: <img id="summoner-icon" src="...">, con el nivel
+ *   como numero suelto al lado en <p id="summoner-level">574</p> (no se
+ *   usa aca, solo el icono).
+ * - Nombre + tag: <a id="summoner-name">OneShotOneKill<span
+ *   id="summoner-tag"> #sigma</span></a> -- no se usa para nada (ya lo
+ *   tenemos de lolUsername), documentado por completitud.
+ * - Servidor/region: <p id="region">LAN</p>, junto al nombre.
  *
  * URL del perfil: https://mmradar.gg/summoner/{Nombre}-{Tag}
- * (el nombre de invocador va tal cual, con guion antes del tag; a
- * diferencia de LeagueOfGraphs, mmradar no fuerza minusculas en el path).
+ * (el nombre de invocador va tal cual, con guion antes del tag; no exige
+ * minusculas ni un servidor/region en la URL — mmradar resuelve la region
+ * del lado de ellos).
  */
 
 export type MmradarLookupErrorReason =
@@ -40,15 +65,25 @@ export interface MmradarPerformanceScores {
   vision: number;
 }
 
+export interface MmradarCurrentRank {
+  rank: string;
+  leaguePoints: number;
+}
+
 export interface MmradarProfileResult {
+  currentRank: MmradarCurrentRank | null;
   performanceRank: string;
   performanceScores: MmradarPerformanceScores | null;
   titles: string[];
+  /** URL del icono de invocador (id="summoner-icon"). null si no se encontro -- no es un error, el componente que lo consume simplemente no lo muestra. */
+  iconUrl: string | null;
+  /** Servidor/region tal como lo muestra mmradar junto al nombre (id="region", ej. "LAN"). null si no se encontro. */
+  server: string | null;
 }
 
 /**
  * "OneShotOneKill#sigma" -> "OneShotOneKill-sigma". mmradar preserva
- * mayusculas del nombre (confirmado contra el HTML de ejemplo:
+ * mayusculas del nombre (confirmado contra el HTML real:
  * "/summoner/OneShotOneKill-sigma"), a diferencia del slug todo-minuscula
  * que exige LeagueOfGraphs.
  */
@@ -87,13 +122,51 @@ function stripTags(fragment: string): string {
 }
 
 /**
- * El bloque de "Performance Rank" en el HTML de ejemplo se ve como:
- *   <h4 style="...">Performance<img ... data-tooltip="..."></h4>
- *   <p style="color: rgb(73, 177, 111);">EMERALD IV</p>
- * Se busca el marcador de texto "Performance" y se toma una ventana
- * despues de el, igual que rankScraper.ts hace con "Soloqueue" — por
- * patrones de texto, no por nombres de clase CSS (fragiles ante cambios
- * del sitio de terceros).
+ * El bloque de "Current Rank" en el HTML real se ve como:
+ *   <div id="current-rank" class="rank-box">
+ *     ...
+ *     <h4>Current Rank</h4>
+ *     <p style="color: rgb(30, 167, 191);">PLATINUM II <span class="rank-lp">(67LP)</span></p>
+ *   </div>
+ * Se ancla en "Current Rank</h4>" (con el cierre de tag) para no matchear
+ * ninguna otra aparicion suelta del texto en la pagina. "Unranked" (sin
+ * clasificar) es un resultado valido -> null, no un error.
+ */
+function parseCurrentRank(html: string): MmradarCurrentRank | null {
+  const marker = "Current Rank</h4>";
+  const idx = html.indexOf(marker);
+  if (idx === -1) return null;
+
+  const window = html.slice(idx + marker.length, idx + marker.length + 300);
+  const text = stripTags(window);
+
+  if (/\bUnranked\b/i.test(text) && !TIER_WORDS.some((t) => text.includes(t))) {
+    return null;
+  }
+
+  const tierPattern = new RegExp(`\\b(${TIER_WORDS.join("|")})\\b\\s*(I{1,3}|IV)?`, "i");
+  const match = text.match(tierPattern);
+  if (!match) return null;
+
+  const tier = match[1].charAt(0).toUpperCase() + match[1].slice(1).toLowerCase();
+  const division = match[2] ? ` ${match[2].toUpperCase()}` : "";
+
+  const lpMatch = text.match(/\((\d+)\s*LP\)/i);
+  const leaguePoints = lpMatch ? Number(lpMatch[1]) : 0;
+
+  return { rank: `${tier}${division}`, leaguePoints };
+}
+
+/**
+ * El bloque de "Performance Rank" en el HTML real se ve como:
+ *   <div id="performance-rank" class="rank-box">
+ *     ...
+ *     <h4 style="...">Performance<img ... data-tooltip="..."></h4>
+ *     <p style="color: rgb(73, 177, 111);">EMERALD IV</p>
+ *   </div>
+ * Se busca el marcador de texto "Performance</h4>" y se toma una ventana
+ * despues de el — por patrones de texto, no por nombres de clase CSS
+ * (fragiles ante cambios del sitio de terceros).
  */
 function parsePerformanceRank(html: string): string | null {
   const marker = "Performance</h4>";
@@ -113,9 +186,11 @@ function parsePerformanceRank(html: string): string | null {
 }
 
 /**
- * Los 6 scores viven en <p id="player-average-{stat}-score" ...>N</p>
- * dentro de #total-average-stats — id's estables y explicitos en el HTML
- * de ejemplo, mas confiables que buscar por posicion/orden visual.
+ * Los 6 scores viven en <p id="player-average-{stat}-score" ...>N</p> --
+ * ids estables y explicitos en el HTML real, mas confiables que buscar
+ * por posicion/orden visual. El patron exige el sufijo -{stat}- para no
+ * matchear el <p id="player-average-score"> general (score total del
+ * jugador, sin sufijo, que no es ninguno de los 6 stats individuales).
  */
 function parsePerformanceScores(html: string): MmradarPerformanceScores | null {
   const keys: (keyof MmradarPerformanceScores)[] = [
@@ -152,6 +227,56 @@ function parseTitles(html: string): string[] {
   return titleMatches.map((m) => m[1].trim()).filter((t) => t.length > 0);
 }
 
+/**
+ * El icono de invocador tiene un id explicito y estable en el HTML real:
+ * <img id="summoner-icon" src="https://mmradar.fra1.cdn.digitaloceanspaces.com/.../5091.webp">
+ * Se busca por ese id en vez de "la primera img del bloque de cabecera"
+ * (fragil si el sitio agrega mas imagenes antes, como ya pasa con el
+ * banner de fondo id="summoner-info-background-image" que aparece ANTES
+ * en el HTML). null si no se encuentra -- no es un error, el componente
+ * que consume esto simplemente no muestra el icono, sin dejar hueco.
+ */
+function parseIconUrl(html: string): string | null {
+  const match = html.match(/id="summoner-icon"[^>]*src="([^"]+)"/i);
+  return match ? match[1] : null;
+}
+
+/**
+ * El servidor/region tiene su propio id explicito: <p id="region">LAN</p>.
+ * Se busca por ese id (mas confiable que buscar texto de region conocido
+ * en una ventana generica, que podia matchear falsos positivos en otra
+ * parte de la pagina).
+ */
+function parseServer(html: string): string | null {
+  const match = html.match(/id="region"[^>]*>([^<]+)</i);
+  return match ? match[1].trim() : null;
+}
+
+/**
+ * Marcadores textuales de "jugador no encontrado" que mmradar puede
+ * devolver con un 200 (pagina normal con mensaje de error) o con un
+ * status HTTP de error propio del sitio (no necesariamente 404) cuando la
+ * Riot API no encuentra el Riot ID consultado -- confirmado que esto
+ * pasaba mal clasificado como "source_unavailable" en vez de "not_found"
+ * (bug real encontrado via bun run test:scrapping, ver fetchMmradarProfile
+ * mas abajo). Se buscan por texto, no por status, porque el status por si
+ * solo no alcanza para distinguir "no existe" de "la fuente esta caida".
+ */
+function looksLikeNotFoundPage(html: string): boolean {
+  const markers = [
+    "summoner not found",
+    "player not found",
+    "couldn't find",
+    "could not find",
+    "no summoner found",
+    "we couldn't find this summoner",
+    "account not found",
+    "riot id not found"
+  ];
+  const lower = html.toLowerCase();
+  return markers.some((marker) => lower.includes(marker));
+}
+
 const BROWSER_LIKE_HEADERS: Record<string, string> = {
   "User-Agent":
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
@@ -179,12 +304,13 @@ function looksLikeChallengePage(html: string): boolean {
 }
 
 /**
- * Fuente unica de verdad del perfil de mmradar, pensada para usarse desde
- * Astro Actions igual que fetchRankFromLeagueOfGraphs. No requiere API
- * key. Misma limitacion conocida que el scraper de LeagueOfGraphs: sitios
- * detras de Cloudflare pueden bloquear peticiones sin navegador real,
- * sobre todo desde IPs de datacenter (Cloudflare Workers) — cuando pasa,
- * se lanza "source_unavailable" en vez de fingir un resultado.
+ * Fuente unica de verdad del perfil de un jugador en este proyecto
+ * (rango oficial + performance + scores + titulos + icono + server),
+ * pensada para usarse desde Astro Actions. No requiere API key.
+ * Limitacion conocida: sitios detras de Cloudflare pueden bloquear
+ * peticiones sin navegador real, sobre todo desde IPs de datacenter
+ * (Cloudflare Workers) — cuando pasa, se lanza "source_unavailable" en
+ * vez de fingir un resultado.
  */
 export async function fetchMmradarProfile(lolUsername: string): Promise<MmradarProfileResult> {
   const url = mmradarProfileUrl(lolUsername);
@@ -209,7 +335,27 @@ export async function fetchMmradarProfile(lolUsername: string): Promise<MmradarP
   if (response.status === 404) {
     throw new MmradarLookupError("not_found", "No encontramos ese Riot ID en mmradar.gg.");
   }
+
+  // Bug real encontrado 2026-08-18 (bun run test:scrapping): para un Riot
+  // ID inexistente mmradar NO siempre responde 404 -- puede devolver otro
+  // status de error propio de su backend (ej. cuando la Riot API no
+  // encuentra el nombre) cuyo body igual trae un mensaje de "no
+  // encontrado" legible. Antes esto caia directo a "source_unavailable"
+  // sin siquiera leer el body, lo cual es incorrecto: hay que inspeccionar
+  // el contenido antes de rendirse a "fuente caida". Solo si el body NO
+  // da ninguna senal de "no encontrado" se asume que es un error real de
+  // la fuente.
   if (!response.ok) {
+    const errorBody = await response.text().catch(() => "");
+    if (looksLikeNotFoundPage(errorBody)) {
+      throw new MmradarLookupError("not_found", "No encontramos ese Riot ID en mmradar.gg.");
+    }
+    if (looksLikeChallengePage(errorBody)) {
+      throw new MmradarLookupError(
+        "source_unavailable",
+        "mmradar.gg bloqueo la consulta (proteccion anti-bot detectada en el contenido)."
+      );
+    }
     throw new MmradarLookupError(
       "source_unavailable",
       `mmradar.gg respondio con un error (${response.status}).`
@@ -229,6 +375,10 @@ export async function fetchMmradarProfile(lolUsername: string): Promise<MmradarP
     throw new MmradarLookupError("not_found", "No encontramos ese Riot ID en mmradar.gg.");
   }
 
+  if (looksLikeNotFoundPage(html)) {
+    throw new MmradarLookupError("not_found", "No encontramos ese Riot ID en mmradar.gg.");
+  }
+
   try {
     const performanceRank = parsePerformanceRank(html);
     if (!performanceRank) {
@@ -239,9 +389,12 @@ export async function fetchMmradarProfile(lolUsername: string): Promise<MmradarP
     }
 
     return {
+      currentRank: parseCurrentRank(html),
       performanceRank,
       performanceScores: parsePerformanceScores(html),
-      titles: parseTitles(html)
+      titles: parseTitles(html),
+      iconUrl: parseIconUrl(html),
+      server: parseServer(html)
     };
   } catch (err) {
     if (err instanceof MmradarLookupError) throw err;

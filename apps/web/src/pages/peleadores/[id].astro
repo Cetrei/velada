@@ -1,7 +1,9 @@
 ---
 import Layout from "../../layouts/Layout.astro";
 import PlayerCard from "../../components/PlayerCard";
-import { loadParticipants } from "../../lib/loadParticipants";
+import MmradarPanel from "../../components/MmradarPanel";
+import { getSession } from "../../lib/session";
+import { loadParticipants, findParticipantByOwner } from "../../lib/loadParticipants";
 import { fetchMatches, fetchPredictionTallies } from "../../lib/matches";
 import { PAGES, flagForCountry } from "@velada/core";
 
@@ -12,6 +14,23 @@ const participant = participants.find((p) => p.id === id);
 
 if (!participant) {
   return Astro.rewrite("/404");
+}
+
+// El boton "Actualizar" de MmradarPanel solo se muestra si el visitante es
+// el dueno de este perfil o un admin de panel ya autenticado (mismo
+// criterio de permisos que refreshMmradarData en actions/index.ts). No se
+// expone ownerUserId al cliente: se re-consulta el perfil propio del
+// visitante (si hay sesion) y se compara el id, igual que hace
+// /mi-perfil para saber si ya existe una ficha.
+const session = await getSession(Astro.cookies, Astro);
+let canUpdateMmradar = false;
+if (session) {
+  if (session.isAdmin && session.passphraseVerified) {
+    canUpdateMmradar = true;
+  } else {
+    const ownProfile = await findParticipantByOwner(session.userId, Astro.locals);
+    canUpdateMmradar = ownProfile?.id === participant.id;
+  }
 }
 
 const participantsById = Object.fromEntries(participants.map((p) => [p.id, p]));
@@ -56,7 +75,8 @@ const copy = PAGES.fighterDetail;
               lolRank: participant.lolRank,
               photo: participant.photo,
               banner: participant.banner,
-              stats: participant.stats
+              stats: participant.stats,
+              performanceRank: participant.performanceRank
             }}
             className="clip-edges"
           />
@@ -112,6 +132,22 @@ const copy = PAGES.fighterDetail;
           )}
 
           {participant.description && <p class="text-slate-300 leading-relaxed mb-8">{participant.description}</p>}
+
+          <div class="mb-8">
+            <MmradarPanel
+              client:load
+              participant={{
+                id: participant.id,
+                name: participant.name,
+                performanceRank: participant.performanceRank,
+                performanceScores: participant.performanceScores,
+                titles: participant.titles,
+                mmradarIconUrl: participant.mmradarIconUrl,
+                mmradarServer: participant.mmradarServer
+              }}
+              canUpdate={canUpdateMmradar}
+            />
+          </div>
 
           <div class="flex items-center justify-between bg-lol-cardBg border border-lol-border p-5 mb-8">
             <div>

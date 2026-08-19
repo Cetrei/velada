@@ -926,6 +926,126 @@ era el de arriba, no whitelist).
   editar/borrar un team match a mano. Mandar detalle o captura del boton
   que se renderiza mal en el panel.
 
+## Sesion 2026-08-18 (13): eliminado LeagueOfGraphs, mmradar.gg unica fuente de rango (en progreso)
+- Bug real reportado por el usuario con captura: `/inscripcion` mostraba
+  "No pudimos consultar tu rango ahora mismo" en el campo de Riot ID. Causa:
+  `checkRiotProfile`/`lookupRank`/`saveOwnParticipant`/`saveParticipant`
+  seguian usando `fetchRiotRank` -> `fetchRankFromLeagueOfGraphs`
+  (rankScraper.ts) para el rango "oficial", pese a que la sesion (11) ya
+  habia agregado mmradar.gg como fuente SECUNDARIA (solo performance/
+  scores/titulos). El usuario confirmo explicitamente: reemplazar
+  LeagueOfGraphs por completo, mmradar.gg pasa a ser la UNICA fuente de
+  rango (tambien del rango "oficial"/lolRank, no solo performance).
+- `packages/core/mmradarScraper.ts`: agregado `parseCurrentRank` (nuevo
+  campo `currentRank: { rank, leaguePoints } | null` en
+  `MmradarProfileResult`) que parsea el bloque "Current Rank" del HTML
+  (`<h4>Current Rank</h4>` seguido de tier+division+"(NNLp)") — mismo
+  patron de deteccion por texto que ya usaba `parsePerformanceRank`.
+  Confirmado contra el HTML real de ejemplo que mando el usuario
+  (`PLATINUM II <span class="rank-lp">(67LP)</span>`).
+- `packages/core/rankScraper.ts`: vaciado a un stub `export {}` con
+  comentario DEPRECATED (mismo patron que `Roulette.tsx`/
+  `rank-scraper.test.ts` de sesiones anteriores — el MCP de filesystem no
+  expone delete). Sacado de `packages/core/index.ts`.
+- `apps/web/src/actions/index.ts`: `fetchRiotRank` (LeagueOfGraphs) borrada
+  por completo. Nueva `fetchOfficialRank(lolUsername)` (sin `lolServer`,
+  mmradar no lo necesita) sobre `fetchMmradarProfile().currentRank`, usada
+  por `lookupRank`/`checkRiotProfile`. `fetchMmradarData` ahora devuelve
+  TAMBIEN `rank`/`lp` ademas de performance/scores/titulos — una sola
+  consulta a mmradar en vez de dos fetches a fuentes distintas.
+  `saveOwnParticipant`: si mmradar no devuelve rango (fuente caida), se
+  conserva el `lol_rank` ya guardado en la fila en vez de pisarlo con
+  "Sin clasificar" (bug que se hubiera introducido si simplemente se
+  reemplazaba `fetchRiotRank` 1:1 — antes un fallo de la fuente TIRABA
+  error y no guardaba nada; ahora `fetchMmradarData` nunca lanza, asi que
+  hacia falta este fallback explicito para no perder un rango real).
+  `lookupRank`/`checkRiotProfile` ya no reciben/validan `lolServer`.
+- Frontend: `ParticipantProfileForm.tsx` (el debounce de `checkRiotProfile`
+  ya no depende de `form.lolServer` para dispararse ni lo manda en el
+  FormData) y `ParticipantManager.tsx` (`handleLookupRank` idem). El campo
+  `lolServer` SIGUE existiendo en ambos forms y en el schema (dato
+  informativo del jugador, se sigue guardando en la fila) — solo se dejo
+  de usar para el lookup de rango en si.
+- Test nuevo `scripts/test-mmradar-scraper.test.ts` (mismo patron que el
+  extinto test de LeagueOfGraphs: consulta real a mmradar.gg contra
+  `OneShotOneKill#sigma`, sin mocks, tolera bloqueo anti-bot sin fallar el
+  test). `scripts/test-rank-scraper.test.ts` vaciado a stub DEPRECATED.
+  `package.json` -> `test:scrapping` apunta al test nuevo.
+  `scripts/setup-cloudflare-secrets.ts`: corregido comentario que
+  mencionaba LeagueOfGraphs.
+- **Pendiente de esta sesion (continua)**: el usuario tambien pidio (1)
+  separar 1v1 vs equipos en `/combates` y en el landing, (2) que el scroll
+  del landing sea libre excepto el hero (que mantenga resistencia/
+  transicion al cruzar su borde en ambas direcciones), (3) confirmar que ya
+  no hace falta ningun servidor separado (confirmado: no existe
+  `apps/server` en el repo, el proyecto es 100% Cloudflare Workers +
+  Astro SSR + Supabase, ya documentado en sesiones anteriores). Esos 3
+  puntos se abordan a continuacion en la misma sesion si el tiempo/contexto
+  alcanza; si no, quedan para la proxima.
+- Pendiente para el usuario (sin bash real sobre el proyecto en esta
+  sesion tampoco, todo via filesystem MCP): correr `bun install` +
+  `bun run test:scrapping` para confirmar que la consulta a mmradar.gg
+  sigue funcionando y que `currentRank` se parsea bien contra un perfil
+  real; `bun run dev` y probar `/inscripcion` con un Riot ID real para
+  confirmar que el indicador verde/rojo ya no menciona error de fuente.
+
+## Sesion 2026-08-18 (14): terminado MmradarPanel.tsx (unico pendiente real de la sesion (13)/chat previo)
+- Retomando la sesion (13) y un chat previo no documentado en este
+  AGENT.md: se sospechaba que faltaba wiring de `iconUrl`/`server` en
+  `actions/index.ts` y el componente `MmradarPanel.tsx` para la ficha
+  publica. Revisado todo el codigo real via filesystem MCP antes de tocar
+  nada: `mmradarScraper.ts` (fix not_found/source_unavailable + parseo de
+  icono/server/currentRank), `actions/index.ts`
+  (`fetchMmradarData`/`saveOwnParticipant`/`saveParticipant`/
+  `refreshMmradarData`), `loadParticipants.ts`, `schemas.ts`, y el DDL en
+  `setup-supabase.ts` (columnas `mmradar_icon_url`/`mmradar_server`) YA
+  estaban completos y correctos -- otra sesion, no documentada aca, los
+  habia terminado despues del chat que trajo el usuario. `PlayerCard.tsx`
+  tambien ya tenia la linea de `performanceRank`.
+- Lo unico que faltaba de verdad: **`MmradarPanel.tsx` nunca se habia
+  creado**, y `/peleadores/[id].astro` no lo importaba ni le pasaba
+  `performanceRank` a `PlayerCard`. Creado
+  `apps/web/src/components/MmradarPanel.tsx` con `filesystem:write_file`
+  (nunca `create_file`, confirmado releyendo desde disco real despues) --
+  titulos/tags arriba, icono + nombre + server + performance rank, boton
+  "Actualizar" (solo visible si `canUpdate`, llama a la action
+  `refreshMmradarData` ya existente) y las 6 barras de performance
+  normalizadas contra el maximo de las 6 (mismo criterio que
+  `TeamMatchManager`/`skillRating.ts`, mmradar no documenta una escala fija
+  0-100 para estos scores).
+- `peleadores/[id].astro`: agregado `performanceRank` al objeto que recibe
+  `PlayerCard` (faltaba ahi especificamente, aunque el componente ya lo
+  soportaba). Agregado calculo de `canUpdateMmradar` server-side: admin de
+  panel ya autenticado (passphrase incluida), o el dueño del perfil
+  (comparando `findParticipantByOwner(session.userId).id` contra el id de
+  la pagina -- nunca se expone `ownerUserId` al cliente). `MmradarPanel` se
+  inserta como bloque nuevo arriba del bloque de "rival" existente -- el
+  plan original de la sesion cortada decia "reemplazar" el bloque de
+  rival, pero ese bloque tiene funcionalidad real (link al combate +
+  seccion de pronosticos debajo depende de `rival`/`match`) que no estaba
+  pedido romper, asi que se opto por agregar sin eliminar en vez de
+  arriesgar una regresion no solicitada.
+- **No tocado, marcado para confirmar con el usuario**: `SITE.name` en
+  `packages/core/content.ts` es literalmente "La Follada del Año",
+  usado en el titulo del sitio, footer, y varios `tabTitle` de paginas --
+  contenido sexual explicito repetido consistentemente en decenas de
+  lugares como el nombre del evento. A diferencia de los placeholders
+  puntuales con slurs que sesiones anteriores (5)/(6) corrigieron sin
+  preguntar (esos eran datos de ejemplo claramente accidentales/no
+  pedidos), esto es el branding del sitio completo, consistente, y el
+  proyecto es explicitamente "un evento entre amigos" -- podria ser una
+  joda intencional del propio usuario. No se cambio unilateralmente; si
+  el usuario confirma que fue un error o quiere otro nombre, es un
+  cambio de una sola constante en `content.ts`.
+- Pendiente para el usuario (sin bash real sobre el proyecto en esta
+  sesion tampoco, todo via filesystem MCP): correr `bun install` +
+  `bun run dev`, entrar a la ficha de un peleador con datos de mmradar
+  cargados y confirmar visualmente el panel nuevo (icono, tags, barras,
+  boton Actualizar si sos el dueño o admin), y probar el boton Actualizar
+  end-to-end (llama `refreshMmradarData`, deberia refrescar sin recargar
+  la pagina). Confirmar si `SITE.name`/el titulo del sitio es intencional
+  o hay que cambiarlo.
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.

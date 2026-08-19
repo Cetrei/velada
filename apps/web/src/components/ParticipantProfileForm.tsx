@@ -105,7 +105,7 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
     if (riotCheckTimer.current) clearTimeout(riotCheckTimer.current);
 
     const username = form.lolUsername.trim();
-    if (!username || !form.lolServer) {
+    if (!username) {
       setRiotCheck({ status: "idle" });
       return;
     }
@@ -117,7 +117,6 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
       try {
         const form2 = new FormData();
         form2.set("lolUsername", username);
-        form2.set("lolServer", form.lolServer);
         const { data, error } = await actions.checkRiotProfile(form2);
         if (requestId !== riotCheckRequestId.current) return;
         if (error) {
@@ -139,7 +138,7 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
     return () => {
       if (riotCheckTimer.current) clearTimeout(riotCheckTimer.current);
     };
-  }, [form.lolUsername, form.lolServer]);
+  }, [form.lolUsername]);
 
   // Genera un object URL local para previsualizar la foto/banner elegidos
   // en la PlayerCard antes de subirlos de verdad (recien se suben al hacer

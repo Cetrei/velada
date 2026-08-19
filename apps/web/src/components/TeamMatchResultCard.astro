@@ -1,0 +1,90 @@
+---
+import type { Participant, TeamMatch } from "@velada/core";
+import { PAGES } from "@velada/core";
+import TeamRoster from "./TeamRoster.astro";
+
+interface Props {
+  teamMatch: TeamMatch;
+  participantsById: Record<string, Participant>;
+  index: number;
+}
+
+const { teamMatch, participantsById, index } = Astro.props;
+const copy = PAGES.matches;
+
+const teamA = teamMatch.teamAIds.map((id) => participantsById[id]).filter((p): p is Participant => Boolean(p));
+const teamB = teamMatch.teamBIds.map((id) => participantsById[id]).filter((p): p is Participant => Boolean(p));
+
+const winnerTeam = teamMatch.winnerTeam;
+---
+
+<div
+  class="reveal-on-scroll bg-lol-cardBg border border-lol-border overflow-hidden clip-edges"
+  style={`transition-delay: ${(index % 4) * 80}ms`}
+>
+  {
+    teamMatch.name && (
+      <p class="text-center text-xs uppercase tracking-wide text-slate-500 pt-3">{teamMatch.name}</p>
+    )
+  }
+
+  <div class="grid grid-cols-2 gap-px bg-lol-border/50 mt-3">
+    <TeamRoster team={teamA} label={copy.teamALabel} isWinner={winnerTeam === "A"} />
+    <TeamRoster team={teamB} label={copy.teamBLabel} isWinner={winnerTeam === "B"} />
+  </div>
+
+  <div class="relative -mt-4 flex justify-center z-20">
+    <div class="w-10 h-10 bg-lol-darkBg border border-lol-gold rotate-45 flex items-center justify-center">
+      <span class="text-lol-gold font-display font-bold text-xs -rotate-45">VS</span>
+    </div>
+  </div>
+
+  <div class="px-6 pb-5 pt-2 text-center">
+    {
+      winnerTeam ? (
+        <>
+          <p class="text-xs uppercase text-slate-500 tracking-wide">{copy.teamWinnerLabel}</p>
+          <p class="font-display text-lg font-bold text-lol-gold uppercase">
+            {winnerTeam === "A" ? copy.teamALabel : copy.teamBLabel}
+          </p>
+        </>
+      ) : (
+        <p class="text-sm text-slate-500 uppercase tracking-wide">{copy.pendingResult}</p>
+      )
+    }
+  </div>
+</div>
+
+<script>
+  const observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("is-visible");
+          observer.unobserve(entry.target);
+        }
+      }
+    },
+    { threshold: 0.15 }
+  );
+  document.querySelectorAll(".reveal-on-scroll").forEach((el) => observer.observe(el));
+</script>
+
+<style>
+  .reveal-on-scroll {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .reveal-on-scroll.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal-on-scroll {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+  }
+</style>

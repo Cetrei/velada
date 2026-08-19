@@ -18,8 +18,8 @@ const GITHUB_ACTIONS_SECRETS = [
 // subida de fotos) falla en producción con "Supabase admin no
 // configurado.", y sin ADMIN_EMAILS/PANEL_PASSPHRASE el login de admin y
 // el gate del panel fallan tambien, aunque el build haya sido exitoso.
-// RIOT_API_KEY ya NO hace falta: el lookup de rango scrapea LeagueOfGraphs
-// (packages/core/rankScraper.ts), no llama a la Riot API.
+// RIOT_API_KEY ya NO hace falta: el lookup de rango scrapea mmradar.gg
+// (packages/core/mmradarScraper.ts), no llama a la Riot API.
 const WORKER_RUNTIME_SECRETS = ["SUPABASE_SERVICE_ROLE_KEY", "PANEL_PASSPHRASE", "ADMIN_EMAILS"] as const;
 
 function parseEnvFile(path: string): Record<string, string> {

@@ -17,6 +17,8 @@ export interface PlayerCardData {
   photo?: string | null;
   banner?: string | null;
   stats?: ParticipantStat[];
+  /** Performance rank de mmradar.gg (ver packages/core/mmradarScraper.ts), el mismo valor que usa el balanceador de equipos para el skill rating. Se muestra como resumen entre el header y las stats custom. */
+  performanceRank?: string | null;
 }
 
 interface PlayerCardProps {
@@ -82,6 +84,13 @@ export default function PlayerCard({ data, className = "" }: PlayerCardProps) {
           )}
         </div>
         {data.favChampion && <p className="player-card-champion">{data.favChampion}</p>}
+
+        {data.performanceRank && (
+          <p className="player-card-performance">
+            <span className="player-card-performance-label">Performance</span>
+            <span className="player-card-performance-value">{data.performanceRank}</span>
+          </p>
+        )}
 
         {visibleStats.length > 0 && (
           <div className="player-card-stats">
@@ -236,6 +245,31 @@ export default function PlayerCard({ data, className = "" }: PlayerCardProps) {
           font-size: clamp(0.6rem, 2cqw, 0.75rem);
           text-transform: uppercase;
           letter-spacing: 0.04em;
+        }
+
+        .player-card-performance {
+          margin: clamp(6px, 2%, 10px) 0 0;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          padding: 4px 8px;
+          background: rgba(200, 170, 110, 0.08);
+          border: 1px solid rgba(200, 170, 110, 0.25);
+          border-radius: 3px;
+        }
+
+        .player-card-performance-label {
+          font-size: clamp(0.5rem, 1.6cqw, 0.62rem);
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          color: #a09b8c;
+        }
+
+        .player-card-performance-value {
+          font-size: clamp(0.62rem, 2cqw, 0.78rem);
+          font-weight: 700;
+          color: #4FC3E8;
         }
 
         .player-card-stats {

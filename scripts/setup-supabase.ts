@@ -140,6 +140,14 @@ ALTER TABLE participants ADD COLUMN IF NOT EXISTS x_followers TEXT;
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS performance_rank TEXT;
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS performance_scores JSONB;
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS titles JSONB;
+-- Icono de invocador y servidor/region tal como los muestra mmradar.gg
+-- (ver packages/core/mmradarScraper.ts parseIconUrl/parseServer). Se
+-- guardan junto al resto de datos de mmradar en el mismo upsert, nunca
+-- escritos a mano. mmradar_icon_url puede quedar NULL si el sitio no
+-- expone el icono para ese perfil -- el componente que lo consume
+-- simplemente no lo muestra en ese caso, sin dejar espacio en blanco.
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS mmradar_icon_url TEXT;
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS mmradar_server TEXT;
 
 -- Combates por equipos (5v5 o mezclas de 4v4/3v3) del evento mayor,
 -- separados de matches (que es siempre 1v1, de la ruleta). Un solo

@@ -1,0 +1,25 @@
+---
+import type { Participant, TeamMatch } from "@velada/core";
+import { PAGES } from "@velada/core";
+import TeamMatchResultCard from "./TeamMatchResultCard.astro";
+
+interface Props {
+  teamMatches: TeamMatch[];
+  participantsById: Record<string, Participant>;
+}
+
+const { teamMatches, participantsById } = Astro.props;
+const copy = PAGES.matches;
+---
+
+{
+  teamMatches.length === 0 ? (
+    <p class="text-center text-slate-500">{copy.teamsEmptyState}</p>
+  ) : (
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+      {teamMatches.map((teamMatch, index) => (
+        <TeamMatchResultCard teamMatch={teamMatch} participantsById={participantsById} index={index} />
+      ))}
+    </div>
+  )
+}

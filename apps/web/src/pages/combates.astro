@@ -1,14 +1,17 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import MatchesSection from "../components/MatchesSection.astro";
+import TeamMatchesSection from "../components/TeamMatchesSection.astro";
 import { loadParticipants } from "../lib/loadParticipants";
 import { fetchMatches, withOfficialResult } from "../lib/matches";
+import { fetchTeamMatches } from "../lib/teamMatches";
 import { PAGES } from "@velada/core";
 
 const participants = await loadParticipants();
 const participantsById = Object.fromEntries(participants.map((p) => [p.id, p]));
 const allMatches = await fetchMatches();
 const officialMatches = withOfficialResult(allMatches);
+const teamMatches = await fetchTeamMatches();
 
 const copy = PAGES.matches;
 ---
@@ -16,7 +19,7 @@ const copy = PAGES.matches;
 <Layout title={copy.tabTitle}>
   <section class="pt-32 pb-24 bg-lol-darkBg min-h-screen">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="text-center mb-16">
+      <div class="text-center mb-10">
         <h1 class="font-display text-4xl md:text-5xl font-bold text-white uppercase tracking-wider">
           {copy.title}
         </h1>
@@ -26,7 +29,64 @@ const copy = PAGES.matches;
         </p>
       </div>
 
-      <MatchesSection matches={officialMatches} participantsById={participantsById} />
+      <div class="matches-tabs">
+        <input type="radio" name="matches-tab" id="tab-1v1" class="matches-tab-input" checked />
+        <input type="radio" name="matches-tab" id="tab-teams" class="matches-tab-input" />
+
+        <div class="matches-tab-labels flex justify-center gap-2 mb-12">
+          <label for="tab-1v1" class="matches-tab-label">{copy.tab1v1}</label>
+          <label for="tab-teams" class="matches-tab-label">{copy.tabTeams}</label>
+        </div>
+
+        <div class="matches-tab-panel" id="panel-1v1">
+          <MatchesSection matches={officialMatches} participantsById={participantsById} />
+        </div>
+        <div class="matches-tab-panel" id="panel-teams">
+          <TeamMatchesSection teamMatches={teamMatches} participantsById={participantsById} />
+        </div>
+      </div>
     </div>
   </section>
 </Layout>
+
+<style>
+  .matches-tab-input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .matches-tab-label {
+    padding: 0.6rem 1.5rem;
+    border: 1px solid rgba(200, 170, 110, 0.3);
+    color: #94a3b8;
+    font-family: var(--font-display, inherit);
+    font-weight: 700;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: color 0.2s, background-color 0.2s, border-color 0.2s;
+    user-select: none;
+  }
+
+  .matches-tab-label:hover {
+    color: #c8aa6e;
+  }
+
+  .matches-tab-panel {
+    display: none;
+  }
+
+  #tab-1v1:checked ~ .matches-tab-labels label[for="tab-1v1"],
+  #tab-teams:checked ~ .matches-tab-labels label[for="tab-teams"] {
+    background-color: #c8aa6e;
+    border-color: #c8aa6e;
+    color: #0a1428;
+  }
+
+  #tab-1v1:checked ~ #panel-1v1,
+  #tab-teams:checked ~ #panel-teams {
+    display: block;
+  }
+</style>
