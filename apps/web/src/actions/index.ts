@@ -697,16 +697,17 @@ export const server = {
 
   /**
    * Re-consulta mmradar.gg para un participante ya guardado y actualiza
-   * SOLO los campos que vienen de ahi (lol_rank/performance_*/titles/
-   * mmradar_icon_url/mmradar_server) -- pensada para el boton "Update" en
-   * la ficha publica del jugador (/peleadores/[id]), que tambien mueve la
-   * barra de performance de la carta izquierda porque toca la misma fila.
+   * SOLO los campos que vienen de ahi (lol_rank, performance rank,
+   * performance scores, titles, mmradar_icon_url, mmradar_server).
+   * Pensada para el boton "Update" en la ficha publica del jugador
+   * (/peleadores/[id]), que tambien mueve la barra de performance de la
+   * carta izquierda porque toca la misma fila.
    * Permitido al dueno del perfil o a un admin de panel; nadie mas puede
-   * forzar una re-consulta de un perfil ajeno. Igual que
-   * saveOwnParticipant, si mmradar no responde se conserva el lol_rank ya
-   * guardado en vez de pisarlo con "Sin clasificar".
+   * forzar una re-consulta de un perfil ajeno.
+   * Igual que saveOwnParticipant, si mmradar no responde se conserva el
+   * lol_rank ya guardado en vez de pisarlo con "Sin clasificar".
    */
-  refreshMmradarData: defineAction({
+    refreshMmradarData: defineAction({
     accept: "form",
     input: z.object({ id: z.string().min(1) }),
     handler: async ({ id }, context) => {
