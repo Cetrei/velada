@@ -137,6 +137,8 @@ export default function RosterExplorer({ participants, votesById }: RosterExplor
               <img
                 src={p.photo ?? fallbackPhoto(p)}
                 alt={p.name}
+                loading="lazy"
+                decoding="async"
                 className="w-12 h-12 rounded object-cover border border-lol-border group-hover:border-lol-gold transition-colors"
               />
               <div className="flex-1 min-w-0">

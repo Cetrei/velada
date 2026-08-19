@@ -106,6 +106,8 @@ export default function MmradarPanel({ participant, canUpdate }: MmradarPanelPro
               src={iconUrl}
               alt=""
               className="mmradar-icon"
+              loading="lazy"
+              decoding="async"
               onError={(e) => {
                 e.currentTarget.style.display = "none";
               }}

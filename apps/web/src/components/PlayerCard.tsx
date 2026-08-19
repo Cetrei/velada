@@ -51,7 +51,7 @@ export default function PlayerCard({ data, className = "" }: PlayerCardProps) {
 
   return (
     <div className={`player-card ${className}`}>
-      <img src={bgImage} alt={data.name || "Preview"} className="player-card-bg" />
+      <img src={bgImage} alt={data.name || "Preview"} className="player-card-bg" decoding="async" />
       <div className="player-card-scrim" />
 
       <div className="player-card-top">

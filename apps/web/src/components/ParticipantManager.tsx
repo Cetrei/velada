@@ -2,6 +2,7 @@ import { useState } from "react";
 import { actions } from "astro:actions";
 import type { Participant, ParticipantStat } from "@velada/core";
 import { PARTICIPANT_MANAGER, rankIconPath } from "@velada/core";
+import { compressImageFile, PHOTO_COMPRESSION, BANNER_COMPRESSION } from "@velada/core/imageCompression";
 
 interface ParticipantManagerProps {
   initialParticipants: Participant[];
@@ -42,6 +43,7 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
   const [stats, setStats] = useState<StatWithKey[]>([]);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [compressingField, setCompressingField] = useState<"photo" | "banner" | null>(null);
   const [status, setStatus] = useState<StatusMessage>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [isLookingUpRank, setIsLookingUpRank] = useState(false);
@@ -65,6 +67,34 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
 
   function addStat() {
     setStats((prev) => [...prev, { ...EMPTY_STAT, _key: makeStatKey() }]);
+  }
+
+  // Mismo criterio que ParticipantProfileForm.tsx: comprime en el
+  // navegador antes de guardar en el estado (ver
+  // packages/core/imageCompression.ts). El panel tambien puede recibir
+  // fotos sin comprimir de un admin subiendo desde el celular.
+  async function handlePhotoChange(fileList: FileList | null) {
+    const raw = fileList?.[0] ?? null;
+    if (!raw) {
+      setPhotoFile(null);
+      return;
+    }
+    setCompressingField("photo");
+    const compressed = await compressImageFile(raw, PHOTO_COMPRESSION);
+    setCompressingField((current) => (current === "photo" ? null : current));
+    setPhotoFile(compressed);
+  }
+
+  async function handleBannerChange(fileList: FileList | null) {
+    const raw = fileList?.[0] ?? null;
+    if (!raw) {
+      setBannerFile(null);
+      return;
+    }
+    setCompressingField("banner");
+    const compressed = await compressImageFile(raw, BANNER_COMPRESSION);
+    setCompressingField((current) => (current === "banner" ? null : current));
+    setBannerFile(compressed);
   }
 
   function updateStat(key: string, patch: Partial<ParticipantStat>) {
@@ -425,24 +455,26 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
               type="file"
               accept="image/*"
               capture="environment"
-              onChange={(e) => setPhotoFile(e.target.files?.[0] ?? null)}
+              onChange={(e) => handlePhotoChange(e.target.files)}
               className="input file:mr-4 file:py-2 file:px-4 file:border-0 file:bg-lol-gold file:text-black file:font-bold file:uppercase file:text-xs"
             />
+            {compressingField === "photo" && <p className="text-xs text-slate-500 mt-1">Optimizando imagen...</p>}
           </Field>
           <Field label={PARTICIPANT_MANAGER.fields.banner}>
             <input
               type="file"
               accept="image/*"
-              onChange={(e) => setBannerFile(e.target.files?.[0] ?? null)}
+              onChange={(e) => handleBannerChange(e.target.files)}
               className="input file:mr-4 file:py-2 file:px-4 file:border-0 file:bg-lol-gold file:text-black file:font-bold file:uppercase file:text-xs"
             />
+            {compressingField === "banner" && <p className="text-xs text-slate-500 mt-1">Optimizando imagen...</p>}
           </Field>
         </div>
 
         <div className="flex gap-3 pt-2">
           <button
             type="submit"
-            disabled={isBusy}
+            disabled={isBusy || compressingField !== null}
             className="flex-1 py-3 px-6 bg-lol-gold text-black font-bold uppercase tracking-wide hover:bg-yellow-400 disabled:opacity-50"
           >
             {editingId ? PARTICIPANT_MANAGER.submitEditCta : PARTICIPANT_MANAGER.submitNewCta}

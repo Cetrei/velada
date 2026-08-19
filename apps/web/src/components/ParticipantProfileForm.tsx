@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { actions } from "astro:actions";
 import type { Participant, ParticipantStat } from "@velada/core";
 import { PAGES, PARTICIPANT_MANAGER, COUNTRIES, flagForCountry } from "@velada/core";
+import { compressImageFile, PHOTO_COMPRESSION, BANNER_COMPRESSION } from "@velada/core/imageCompression";
 import PlayerCard from "./PlayerCard";
 
 type RiotCheckStatus = "idle" | "checking" | "found" | "not_found" | "invalid" | "error";
@@ -85,6 +86,7 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
   );
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [compressingField, setCompressingField] = useState<"photo" | "banner" | null>(null);
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
   const [bannerPreviewUrl, setBannerPreviewUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<StatusMessage>(null);
@@ -177,6 +179,36 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
 
   function addStat() {
     setStats((prev) => [...prev, { ...EMPTY_STAT, _key: makeStatKey() }]);
+  }
+
+  // Comprime la foto/banner elegida en el navegador antes de guardarla en
+  // el estado (y por lo tanto antes de subirla) -- ver
+  // packages/core/imageCompression.ts para el porque. El archivo original
+  // nunca se usa mas alla de este punto; si la compresion falla por algun
+  // motivo, compressImageFile devuelve el original tal cual, asi que el
+  // formulario nunca se bloquea por esto.
+  async function handlePhotoChange(fileList: FileList | null) {
+    const raw = fileList?.[0] ?? null;
+    if (!raw) {
+      setPhotoFile(null);
+      return;
+    }
+    setCompressingField("photo");
+    const compressed = await compressImageFile(raw, PHOTO_COMPRESSION);
+    setCompressingField((current) => (current === "photo" ? null : current));
+    setPhotoFile(compressed);
+  }
+
+  async function handleBannerChange(fileList: FileList | null) {
+    const raw = fileList?.[0] ?? null;
+    if (!raw) {
+      setBannerFile(null);
+      return;
+    }
+    setCompressingField("banner");
+    const compressed = await compressImageFile(raw, BANNER_COMPRESSION);
+    setCompressingField((current) => (current === "banner" ? null : current));
+    setBannerFile(compressed);
   }
 
   function updateStat(key: string, patch: Partial<ParticipantStat>) {
@@ -464,23 +496,25 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
             type="file"
             accept="image/*"
             capture="environment"
-            onChange={(e) => setPhotoFile(e.target.files?.[0] ?? null)}
+            onChange={(e) => handlePhotoChange(e.target.files)}
             className="input file:mr-4 file:py-2 file:px-4 file:border-0 file:bg-lol-gold file:text-black file:font-bold file:uppercase file:text-xs"
           />
+          {compressingField === "photo" && <p className="text-xs text-slate-500 mt-1">Optimizando imagen...</p>}
         </Field>
         <Field label={PARTICIPANT_MANAGER.fields.banner}>
           <input
             type="file"
             accept="image/*"
-            onChange={(e) => setBannerFile(e.target.files?.[0] ?? null)}
+            onChange={(e) => handleBannerChange(e.target.files)}
             className="input file:mr-4 file:py-2 file:px-4 file:border-0 file:bg-lol-gold file:text-black file:font-bold file:uppercase file:text-xs"
           />
+          {compressingField === "banner" && <p className="text-xs text-slate-500 mt-1">Optimizando imagen...</p>}
         </Field>
       </div>
 
       <button
         type="submit"
-        disabled={isBusy}
+        disabled={isBusy || compressingField !== null}
         className="w-full py-3 px-6 bg-lol-gold text-black font-bold uppercase tracking-wide hover:bg-yellow-400 disabled:opacity-50"
       >
         {existingParticipant ? copy.submitUpdateCta : copy.submitCreateCta}

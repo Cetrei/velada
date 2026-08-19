@@ -1046,6 +1046,102 @@ era el de arriba, no whitelist).
   la pagina). Confirmar si `SITE.name`/el titulo del sitio es intencional
   o hay que cambiarlo.
 
+## Sesion 2026-08-18 (15): confirmado que el schema de DB ya cubre lo nuevo + compresion de imagenes client-side
+- Pedido del usuario: (1) confirmar que las columnas nuevas de las ultimas
+  dos sesiones (mmradar) esten en `scripts/setup-supabase.ts` y decidir si
+  hace falta resetear la base (no hay usuarios reales todavia); (2)
+  arreglar performance de carga de imagenes/estadisticas, cacheando en DB
+  en vez de Redis (no disponible en este stack) y solo re-consultando al
+  apretar "Actualizar".
+- **(1) Confirmado, nada que cambiar en el schema**: `performance_rank`,
+  `performance_scores`, `titles`, `mmradar_icon_url`, `mmradar_server` ya
+  estaban en `SETUP_SQL` como `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`
+  desde la sesion (12)/(13). Como es `IF NOT EXISTS`, correr
+  `bun run scripts/setup-supabase.ts` de nuevo es 100% seguro e
+  idempotente — no borra nada, solo agrega lo que falte. **No hace falta
+  `--reset-data`**: ese flag borra `participant_users`/`sessions`/
+  `participants` (cuentas y perfiles), no toca columnas ni schema; como
+  las columnas mmradar ya estaban desde antes en el schema (aunque no
+  hubiera filas usandolas todavia), no hay nada que un reset de datos
+  arreglaria aca. Comando a correr (uno solo, sin reset):
+  `bun run scripts/setup-supabase.ts`.
+  Si en algun momento el usuario SI quiere vaciar cuentas/participantes de
+  prueba antes de cargar datos reales (no por esto, sino porque no hay
+  usuarios reales todavia y quiere arrancar limpio), el comando con reset
+  es `CONFIRM_RESET_DATA=yes bun run scripts/setup-supabase.ts --reset-data`
+  — decision del usuario, no necesaria para que el schema tenga las
+  columnas nuevas.
+- **(2) Cache de performance/scores ya estaba resuelto de sesiones
+  anteriores** (confirmado leyendo `actions/index.ts` de nuevo):
+  `saveOwnParticipant`/`saveParticipant` ya escriben
+  `performance_rank`/`performance_scores`/`titles`/`mmradar_icon_url`/
+  `mmradar_server` en la fila de `participants`, y todas las paginas leen
+  esos valores cacheados via `loadParticipants.ts` — mmradar.gg SOLO se
+  re-consulta al guardar el perfil o al apretar "Actualizar"
+  (`refreshMmradarData`, sesion (14)), nunca en cada carga de pagina. Este
+  es exactamente el patron de cache-en-DB pedido, ya funcionando.
+- **Imagenes: el problema real encontrado fue distinto** — fotos/banners
+  se suben tal cual a Supabase Storage sin ningun resize/compresion (una
+  foto de celular sin comprimir puede pesar varios MB) y se sirven asi en
+  toda la web, incluyendo lugares donde se muestran a 48-64px (rail de
+  `ChampionSelectGrid`, lista de `RosterExplorer`, avatar del banner).
+  Investigado si usar Image Transformations de Supabase Storage (resize
+  server-side): es una feature de pago, solo disponible en planes Pro+,
+  con costo variable ($5 por 1000 imagenes de origen procesadas mas alla
+  de las primeras 100) — no tiene sentido pagar por eso en un proyecto de
+  este tamano cuando comprimir en el navegador antes de subir logra el
+  mismo resultado gratis. Se opto por esto en vez de la feature de
+  Supabase.
+- **Nuevo `packages/core/imageCompression.ts`**: `compressImageFile(file,
+  options)` redimensiona (Canvas API, manteniendo aspect ratio) y
+  recomprime a JPEG/WebP en el navegador antes de que el archivo toque la
+  red. `PHOTO_COMPRESSION` (800px, calidad 0.82) para fotos de perfil,
+  `BANNER_COMPRESSION` (1600px, calidad 0.82) para banners (se muestran
+  mas grandes). Si algo falla en el camino (imagen que el navegador no
+  puede decodificar, canvas no disponible, etc.) devuelve el File original
+  sin tocar — comprimir es una optimizacion, nunca bloquea poder guardar
+  el perfil. Detecta si un PNG tiene transparencia real (muestreo barato
+  de 5 puntos) antes de decidir si recodificar a JPEG (mucho mas liviano
+  para fotos sin canal alpha) o mantener el formato original. Este modulo
+  usa `document`/`createImageBitmap`/Canvas, que no existen en el runtime
+  de Cloudflare Workers ni en Node — por eso NO esta en el barrel export
+  de `packages/core/index.ts` (evita que un import de `@velada/core` en
+  codigo server-side arrastre esto); se importa por subpath directo,
+  `@velada/core/imageCompression`, solo desde componentes cliente.
+- Integrado en los dos formularios que suben fotos/banners:
+  `ParticipantProfileForm.tsx` (auto-registro) y `ParticipantManager.tsx`
+  (panel admin) — mismo patron en ambos: `handlePhotoChange`/
+  `handleBannerChange` comprimen antes de guardar el `File` en el estado,
+  estado `compressingField` muestra "Optimizando imagen..." bajo el input
+  mientras corre, y el boton de submit se deshabilita mientras haya una
+  compresion en curso (ademas de mientras `isBusy`), para no mandar el
+  archivo original sin comprimir si el usuario aprieta guardar demasiado
+  rapido.
+- **`loading="lazy"`/`decoding="async"` agregados donde faltaban** (varias
+  imagenes de foto de usuario no lo tenian, a diferencia de los iconos de
+  rango que ya lo tenian todos desde antes): `RosterExplorer.tsx` (foto en
+  la lista del roster), `ChampionSelectGrid.tsx` (avatar del banner y
+  splash de fondo al fijar seleccion — decoding async, no lazy: son
+  visibles apenas se interactua, no tiene sentido diferirlas),
+  `FighterCard.astro`, `PlayerCard.tsx`, `MmradarPanel.tsx` (icono de
+  invocador). No se toco ningun `<img>` de icono de rango/rol (ya tenian
+  lazy) ni el splash grande de `peleadores/[id].astro`/`PlayerCard` en la
+  ficha individual (esa es la imagen principal above-the-fold, no debe
+  diferirse).
+- Pendiente para el usuario (sin bash real sobre el proyecto en esta
+  sesion tampoco, todo via filesystem MCP): correr
+  `bun run scripts/setup-supabase.ts` (sin reset, confirma que las
+  columnas mmradar existen si por algun motivo el schema remoto quedo
+  atras) y `bun install` + `bun run dev`, luego subir una foto/banner
+  desde el formulario de inscripcion o el panel y confirmar en las
+  devtools (pestana Network) que el archivo que sale hacia Supabase pesa
+  bastante menos que el original elegido. Si el usuario decide que si
+  quiere arrancar con la base de datos completamente limpia (sin cuentas
+  de prueba), el comando es
+  `CONFIRM_RESET_DATA=yes bun run scripts/setup-supabase.ts --reset-data`
+  en vez del anterior — opcional, no requerido por los cambios de esta
+  sesion.
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.

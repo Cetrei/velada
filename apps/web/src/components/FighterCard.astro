@@ -25,6 +25,7 @@ const statBars = participant.stats ?? [];
       src={imgSrc}
       alt={participant.name}
       loading="lazy"
+      decoding="async"
       onerror={`this.onerror=null;this.src='${fallbackImg}'`}
       class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
     />

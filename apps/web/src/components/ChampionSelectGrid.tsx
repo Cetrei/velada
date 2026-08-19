@@ -93,6 +93,7 @@ export default function ChampionSelectGrid({
                 <img
                     src={selected.photo ?? fallbackPhoto(selected)}
                     alt="Avatar"
+                    decoding="async"
                     className="w-full h-full object-cover"
                     onError={(e) => {
                         const fallback = fallbackPhoto(selected);
@@ -234,6 +235,7 @@ export default function ChampionSelectGrid({
                      <img
                          src={selected.banner ?? selected.photo ?? fallbackPhoto(selected)}
                          alt="Background"
+                         decoding="async"
                          onError={(e) => {
                              // Si la URL guardada (banner o photo) esta rota o vacia, cae al
                              // placeholder generico en vez de quedar en blanco — antes no
