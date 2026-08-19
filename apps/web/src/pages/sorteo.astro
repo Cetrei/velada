@@ -5,7 +5,7 @@ import { loadParticipants } from "../lib/loadParticipants";
 import { fetchEventState } from "../lib/eventState";
 import { PAGES } from "@velada/core";
 
-const participants = loadParticipants();
+const participants = await loadParticipants();
 const eventState = await fetchEventState();
 const copy = PAGES.raffle;
 ---

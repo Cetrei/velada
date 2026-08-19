@@ -6,6 +6,7 @@ import { actions, isInputError } from "astro:actions";
 import { getSession } from "../lib/session";
 import { loadParticipants } from "../lib/loadParticipants";
 import { fetchEventState } from "../lib/eventState";
+import { fetchMatches } from "../lib/matches";
 import AdminTabs from "../components/AdminTabs";
 import { PAGES } from "@velada/core";
 
@@ -21,6 +22,7 @@ if (passphraseResult && !passphraseResult.error) {
 
 const initialParticipants = await loadParticipants();
 const eventState = await fetchEventState();
+const initialMatches = await fetchMatches();
 const copy = PAGES.panelPassphrase;
 const managerCopy = PAGES.rosterManager;
 ---
@@ -96,7 +98,12 @@ const managerCopy = PAGES.rosterManager;
                 </a>
               </p>
             </div>
-            <AdminTabs client:load initialParticipants={initialParticipants} eventState={eventState} />
+            <AdminTabs
+              client:load
+              initialParticipants={initialParticipants}
+              eventState={eventState}
+              initialMatches={initialMatches}
+            />
           </>
         )
       }

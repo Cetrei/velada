@@ -1,15 +1,17 @@
 import { useState } from "react";
-import type { Participant, EventState } from "@velada/core";
+import type { Participant, EventState, Match } from "@velada/core";
 import { PAGES } from "@velada/core";
 import ParticipantManager from "./ParticipantManager";
 import AdminControl from "./AdminControl";
+import MatchManager from "./MatchManager";
 
 interface AdminTabsProps {
   initialParticipants: Participant[];
   eventState: EventState;
+  initialMatches: Match[];
 }
 
-type Tab = "participants" | "event";
+type Tab = "participants" | "event" | "matches";
 
 const copy = PAGES.rosterManager;
 
@@ -22,7 +24,7 @@ const copy = PAGES.rosterManager;
  * archivo es solo el layout de pestanas que lo conecta junto a
  * ParticipantManager, sin tocar la logica interna de ninguno de los dos.
  */
-export default function AdminTabs({ initialParticipants, eventState }: AdminTabsProps) {
+export default function AdminTabs({ initialParticipants, eventState, initialMatches }: AdminTabsProps) {
   const [tab, setTab] = useState<Tab>("participants");
 
   return (
@@ -34,11 +36,13 @@ export default function AdminTabs({ initialParticipants, eventState }: AdminTabs
         <TabButton active={tab === "event"} onClick={() => setTab("event")}>
           {copy.tabEvent}
         </TabButton>
+        <TabButton active={tab === "matches"} onClick={() => setTab("matches")}>
+          {copy.tabMatches}
+        </TabButton>
       </div>
 
-      {tab === "participants" ? (
-        <ParticipantManager initialParticipants={initialParticipants} />
-      ) : (
+      {tab === "participants" && <ParticipantManager initialParticipants={initialParticipants} />}
+      {tab === "event" && (
         <AdminControl
           participants={initialParticipants}
           initialRouletteUnlocked={eventState.rouletteUnlocked}
@@ -47,6 +51,9 @@ export default function AdminTabs({ initialParticipants, eventState }: AdminTabs
           initialVotingEnabled={eventState.votingEnabled}
           initialEventStarted={eventState.eventStarted}
         />
+      )}
+      {tab === "matches" && (
+        <MatchManager initialMatches={initialMatches} participants={initialParticipants} />
       )}
     </div>
   );

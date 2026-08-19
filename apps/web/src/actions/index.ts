@@ -11,7 +11,8 @@ import {
   PASSWORD_MIN_LENGTH,
   fetchRankFromLeagueOfGraphs,
   RankLookupError,
-  RANK_SOURCE_SERVERS
+  RANK_SOURCE_SERVERS,
+  JudgeCardSchema
 } from "@velada/core";
 import type { AppSession } from "../lib/session";
 
@@ -628,6 +629,90 @@ export const server = {
     handler: async ({ lolUsername, lolServer }, context) => {
       requirePanelAuth(await getSession(context.cookies, context));
       return fetchRiotRank(lolUsername, lolServer);
+    }
+  }),
+
+  /**
+   * Crea o edita un combate a mano desde /gestion-roster-x9f2 (pestana
+   * Evento). Cubre lo mismo que la ruleta (player1/player2) mas todo lo
+   * que la ruleta no toca: nombre del combate (etiqueta libre, ej.
+   * "Semifinal"), numero de orden, resultado oficial (winnerId +
+   * decision), tarjetas de jueces, y si esta abierto a pronosticos. Sin
+   * id -> crea; con id -> actualiza esa fila (nunca upsert por otra
+   * clave, a diferencia de participants no hay ningun campo natural tipo
+   * owner_user_id para eso aca).
+   */
+  saveMatch: defineAction({
+    accept: "form",
+    input: z.object({
+      id: z.string().uuid().optional(),
+      matchNumber: z.coerce.number().int().positive().optional(),
+      name: z.string().optional(),
+      player1Id: z.string().min(1),
+      player2Id: z.string().min(1),
+      winnerId: z.string().optional(),
+      decision: z.string().optional(),
+      judgeCards: z.string().optional(),
+      predictionsOpen: z.coerce.boolean().default(false)
+    }),
+    handler: async (input, context) => {
+      requirePanelAuth(await getSession(context.cookies, context));
+      const [admin, msg] = createSupabaseAdminClient(context.locals);
+      if (!admin) {
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
+      }
+
+      if (input.player1Id === input.player2Id) {
+        throw new ActionError({ code: "BAD_REQUEST", message: "Elegi dos peleadores distintos." });
+      }
+
+      let parsedJudgeCards: unknown;
+      if (input.judgeCards) {
+        try {
+          parsedJudgeCards = z.array(JudgeCardSchema).parse(JSON.parse(input.judgeCards));
+        } catch {
+          throw new ActionError({ code: "BAD_REQUEST", message: "Tarjetas de jueces invalidas." });
+        }
+      }
+
+      const row = {
+        ...(input.id ? { id: input.id } : {}),
+        match_number: input.matchNumber ?? null,
+        name: input.name || null,
+        player1_id: input.player1Id,
+        player2_id: input.player2Id,
+        winner_id: input.winnerId || null,
+        decision: input.decision || null,
+        judge_cards: parsedJudgeCards ?? null,
+        predictions_open: input.predictionsOpen,
+        is_random: false
+      };
+
+      const { data, error } = await admin.from("matches").upsert(row).select("id").single();
+      if (error || !data) {
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: error?.message ?? "No se pudo guardar el combate." });
+      }
+
+      return { success: true, id: data.id };
+    }
+  }),
+
+  deleteMatch: defineAction({
+    accept: "form",
+    input: z.object({ id: z.string().uuid() }),
+    handler: async ({ id }, context) => {
+      requirePanelAuth(await getSession(context.cookies, context));
+      const [admin, msg] = createSupabaseAdminClient(context.locals);
+      if (!admin) {
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
+      }
+
+      const { error } = await admin.from("matches").delete().eq("id", id);
+      if (error) {
+        throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: error.message });
+      }
+
+      return { success: true };
     }
   }),
 

@@ -149,7 +149,8 @@ export const PAGES = {
     subtitle: "Edita o elimina los perfiles que cada peleador cargo desde /mi-perfil.",
     logoutCta: "Cerrar sesion",
     tabParticipants: "Participantes",
-    tabEvent: "Evento"
+    tabEvent: "Evento",
+    tabMatches: "Combates"
   },
 
   admin: {

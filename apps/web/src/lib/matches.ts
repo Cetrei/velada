@@ -4,6 +4,7 @@ import type { JudgeCard, Match, PredictionTally } from "@velada/core";
 interface MatchRow {
   id: string;
   match_number: number | null;
+  name: string | null;
   player1_id: string;
   player2_id: string;
   winner_id: string | null;
@@ -18,6 +19,7 @@ function toMatch(row: MatchRow): Match {
   return {
     id: row.id,
     matchNumber: row.match_number ?? undefined,
+    name: row.name,
     player1Id: row.player1_id,
     player2Id: row.player2_id,
     winnerId: row.winner_id,
@@ -37,7 +39,7 @@ export async function fetchMatches(): Promise<Match[]> {
   const { data, error } = await supabase
     .from("matches")
     .select(
-      "id, match_number, player1_id, player2_id, winner_id, decision, judge_cards, predictions_open, is_random, created_at"
+      "id, match_number, name, player1_id, player2_id, winner_id, decision, judge_cards, predictions_open, is_random, created_at"
     )
     .order("match_number", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: true });

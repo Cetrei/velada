@@ -73,6 +73,7 @@ export const JudgeCardSchema = z.object({
 export const MatchSchema = z.object({
   id: z.string().uuid().optional(),
   matchNumber: z.number().int().positive().optional(),
+  name: z.string().nullable().optional(),
   player1Id: z.string(),
   player2Id: z.string(),
   winnerId: z.string().nullable().optional(),

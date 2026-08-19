@@ -49,6 +49,7 @@ ALTER TABLE event_state ADD COLUMN IF NOT EXISTS event_started BOOLEAN DEFAULT F
 CREATE TABLE IF NOT EXISTS matches (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   match_number INTEGER,
+  name TEXT DEFAULT NULL,
   player1_id TEXT NOT NULL,
   player2_id TEXT NOT NULL,
   winner_id TEXT DEFAULT NULL,
@@ -60,6 +61,11 @@ CREATE TABLE IF NOT EXISTS matches (
 );
 
 ALTER TABLE matches ADD COLUMN IF NOT EXISTS match_number INTEGER;
+-- Nombre opcional del combate (ej. "Semifinal", "Gran Final") — la ruleta
+-- (aleatoria o manual desde el panel) sigue generando el emparejamiento
+-- (player1/player2), este campo solo etiqueta el match despues de creado,
+-- se edita a mano desde /gestion-roster-x9f2 (pestana Evento).
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS name TEXT DEFAULT NULL;
 ALTER TABLE matches ADD COLUMN IF NOT EXISTS decision TEXT DEFAULT NULL;
 ALTER TABLE matches ADD COLUMN IF NOT EXISTS judge_cards JSONB DEFAULT NULL;
 ALTER TABLE matches ADD COLUMN IF NOT EXISTS predictions_open BOOLEAN DEFAULT FALSE;
