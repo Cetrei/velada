@@ -90,7 +90,15 @@ export default function ChampionSelectGrid({
 
         <div className="w-11 h-11 sm:w-[52px] sm:h-[52px] rounded-full border-2 ml-3 flex items-center justify-center bg-[#010a13] overflow-hidden avatar-border z-10 relative transition-all duration-300 flex-shrink-0">
             {selected && (
-                <img src={selected.photo ?? fallbackPhoto(selected)} alt="Avatar" className="w-full h-full object-cover" />
+                <img
+                    src={selected.photo ?? fallbackPhoto(selected)}
+                    alt="Avatar"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                        const fallback = fallbackPhoto(selected);
+                        if (e.currentTarget.src !== fallback) e.currentTarget.src = fallback;
+                    }}
+                />
             )}
         </div>
 
@@ -194,7 +202,16 @@ export default function ChampionSelectGrid({
                             className={`champ-portrait group ${isSelected ? 'selected' : ''} ${!p.photo ? 'no-photo' : ''}`}
                             aria-pressed={isSelected}
                         >
-                            <img src={p.photo ?? fallbackPhoto(p)} alt={p.name} className="placeholder-img" loading="lazy" />
+                            <img
+                                src={p.photo ?? fallbackPhoto(p)}
+                                alt={p.name}
+                                className="placeholder-img"
+                                loading="lazy"
+                                onError={(e) => {
+                                    const fallback = fallbackPhoto(p);
+                                    if (e.currentTarget.src !== fallback) e.currentTarget.src = fallback;
+                                }}
+                            />
                             <div className={`champ-name ${isSelected ? 'text-[#f0e6d2]' : ''}`}>
                                 {p.nickname}
                             </div>
@@ -213,7 +230,20 @@ export default function ChampionSelectGrid({
         <div className={`absolute inset-0 w-full h-full transition-all duration-500 ${isLockedIn ? 'opacity-100 z-10' : 'opacity-0 pointer-events-none -z-10'}`}>
             
             <div className="splash-background">
-                 {selected && <img src={selected.banner ?? selected.photo ?? fallbackPhoto(selected)} alt="Background" />}
+                 {selected && (
+                     <img
+                         src={selected.banner ?? selected.photo ?? fallbackPhoto(selected)}
+                         alt="Background"
+                         onError={(e) => {
+                             // Si la URL guardada (banner o photo) esta rota o vacia, cae al
+                             // placeholder generico en vez de quedar en blanco — antes no
+                             // habia ningun manejo de error aca, asi que una URL invalida
+                             // simplemente no mostraba nada.
+                             const fallback = fallbackPhoto(selected);
+                             if (e.currentTarget.src !== fallback) e.currentTarget.src = fallback;
+                         }}
+                     />
+                 )}
             </div>
 
             <div className="hextech-arcs">

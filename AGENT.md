@@ -740,6 +740,98 @@ era el de arriba, no whitelist).
   no se pudo confirmar la causa exacta de ESE 500 especifico sin logs del
   Worker real.
 
+## Sesion 2026-08-18 (11): rango via LeagueOfGraphs (no Mobalytics), pais con bandera, fallback de banner en ChampionSelectGrid
+- **Mobalytics investigado y descartado**: es una SPA (React/Next) — el
+  HTML que devuelve el servidor viene vacio, todo se pinta con JS en el
+  navegador (confirmado con un fetch real a una URL de perfil: solo trae
+  metadata, nada del contenido). Un Cloudflare Worker no tiene navegador
+  headless disponible gratis, asi que un fetch normal (lo unico que ya usa
+  este proyecto) nunca hubiera visto el rango ahi. No se encontro ninguna
+  API publica/gratuita de Mobalytics para perfiles de summoner.
+  **Elegido en su lugar: LeagueOfGraphs** (confirmado con un fetch real
+  tambien: el HTML del servidor SI trae el rango, LP, W/L de Solo y Flex
+  directo, sin JS). Nuevo modulo `packages/core/rankScraper.ts`
+  (`fetchRankFromLeagueOfGraphs`, `leagueOfGraphsProfileUrl`,
+  `riotIdToLeagueOfGraphsSlug`, `RankLookupError`) que arma la URL
+  `https://www.leagueofgraphs.com/summoner/{server}/{nombre-en-minuscula}-{tag}`,
+  hace el fetch, y parsea el bloque de rango por PATRONES DE TEXTO (nombre
+  de tier + numero romano, "Soloqueue"/"Ranked Flex", "LP: N") en vez de
+  por nombres de clase CSS especificos — las clases de LeagueOfGraphs son
+  hasheadas y van a cambiar con cualquier build de su frontend, el texto
+  visible es mas estable.
+- **La Riot API se reemplazo por completo** (decision explicita del
+  usuario, no queda como fallback): `RIOT_PLATFORM_BY_SERVER`/
+  `RIOT_REGION_BY_SERVER`/toda la logica de `fetchRiotRank` vieja en
+  `actions/index.ts` se borro; la funcion se reescribio como un wrapper
+  fino sobre `fetchRankFromLeagueOfGraphs` que traduce `RankLookupError`
+  a `ActionError` con mensajes SIN jerga tecnica (nada de "scraping",
+  "HTML", nombre del sitio de terceros, codigos HTTP) — solo lo que el
+  jugador puede hacer al respecto ("revisa que este bien escrito", "se
+  reintentara al guardar"). `RIOT_API_KEY` ya no se usa en ningun lado:
+  sacada de `.env.example`, `scripts/setup-cloudflare-secrets.ts`
+  (`WORKER_RUNTIME_SECRETS`) y `scripts/setup-supabase.ts`
+  (`serverOnlyVars`). `checkRiotProfile` dejo de requerir sesion (ya no
+  hay una API key/rate limit que proteger detras).
+- **Nuevo test**: `bun run test:scrapping` (`scripts/test-rank-scraper.ts`,
+  usa `bun:test`). No es un test con mocks a proposito — pega de verdad a
+  LeagueOfGraphs contra un Riot ID real (`OneShotOneKill#sigma`, LAN,
+  provisto por el usuario) porque lo que puede romperse con el tiempo es
+  justamente que ESE sitio cambie de formato, algo que un mock nunca
+  detectaria. Cubre: slug/URL ("OneShotOneKill#sigma" ->
+  "oneshotonekill-sigma", nombre en minuscula + tag tal cual), rechazo de
+  Riot ID sin tag / servidor no soportado, una consulta real que valida la
+  FORMA del resultado (no un rango fijo, para no fallar solo si el jugador
+  de ejemplo cambia de elo), y que un Riot ID inexistente devuelve
+  `RankLookupError` con `reason: "not_found"`.
+- **Pais con autocompletado + bandera con fallback**: nuevo
+  `packages/core/countries.ts` (`COUNTRIES` con ~70 paises en espanol +
+  emoji bandera, `flagForCountry`, `UNKNOWN_COUNTRY_FLAG` = bandera
+  blanca generica). En `ParticipantProfileForm.tsx` el campo "Pais" ahora
+  es un `<input list="country-options">` + `<datalist>`: sugiere de la
+  lista pero permite escribir cualquier texto libre (a pedido explicito
+  del usuario). `countryFlag` ya NO se pide a mano — se resuelve solo al
+  enviar el form (`flagForCountry(form.country)`), y el input muestra un
+  preview de la bandera resuelta a la izquierda mientras se escribe. Si el
+  texto no matchea ningun pais conocido, no se manda bandera especifica;
+  `peleadores/[id].astro` ahora usa
+  `participant.countryFlag ?? flagForCountry(participant.country)` como
+  fallback en vez de depender solo de que `countryFlag` este guardado.
+- **Redes sociales**: confirmado que YA se mostraban (sesion anterior, no
+  esta) en `peleadores/[id].astro` con iconos de Instagram/X junto a la
+  `PlayerCard` — no hizo falta agregar nada nuevo, el pedido de "que se
+  muestren en algun lado, no el formulario" ya estaba resuelto ahi.
+- **Banner del splash en `ChampionSelectGrid.tsx` (bug real distinto al
+  que se sospechaba al principio)**: NO era un problema de
+  `apps/web/public/images/participants/` faltante — esos archivos SI
+  existen (`p1Banner.jpg`, `p1Photo.png`, confirmado con
+  `list_directory_with_sizes`) y `participants.yml` los referencia bien.
+  El tema es que ese YAML es solo el fallback/demo: con Supabase
+  configurado (que es el caso, local y prod) `loadParticipants.ts` lo
+  ignora por completo y lee la fila real de la tabla `participants` — el
+  "Fabitos Priv" que se ve en pantalla viene de esa fila, no del YAML. El
+  `<img>` del splash (`selected.banner ?? selected.photo ??
+  fallbackPhoto(selected)`) nunca tenia `onError`: si la URL guardada en
+  Supabase (Storage o de otra fuente) fallaba por cualquier motivo, no
+  caia a ningun placeholder, quedaba en blanco. Agregado `onError` con
+  fallback a `fallbackPhoto()` en las 3 imagenes de participante del
+  componente (avatar del banner superior, grid de retratos, y el splash
+  grande) — mismo patron que ya usan los iconos de rol/rango en otros
+  componentes. Esto arregla el sintoma (nunca queda en blanco) pero si el
+  problema de fondo es que la fila real de "Fabitos Priv" en Supabase no
+  tiene `banner`/`photo` cargados (o la URL de Storage esta rota), eso
+  sigue siendo un tema de datos, no de codigo — no se pudo confirmar sin
+  acceso a la base real desde esta sesion.
+- Pendiente para el usuario: correr `bun run test:scrapping` para
+  confirmar que la consulta a LeagueOfGraphs sigue funcionando (puede
+  fallar mas adelante si ese sitio cambia su formato — el test esta
+  pensado justamente para detectar eso temprano). Revisar en el dashboard
+  de Supabase si la fila de "Fabitos Priv" en `participants` tiene
+  `banner`/`photo` con una URL valida. Probar el datalist de pais en
+  mobile (algunos navegadores moviles no muestran `<datalist>` con el
+  mismo UX que desktop). Sin bash real sobre el proyecto en esta sesion
+  tampoco — todo via filesystem MCP, no se pudo correr `bun install` /
+  `bun run dev` / el test nuevo para confirmar en caliente.
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.

@@ -534,7 +534,6 @@ async function main() {
   // "Supabase no configurado" o "RIOT_API_KEY no configurada" aunque el
   // root .env este completo.
   const serverOnlyVars: Record<string, string> = { SUPABASE_SERVICE_ROLE_KEY: serviceRoleKey };
-  if (process.env.RIOT_API_KEY) serverOnlyVars.RIOT_API_KEY = process.env.RIOT_API_KEY;
   if (process.env.PANEL_PASSPHRASE) serverOnlyVars.PANEL_PASSPHRASE = process.env.PANEL_PASSPHRASE;
   if (process.env.ADMIN_EMAILS) serverOnlyVars.ADMIN_EMAILS = process.env.ADMIN_EMAILS;
 

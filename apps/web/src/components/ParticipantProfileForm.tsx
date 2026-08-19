@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { actions } from "astro:actions";
 import type { Participant, ParticipantStat } from "@velada/core";
-import { PAGES, PARTICIPANT_MANAGER } from "@velada/core";
+import { PAGES, PARTICIPANT_MANAGER, COUNTRIES, flagForCountry } from "@velada/core";
 import PlayerCard from "./PlayerCard";
 
 type RiotCheckStatus = "idle" | "checking" | "found" | "not_found" | "invalid" | "error";
@@ -210,8 +210,17 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
     if (form.age) data.set("age", form.age);
     if (form.weight) data.set("weight", form.weight);
     if (form.height) data.set("height", form.height);
-    if (form.country) data.set("country", form.country);
-    if (form.countryFlag) data.set("countryFlag", form.countryFlag);
+    if (form.country) {
+      data.set("country", form.country);
+      // La bandera se resuelve sola a partir del texto escrito (lista de
+      // paises conocidos con fallback generico) — el jugador nunca la
+      // completa a mano, asi que si el pais no matchea ningun conocido
+      // no se manda ninguna bandera especifica (queda el fallback en el
+      // resto del sitio, ver participant.countryFlag ?? UNKNOWN_COUNTRY_FLAG
+      // donde se usa).
+      const resolvedFlag = flagForCountry(form.country);
+      data.set("countryFlag", resolvedFlag);
+    }
     if (form.instagramHandle) data.set("instagramHandle", form.instagramHandle);
     if (form.instagramFollowers) data.set("instagramFollowers", form.instagramFollowers);
     if (form.xHandle) data.set("xHandle", form.xHandle);
@@ -323,11 +332,24 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
           />
         </Field>
         <Field label="País">
-          <input
-            value={form.country}
-            onChange={(e) => setForm({ ...form, country: e.target.value })}
-            className="input"
-          />
+          <div className="relative">
+            <input
+              value={form.country}
+              onChange={(e) => setForm({ ...form, country: e.target.value })}
+              className="input pl-9"
+              list="country-options"
+              placeholder="Escribí tu país"
+              autoComplete="off"
+            />
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-base pointer-events-none" aria-hidden="true">
+              {flagForCountry(form.country)}
+            </span>
+            <datalist id="country-options">
+              {COUNTRIES.map((c) => (
+                <option key={c.name} value={c.name} />
+              ))}
+            </datalist>
+          </div>
         </Field>
       </div>
 
@@ -597,13 +619,11 @@ function RiotCheckHint({
 }) {
   if (status === "idle") return null;
   const errorText =
-    reason === "rate_limited"
-      ? "Riot esta limitando las consultas ahora mismo. Se reintentará al guardar."
-      : reason === "riot_down"
-        ? "Riot no esta respondiendo ahora. Se reintentará al guardar."
-        : reason === "network"
-          ? "No se pudo conectar para verificar. Se reintentará al guardar."
-          : "No se pudo verificar ahora. Se reintentará al guardar.";
+    reason === "riot_down"
+      ? "No pudimos consultar tu rango ahora mismo. Se reintentará al guardar."
+      : reason === "network"
+        ? "No se pudo conectar para verificar. Se reintentará al guardar."
+        : "No se pudo verificar ahora. Se reintentará al guardar.";
   const text =
     status === "checking"
       ? "Buscando el perfil en Riot..."

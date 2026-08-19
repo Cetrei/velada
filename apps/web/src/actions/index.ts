@@ -5,32 +5,15 @@ import { getSession, createSession, destroySession, markPassphraseVerified, isAd
 import { hashPassword, verifyPassword } from "../lib/password";
 import { getServerEnv } from "../lib/env";
 import { fetchEventState } from "../lib/eventState";
-import { ParticipantStatsSchema, isPasswordValid, PASSWORD_MIN_LENGTH } from "@velada/core";
+import {
+  ParticipantStatsSchema,
+  isPasswordValid,
+  PASSWORD_MIN_LENGTH,
+  fetchRankFromLeagueOfGraphs,
+  RankLookupError,
+  RANK_SOURCE_SERVERS
+} from "@velada/core";
 import type { AppSession } from "../lib/session";
-
-const RIOT_PLATFORM_BY_SERVER: Record<string, string> = {
-  LAN: "la1",
-  LAS: "la2",
-  NA: "na1",
-  BR: "br1",
-  EUW: "euw1",
-  EUNE: "eun1",
-  KR: "kr",
-  JP: "jp1",
-  OCE: "oc1"
-};
-
-const RIOT_REGION_BY_SERVER: Record<string, string> = {
-  LAN: "americas",
-  LAS: "americas",
-  NA: "americas",
-  BR: "americas",
-  EUW: "europe",
-  EUNE: "europe",
-  KR: "asia",
-  JP: "asia",
-  OCE: "sea"
-};
 
 function requireSession(session: AppSession | null): AppSession {
   if (!session) {
@@ -58,97 +41,67 @@ function requirePanelAuth(session: AppSession | null): AppSession {
 }
 
 /**
- * Looks up a player's current solo queue rank from the Riot API. Shared by
- * the admin lookupRank action (manual "Consultar" button) and
- * saveOwnParticipant (self-service profile save, where the rank is always
- * re-derived server-side so nobody can type in "Challenger" by hand).
+ * Mensajes de error pensados para el jugador que llena el formulario, sin
+ * mencionar de donde viene el dato ni como se obtiene (nada de "scraping",
+ * "HTML", "Riot API", nombres de sitios de terceros, etc.) — solo lo que
+ * puede hacer al respecto.
  */
-async function fetchRiotRank(
-  lolUsername: string,
-  lolServer: string,
-  locals: Parameters<typeof getServerEnv>[0]["locals"]
-): Promise<{ rank: string; lp: number }> {
-  const riotApiKey = getServerEnv({ locals }, "RIOT_API_KEY");
-  if (!riotApiKey) {
+function rankLookupErrorMessage(reason: RankLookupError["reason"]): string {
+  switch (reason) {
+    case "not_found":
+      return "No encontramos ese Riot ID en ese servidor. Revisa que este bien escrito.";
+    case "invalid_riot_id":
+      return 'Formato invalido. Usa "NombreDeInvocador#TAG" (Riot ID).';
+    case "invalid_server":
+      return `Servidor no reconocido. Usa: ${Object.keys(RANK_SOURCE_SERVERS).join(", ")}.`;
+    case "source_unavailable":
+      return "No pudimos consultar tu rango ahora mismo. Se reintentara al guardar.";
+    case "unexpected_format":
+      return "No pudimos leer tu rango ahora mismo. Se reintentara al guardar.";
+    default:
+      return "No pudimos consultar tu rango ahora mismo. Se reintentara al guardar.";
+  }
+}
+
+function actionErrorCodeForRankLookup(reason: RankLookupError["reason"]): "NOT_FOUND" | "BAD_REQUEST" | "INTERNAL_SERVER_ERROR" {
+  switch (reason) {
+    case "not_found":
+      return "NOT_FOUND";
+    case "invalid_riot_id":
+    case "invalid_server":
+      return "BAD_REQUEST";
+    default:
+      return "INTERNAL_SERVER_ERROR";
+  }
+}
+
+/**
+ * Looks up a player's current rank. Shared by the admin lookupRank action
+ * (manual "Consultar" button) and saveOwnParticipant (self-service profile
+ * save, where the rank is always re-derived server-side so nobody can type
+ * in "Challenger" by hand). Consulta un sitio externo de estadisticas de
+ * LoL (ver packages/core/rankScraper.ts para el detalle tecnico y por que
+ * se eligio esa fuente) — no la Riot API directamente.
+ */
+async function fetchRiotRank(lolUsername: string, lolServer: string): Promise<{ rank: string; lp: number }> {
+  try {
+    const result = await fetchRankFromLeagueOfGraphs(lolUsername, lolServer);
+    if (!result) {
+      return { rank: "Sin clasificar", lp: 0 };
+    }
+    return { rank: result.rank, lp: result.leaguePoints };
+  } catch (err) {
+    if (err instanceof RankLookupError) {
+      throw new ActionError({
+        code: actionErrorCodeForRankLookup(err.reason),
+        message: rankLookupErrorMessage(err.reason)
+      });
+    }
     throw new ActionError({
       code: "INTERNAL_SERVER_ERROR",
-      message: "RIOT_API_KEY no configurada en el servidor."
+      message: rankLookupErrorMessage("source_unavailable")
     });
   }
-
-  const serverKey = lolServer.toUpperCase();
-  const platform = RIOT_PLATFORM_BY_SERVER[serverKey];
-  const region = RIOT_REGION_BY_SERVER[serverKey];
-  if (!platform || !region) {
-    throw new ActionError({
-      code: "BAD_REQUEST",
-      message: `Servidor "${lolServer}" no reconocido. Usa: ${Object.keys(RIOT_PLATFORM_BY_SERVER).join(", ")}.`
-    });
-  }
-
-  const [gameName, tagLine] = lolUsername.split("#");
-  if (!gameName || !tagLine) {
-    throw new ActionError({
-      code: "BAD_REQUEST",
-      message: 'Formato invalido. Usa "NombreDeInvocador#TAG" (Riot ID).'
-    });
-  }
-
-  const accountResponse = await fetch(
-    `https://${region}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`,
-    { headers: { "X-Riot-Token": riotApiKey } }
-  );
-
-  if (accountResponse.status === 404) {
-    throw new ActionError({ code: "NOT_FOUND", message: "Riot ID no encontrado." });
-  }
-  if (accountResponse.status === 429 || accountResponse.status === 403) {
-    throw new ActionError({
-      code: "TOO_MANY_REQUESTS",
-      message: `Riot API (account) rate-limited o key invalida: ${accountResponse.status}`
-    });
-  }
-  if (!accountResponse.ok) {
-    throw new ActionError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: `Riot API (account) fallo: ${accountResponse.status}`
-    });
-  }
-
-  const account = (await accountResponse.json()) as { puuid: string };
-
-  const leagueResponse = await fetch(
-    `https://${platform}.api.riotgames.com/lol/league/v4/entries/by-puuid/${account.puuid}`,
-    { headers: { "X-Riot-Token": riotApiKey } }
-  );
-
-  if (leagueResponse.status === 429 || leagueResponse.status === 403) {
-    throw new ActionError({
-      code: "TOO_MANY_REQUESTS",
-      message: `Riot API (league) rate-limited o key invalida: ${leagueResponse.status}`
-    });
-  }
-  if (!leagueResponse.ok) {
-    throw new ActionError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: `Riot API (league) fallo: ${leagueResponse.status}`
-    });
-  }
-
-  const entries = (await leagueResponse.json()) as Array<{
-    queueType: string;
-    tier: string;
-    rank: string;
-    leaguePoints: number;
-  }>;
-
-  const soloQueue = entries.find((e) => e.queueType === "RANKED_SOLO_5x5");
-  if (!soloQueue) {
-    return { rank: "Sin clasificar", lp: 0 };
-  }
-
-  const tier = soloQueue.tier.charAt(0) + soloQueue.tier.slice(1).toLowerCase();
-  return { rank: `${tier} ${soloQueue.rank}`, lp: soloQueue.leaguePoints };
 }
 
 const ownParticipantFields = {
@@ -422,7 +375,7 @@ export const server = {
         throw new ActionError({ code: "INTERNAL_SERVER_ERROR", message: msg });
       }
 
-      const { rank } = await fetchRiotRank(input.lolUsername, input.lolServer, context.locals);
+      const { rank } = await fetchRiotRank(input.lolUsername, input.lolServer);
 
       const { data: existing } = await admin
         .from("participants")
@@ -674,7 +627,7 @@ export const server = {
     }),
     handler: async ({ lolUsername, lolServer }, context) => {
       requirePanelAuth(await getSession(context.cookies, context));
-      return fetchRiotRank(lolUsername, lolServer, context.locals);
+      return fetchRiotRank(lolUsername, lolServer);
     }
   }),
 
@@ -683,11 +636,10 @@ export const server = {
    * /inscripcion, driving the green check / yellow spinner / red X
    * indicator next to the field before they submit. Requires a logged-in
    * session (not full panel auth) so it stays usable by fighters
-   * self-registering, but isn't a fully anonymous endpoint that could burn
-   * through the Riot API rate limit. Never throws for the expected "still
-   * typing" or "typo" states (not_found / invalid) — only real infra
-   * failures (missing key, Riot API down) throw, matching fetchRiotRank's
-   * own error semantics.
+   * self-registering. Never throws for the expected "still typing" or
+   * "typo" states (not_found / invalid) — only real infra failures
+   * (fuente externa caida/formato inesperado) throw, matching
+   * fetchRiotRank's own error semantics.
    */
   checkRiotProfile: defineAction({
     accept: "form",
@@ -695,11 +647,9 @@ export const server = {
       lolUsername: z.string().min(1),
       lolServer: z.string().min(1)
     }),
-    handler: async ({ lolUsername, lolServer }, context) => {
-      requireSession(await getSession(context.cookies, context));
-
+    handler: async ({ lolUsername, lolServer }) => {
       const serverKey = lolServer.toUpperCase();
-      if (!RIOT_PLATFORM_BY_SERVER[serverKey]) {
+      if (!RANK_SOURCE_SERVERS[serverKey]) {
         return { status: "invalid" as const, reason: "server" as const };
       }
       const [gameName, tagLine] = lolUsername.split("#");
@@ -708,7 +658,7 @@ export const server = {
       }
 
       try {
-        const { rank } = await fetchRiotRank(lolUsername, lolServer, context.locals);
+        const { rank } = await fetchRiotRank(lolUsername, lolServer);
         return { status: "found" as const, rank };
       } catch (err) {
         if (err instanceof ActionError && err.code === "NOT_FOUND") {
@@ -717,12 +667,8 @@ export const server = {
         if (err instanceof ActionError && err.code === "BAD_REQUEST") {
           return { status: "invalid" as const, reason: "format" as const };
         }
-        if (err instanceof ActionError && err.code === "TOO_MANY_REQUESTS") {
-          console.error("[checkRiotProfile] rate limited:", err.message);
-          return { status: "error" as const, reason: "rate_limited" as const };
-        }
         if (err instanceof ActionError && err.code === "INTERNAL_SERVER_ERROR") {
-          console.error("[checkRiotProfile] infra failure:", err.message);
+          console.error("[checkRiotProfile] fuente de rango no disponible:", err.message);
           return { status: "error" as const, reason: "riot_down" as const };
         }
         console.error("[checkRiotProfile] unexpected error:", err);

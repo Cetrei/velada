@@ -149,7 +149,11 @@ export const PAGES = {
 
   rosterManager: {
     title: "Gestion de Participantes",
-    subtitle: "Editá o eliminá los perfiles que cada peleador cargó desde /mi-perfil.: {
+    subtitle: "Edita o elimina los perfiles que cada peleador cargo desde /mi-perfil.",
+    logoutCta: "Cerrar sesion"
+  },
+
+  admin: {
     tabTitle: "Panel Admin - La Venida del Año",
     title: "Panel del Host",
     subtitle: "Control de fase del evento, combates y sorteo."
@@ -266,7 +270,7 @@ export const PARTICIPANT_MANAGER = {
   editingParticipant: (id: string) => `Editando: ${id}`,
   newParticipant: "Nuevo participante",
   submitNewCta: "Crear participante",
-  noManualCreateHint: "Los peleadores se inscriben ellos mismos en /inscripcion. Acá solo podés editar o borrar.",
+  noManualCreateHint: "Los peleadores se inscriben ellos mismos en /inscripcion y completan su ficha en /mi-perfil. Aca solo podes editar o borrar.",
   fields: {
     name: "Nombre *",
     nickname: "Apodo *",

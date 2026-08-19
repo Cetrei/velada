@@ -3,7 +3,7 @@ import Layout from "../../layouts/Layout.astro";
 import PlayerCard from "../../components/PlayerCard";
 import { loadParticipants } from "../../lib/loadParticipants";
 import { fetchMatches, fetchPredictionTallies } from "../../lib/matches";
-import { PAGES } from "@velada/core";
+import { PAGES, flagForCountry } from "@velada/core";
 
 const { id } = Astro.params;
 
@@ -77,9 +77,9 @@ const copy = PAGES.fighterDetail;
         </div>
 
         <div class="lg:col-span-3">
-          {participant.countryFlag && (
+          {participant.country && (
             <div class="flex items-center gap-3 mb-3">
-              <span class="text-2xl">{participant.countryFlag}</span>
+              <span class="text-2xl">{participant.countryFlag ?? flagForCountry(participant.country)}</span>
             </div>
           )}
 
