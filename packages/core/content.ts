@@ -218,20 +218,10 @@ export const PAGES = {
   }
 };
 
-/**
- * Copy de las 6 categorias de mmradar (bloque "Scores Explained" del
- * modal de ayuda, icono "!" junto a cada barra de MmradarPerformanceCard)
- * -- version simplificada (no copy-paste) del texto real del popup
- * "Scores Explained" de mmradar.gg que pego el usuario 2026-08-20,
- * conservando la idea de cada categoria pero mas corto y en espanol,
- * mismo criterio que PERFORMANCE_RANK_EXPLANATION
- * (packages/core/performanceRank.ts) y DUEL_RATING_EXPLANATION
- * (packages/core/duelRating.ts), que si son propios de este proyecto.
- */
 export const MMRADAR_SCORES_EXPLAINED = {
   title: "¿Qué mide cada stat?",
   summary:
-    "Estos 6 números resumen tu rendimiento reciente en tus últimas partidas -- no son 0 a 100, son un puntaje propio de mmradar en una escala de miles.",
+    "Estos 6 números resumen tu rendimiento reciente en tus últimas partidas del 0 al 2500",
   stats: {
     laning: {
       label: "Laning",

@@ -243,7 +243,7 @@ export function computeDuelWinProbability(playerA: DuelInput, playerB: DuelInput
 export const DUEL_RATING_EXPLANATION = {
   title: "¿Cómo se calcula la Habilidad 1v1?",
   summary:
-    "Es un puntaje de 0 a 100 que estima qué tan peligroso sos en un duelo directo, basado en tus partidas recientes -- no es un dato de mmradar.gg, es un cálculo propio de este sitio.",
+    "Es un puntaje de 0 a 100 que estima que tan peligroso eres en duelos, basado en tus partidas recientes.",
   formula: "Pelea y teamfight (lo que más pesa) + laning + el resto de tus stats, con bonus si salís MVP seguido o ganás seguido",
   points: [
     "Combat y Teamfight pesan más que el resto: son las partes de tu juego más ligadas a ganar peleas uno contra uno.",

@@ -232,12 +232,12 @@ export function computePerformanceRank(matches: TitleEngineMatch[]): Performance
 export const PERFORMANCE_RANK_EXPLANATION = {
   title: "¿Cómo se calcula el Performance Rank?",
   summary:
-    "Es un rango propio de este sitio (no el que muestra mmradar.gg) basado en tus últimas partidas: qué tan bien jugás en promedio, qué tan seguido ganás, y qué tan parejo rendís partida a partida.",
+    "Se basa en el promedio y consistencia de tus ultimas partidas, con ajustes por winrate y estabilidad de rendimiento.",
   formula: "Rango base (por tu promedio) + ajuste por winrate + ajuste por consistencia",
   points: [
-    "Promedio: se suman tus 6 scores (Laning, Farming, Objectives, Combat, Teamfight, Vision) de cada partida y se promedia sobre tus últimas partidas — esto define el rango base.",
+    "Promedio: se suman tus 6 scores (Laning, Farming, Objectives, Combat, Teamfight, Vision) de cada partida y se promedia sobre tus últimas partidas",
     "Winrate: ganar seguido te sube de rango, perder seguido te baja. Hace falta un mínimo de partidas para que esto pese.",
     "Consistencia: rendir parecido partida a partida (sin picos ni bajones grandes) suma; ser errático resta.",
-    "Con promedios muy parecidos, dos jugadores pueden terminar en rangos distintos si uno gana más seguido o juega más parejo que el otro — así se explica que un promedio similar no siempre da el mismo rango."
+    "Con promedios muy parecidos, dos jugadores pueden terminar en rangos distintos si uno gana más seguido o juega más parejo que el otro"
   ]
 };
