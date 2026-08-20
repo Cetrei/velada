@@ -428,15 +428,7 @@ export default function ChampionSelectGrid({
             max-height: 128px;
             overflow-y: auto;
             overflow-x: hidden;
-            /* Sin esto, la rueda del mouse quedaba atrapada dentro de este
-               scroll interno chico apenas el cursor pasaba por encima --
-               nunca llegaba a propagarse al scroll de la pagina (contenedor
-               con snap-mandatory en index.astro), asi que hacia falta
-               agarrar la scrollbar a mano para bajar. overscroll-behavior:
-               contain hace que, al llegar al tope/fondo de ESTE scroll, el
-               resto del gesto de rueda se lo quede el navegador para seguir
-               scrolleando el contenedor padre en vez de descartarlo. */
-            overscroll-behavior-y: contain;
+            /* overscroll-behavior-y: contain;  <-- ELIMINAR */
             padding: 6px 6px 6px 4px;
             align-content: start;
             scrollbar-width: thin;
