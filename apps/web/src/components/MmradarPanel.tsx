@@ -4,33 +4,6 @@ import type { Participant, MmradarPerformanceScores, MmradarTitle } from "@velad
 import { emitMmradarUpdate } from "../lib/mmradarUpdateBus";
 import { resolveTitleColor } from "../lib/mmradarTitleColor";
 
-/**
- * Bloque de datos de mmradar.gg para la ficha publica del jugador
- * (/peleadores/[id].astro): icono con nivel superpuesto + Riot ID +
- * server + tags de colores arriba (igual a la referencia visual del
- * usuario, ver captura de su propio perfil de mmradar.gg -- icono
- * circular con el nivel de invocador en una esquina, tags coloreados
- * segun el tipo de titulo, Riot ID grande, badge de servidor), barras de
- * las 6 stats de performance abajo, y un boton "Actualizar" opcional
- * (solo si el visitante es el dueno del perfil o un admin de panel) que
- * llama refreshMmradarData para re-consultar la fuente sin tener que
- * editar el resto del formulario. Si mmradar nunca respondio para este
- * jugador (performanceScores null) no se muestra nada de las barras, sin
- * dejar un hueco vacio -- mismo criterio que el resto de componentes que
- * consumen datos opcionales de mmradar (icono/server/nivel tambien caen
- * sin romper el layout si faltan).
- *
- * Participantes de meme (excludeFromMatches, ver
- * ParticipantSchema.memeTitles/memeIconUrl): no tienen lolUsername real,
- * asi que nunca van a tener icono/titulos/rango de mmradar. Pedido
- * explicito del usuario 2026-08-19: el icono, riot id y titulos van
- * SIEMPRE en este mismo cuadro (arriba del nombre), nunca en un bloque
- * aparte -- para un meme, memeIconUrl/memeTitles se usan como fallback
- * visual de icono/titulos cuando no hay datos reales de mmradar (nunca
- * los reemplazan si existen -- un meme no deberia tener lolUsername de
- * todos modos, pero por las dudas los reales siempre ganan).
- */
-
 type ParticipantMmradarData = Pick<
   Participant,
   | "id"

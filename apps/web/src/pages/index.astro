@@ -39,7 +39,7 @@ const { predictions, matches, home } = PAGES;
       <Countdown client:load targetIso={eventState.startTime} />
     </HeroBanner>
 
-    <section id="roster" class="h-screen snap-start flex flex-col items-center justify-center bg-lol-darkBg border-y border-lol-border py-4 overflow-y-auto">
+    <section id="roster" class="h-screen snap-start flex flex-col items-center justify-center bg-lol-darkBg border-y border-lol-border py-4 overflow-y-auto overscroll-y-contain">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full min-h-full flex flex-col items-center justify-center gap-4">
         <div class="w-full flex items-center justify-center">
           <ChampionSelectGrid client:load participants={participants} rivalByParticipantId={rivalByParticipantId} />

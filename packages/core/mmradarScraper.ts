@@ -230,33 +230,31 @@ function parsePerformanceRank(html: string): string | null {
 }
 
 /**
- * Los 6 scores viven en <p id="player-average-{stat}-score" ...>N</p> --
- * ids estables y explicitos en el HTML real, mas confiables que buscar
- * por posicion/orden visual. El patron exige el sufijo -{stat}- para no
- * matchear el <p id="player-average-score"> general (score total del
- * jugador, sin sufijo, que no es ninguno de los 6 stats individuales).
+ * Los 6 scores viven en <p id="player-average-{stat}-score" ...>N</p> en
+ * el HTML servidor -- ids estables y explicitos, en teoria mas confiables
+ * que buscar por posicion/orden visual. El patron exige el sufijo
+ * -{stat}- para no matchear el <p id="player-average-score"> general
+ * (score total del jugador, sin sufijo, que no es ninguno de los 6 stats
+ * individuales).
  *
  * Bug real reportado 2026-08-19 (captura del usuario: /inscripcion
  * detectaba el rango bien -- "Perfil encontrado -- Platinum II" -- pero
  * las 6 barras de performance y el total se quedaban en "Sin datos aun").
- * Causa: mmradar.gg parece haber movido el render de estos 6 numeros a
- * JS del lado del cliente (confirmado con un fetch real a un perfil
- * live: los iconos/labels de Laning/Farming/etc siguen apareciendo en el
- * HTML, pero sin ningun numero de puntaje al lado -- a diferencia de
- * Current Rank y Performance Rank, que parsean bien porque viven en
- * bloques de texto server-side distintos que no cambiaron). El
- * comportamiento anterior era todo-o-nada: si UN SOLO id de los 6 no
- * matcheaba (aunque sea porque mmradar le cambio el nombre a ese stat
- * puntual, no porque el bloque entero haya desaparecido), la funcion
- * devolvia null para los 6 -- perdiendo datos reales que si estaban
- * disponibles. Ahora cada stat se parsea de forma independiente: si un id
- * puntual no aparece, ese stat cae a 0 en vez de tirar todo el objeto (0
- * es el minimo valido en la escala, se ve como "barra vacia" en vez de
- * "sin datos", degradacion razonable para un stat individual faltante).
- * Solo se devuelve null (bloque completo ausente, ej. mmradar removio
- * esta seccion del todo para cierto tipo de perfil) cuando NINGUNO de los
- * 6 ids aparece -- esa es la unica situacion en la que "sin datos" sigue
- * siendo mas honesto que "todo en 0".
+ * Causa CONFIRMADA 2026-08-20 con el propio "Ver codigo fuente" (HTML
+ * crudo real, lo unico que fetch() puede ver) que el usuario pegó en el
+ * chat: los <p id="player-average-{stat}-score"> existen en el HTML pero
+ * estan VACIOS (`<p id="player-average-laning-score"
+ * class="player-average-score"></p>`, sin numero adentro), dentro de un
+ * bloque `<div id="first-loader" style="display:none">` -- mmradar
+ * rellena estos 6 numeros con JS del lado del cliente despues de cargar,
+ * ya no vienen en absoluto en lo que el servidor manda. Confirmado que
+ * NINGUN ajuste de regex sobre el HTML puede recuperarlos: el dato
+ * simplemente no esta ahi. Esta funcion se deja SIN USAR en
+ * fetchMmradarProfile (nunca devuelve nada distinto de null en la
+ * practica actual) pero no se borra: sirve de documentacion de que se
+ * intento y por que no alcanza, y por si mmradar en algun momento vuelve
+ * a exponerlos aca. La fuente real de estos 6 numeros ahora es
+ * fetchMatchScores() mas abajo (endpoint /load-matches).
  */
 function parsePerformanceScores(html: string): MmradarPerformanceScores | null {
   const keys: (keyof MmradarPerformanceScores)[] = [
@@ -282,6 +280,107 @@ function parsePerformanceScores(html: string): MmradarPerformanceScores | null {
   }
 
   return foundAny ? (scores as MmradarPerformanceScores) : null;
+}
+
+interface LoadMatchesParticipant {
+  isPlayer: boolean;
+  scores?: {
+    laning: number;
+    farming: number;
+    objectives: number;
+    combat: number;
+    teamfight: number;
+    vision: number;
+    total: number;
+  };
+}
+
+interface LoadMatchesMatch {
+  matchId: string;
+  participants: LoadMatchesParticipant[];
+}
+
+/**
+ * El HTML servidor no trae los 6 scores individuales (ver comentario de
+ * parsePerformanceScores arriba) -- mmradar los pinta con JS del lado
+ * del cliente. Ese JS los saca de este endpoint interno, confirmado
+ * 2026-08-20 inspeccionando la pestana Network del navegador del usuario
+ * mientras cargaba un perfil real:
+ *   POST https://mmradar.gg/load-matches
+ *   Content-Type: application/json
+ *   { "matchId": null, "mode": "solo", "riotGameName": "...",
+ *     "riotTagLine": "..." }
+ * Devuelve un array de partidas recientes, cada una con `participants[]`
+ * (10 jugadores); el jugador consultado tiene `isPlayer: true` y trae sus
+ * `scores` de ESA partida puntual (no un promedio). El promedio que
+ * muestra el perfil se calcula sumando/promediando estos 6 numeros sobre
+ * todas las partidas devueltas -- eso es lo que hace esta funcion.
+ *
+ * OJO -- distinto en naturaleza al resto de este archivo: `/load-matches`
+ * es un endpoint interno no documentado publicamente (a diferencia del
+ * HTML de `/summoner/...`, que es la pagina publica que cualquiera ve).
+ * Decision explicita del usuario 2026-08-20: usarlo de todos modos porque
+ * es la unica via gratuita sin cambiar de arquitectura (la alternativa,
+ * un navegador headless, no corre en Cloudflare Workers y tiene costo
+ * real). Riesgo aceptado y conocido: si mmradar cambia este endpoint
+ * (nombre, forma, o le agrega auth/rate-limit) esto deja de funcionar sin
+ * aviso previo, mas fragil que el HTML publico que si es una superficie
+ * que ellos mantienen estable a proposito. Nunca lanza: mismo criterio
+ * que fetchMmradarData en actions/index.ts, es una fuente
+ * opcional/secundaria (currentRank/icono/nivel/titulos del HTML publico
+ * siguen funcionando aunque esto falle), asi que un fallo aca no debe
+ * romper el resto de la consulta -- solo loguea y devuelve null.
+ */
+async function fetchMatchScores(gameName: string, tagLine: string): Promise<MmradarPerformanceScores | null> {
+  try {
+    const response = await fetch("https://mmradar.gg/load-matches", {
+      method: "POST",
+      headers: { ...BROWSER_LIKE_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({ matchId: null, mode: "solo", riotGameName: gameName, riotTagLine: tagLine })
+    });
+
+    if (!response.ok) {
+      console.error(`mmradar /load-matches respondio ${response.status} para ${gameName}#${tagLine}`);
+      return null;
+    }
+
+    const matches = (await response.json()) as LoadMatchesMatch[];
+    if (!Array.isArray(matches) || matches.length === 0) return null;
+
+    const keys: (keyof MmradarPerformanceScores)[] = [
+      "laning",
+      "farming",
+      "objectives",
+      "combat",
+      "teamfight",
+      "vision"
+    ];
+    const totals: Record<keyof MmradarPerformanceScores, number> = {
+      laning: 0,
+      farming: 0,
+      objectives: 0,
+      combat: 0,
+      teamfight: 0,
+      vision: 0
+    };
+    let gamesCounted = 0;
+
+    for (const match of matches) {
+      const player = match.participants?.find((p) => p.isPlayer);
+      if (!player?.scores) continue;
+      for (const key of keys) totals[key] += player.scores[key];
+      gamesCounted += 1;
+    }
+
+    if (gamesCounted === 0) return null;
+
+    const averages = {} as MmradarPerformanceScores;
+    for (const key of keys) averages[key] = Math.round(totals[key] / gamesCounted);
+    return averages;
+  } catch (err) {
+    console.error(`fetchMatchScores fallo para ${gameName}#${tagLine}:`, err);
+    return null;
+  }
 }
 
 /**
@@ -502,10 +601,17 @@ export async function fetchMmradarProfile(lolUsername: string): Promise<MmradarP
     // parsePerformanceRank). Antes esto abortaba TODA la consulta con
     // unexpected_format, tirando tambien el currentRank oficial que si
     // funciona perfecto -- ahora simplemente se guarda null y se sigue.
+    // performanceScores: el HTML nunca los trae (ver parsePerformanceScores),
+    // asi que se consultan aparte via fetchMatchScores (endpoint
+    // /load-matches) -- fuente distinta, nunca lanza, un fallo ahi no
+    // aborta el resto de este resultado.
+    const [gameName, tagLine] = lolUsername.split("#");
+    const performanceScores = await fetchMatchScores(gameName, tagLine);
+
     return {
       currentRank: parseCurrentRank(html),
       performanceRank: parsePerformanceRank(html),
-      performanceScores: parsePerformanceScores(html),
+      performanceScores,
       titles: parseTitles(html),
       iconUrl: parseIconUrl(html),
       server: parseServer(html),

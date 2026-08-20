@@ -1374,6 +1374,148 @@ era el de arriba, no whitelist).
   de que haya otro error distinto tapado detras de este (el 500 pudo
   haber estado ocultando otros problemas que no llegaban a ejecutarse).
 
+## Sesion 2026-08-20: fix real de scroll atrapado + investigacion en curso de las barras de performance (mmradar cambio de raiz, no un bug del proyecto)
+- Retomando 3 pedidos del usuario en el mismo chat: (1) scroll pesado
+  hero->roster y "no puedo bajar del grid sin la scrollbar"; (2) barras
+  de performance en "SIN DATOS AUN" en `/peleadores/[id]`; (3) landing
+  deberia mostrar los combates 1v1/equipos bloqueados con candado +
+  "Proximamente" cuando no hay combates generados.
+- **(1) Scroll -- causa real confirmada y arreglada**: `#roster` en
+  `index.astro` (dentro del wrapper `snap-mandatory`) y `.champ-grid-scroll`
+  en `ChampionSelectGrid.tsx` tenian `overflow-y: auto` propio SIN
+  `overscroll-behavior: contain`. La rueda del mouse quedaba atrapada en
+  esos dos scrolls internos chicos apenas el cursor pasaba por encima y
+  nunca se propagaba al scroll de la pagina -- de ahi que hiciera falta
+  agarrar la scrollbar a mano. Fix: `overscroll-y-contain` (Tailwind) en
+  `#roster`, `overscroll-behavior-y: contain` en `.champ-grid-scroll`
+  (CSS plano, mismo bloque que ya tenia `overflow-y: auto`). Ambos
+  editados con `filesystem:edit_file` sobre la ruta real y releidos
+  despues para confirmar. Pendiente que el usuario confirme en
+  `bun run dev` que ya no hace falta la scrollbar para bajar del hero al
+  grid ni para scrollear dentro del grid con pocos resultados.
+- **(2) Barras de performance -- diagnostico cambio a mitad de la
+  investigacion, con evidencia real del usuario (no asuncion mia)**: mi
+  hipotesis inicial (mmradar dejo de exponer los 6 numeros del todo en
+  HTML servidor, confirmado con `web_fetch` a `Marcinator-Grind` y
+  `web_search`) resulto ser CORRECTA pero el usuario aporto el detalle
+  que faltaba: pego el HTML de "Inspeccionar elemento" (DOM post-JS) con
+  los 6 numeros presentes (`id="player-average-laning-score"` con `1780`
+  adentro, etc.), lo cual sugeria que el regex de `parsePerformanceScores`
+  (`packages/core/mmradarScraper.ts`) deberia matchear. Le pedi "Ver
+  codigo fuente" (Ctrl+U, HTML crudo real, lo unico que ve `fetch()` sin
+  ejecutar JS) del mismo perfil (`OneShotOneKill-sigma`) para confirmar
+  si el numero esta ahi o lo rellena JS despues -- **confirmado con el
+  propio codigo fuente que pego el usuario**: los mismos `<p
+  id="player-average-laning-score" class="player-average-score"></p>`
+  estan VACIOS en el HTML crudo (igual los otros 5, y
+  `performance-rank-icon` con `src=""`, y el tier de Performance como
+  `<p></p>` vacio). El bloque vive bajo `<div id="first-loader"
+  class="first-loader" style="display:none">` con un SVG de loading --
+  patron inequivoco de "esto lo rellena JS del cliente despues de
+  cargar", no algo que un regex distinto pueda arreglar. `Current Rank`
+  (`PLATINUM II (67LP)`), icono, nivel (574), nombre, tag y server
+  (`LAN`) SI vienen completos en el HTML crudo -- por eso esos campos
+  siempre funcionaron bien mientras las barras nunca lo hicieron, no es
+  inconsistente. **No se toco `mmradarScraper.ts` en esta sesion**: no
+  hay ningun cambio de regex que arregle esto, el dato simplemente no
+  esta en lo que `fetch()` puede ver.
+- El usuario pidio explorar alternativas antes de resignarse a ocultar
+  las barras. Se le presentaron 3 opciones reales: (a) navegador headless
+  (Playwright/Puppeteer) -- no corre en Cloudflare Workers, necesitaria
+  un servicio aparte (Railway/Fly.io/Browserless/ScrapingBee), cambia la
+  arquitectura del proyecto y tiene costo real (~$30-50+/mes en
+  servicios managed); (b) interceptar la llamada JS interna de mmradar
+  (si `summoner.js` pide estos numeros a una API propia tipo
+  `/api/summoner/...`, en teoria se podria pegarle a esa API directo con
+  `fetch()` sin necesitar navegador -- gratis y sin cambio de
+  arquitectura SI funciona, pero requiere que alguien mire la pestana
+  Network en devtools mientras carga el perfil real, cosa que yo no puedo
+  hacer sin acceso a un navegador); (c) aceptar que estos 6 numeros no
+  esten y ocultar solo esa seccion (rango/nivel/icono/titulos siguen
+  funcionando). El usuario eligio explorar (b) primero -- **pendiente que
+  el usuario pegue las URLs que ve en la pestana Network (filtradas por
+  XHR/fetch) al cargar un perfil de mmradar, idealmente la que devuelva
+  JSON con algo como "laning"/"score" en la respuesta**, para poder
+  probarla directo. Mientras tanto se continuo con el fix de scroll (1) a
+  pedido explicito del usuario ("segui con eso mientras tanto").
+- Nota de acceso a red de esta sesion: `bash_tool`/curl NO tiene
+  `mmradar.gg` en la lista de dominios permitidos del sandbox (403
+  devuelto, no es un bloqueo del lado de mmradar) -- toda la verificacion
+  de HTML real en esta sesion se hizo via `web_fetch`/`web_search`
+  (resultados indexados, no fetch en vivo arbitrario) mas lo que el
+  propio usuario pegó directamente desde su navegador. Si en el futuro
+  hace falta probar una URL de API candidata para (b), probablemente
+  tampoco se pueda con `bash_tool` (dominio no en la whitelist) ni con
+  `web_fetch` si esa URL nunca aparecio en un search/fetch previo (el
+  tool la rechaza) -- puede hacer falta que el usuario mismo pruebe la
+  URL (`curl`/Postman/pegarla en la barra) y reporte la respuesta.
+- **(3) Landing: combates bloqueados con candado -- aun no implementado,
+  pendiente de definicion**: el usuario aclaro que no se referia a
+  bloquear los tabs 1v1/Equipos que YA funcionan (esos se quedan como
+  estan) sino a que el landing muestre una preview simple de esa seccion
+  con un candado + "Proximamente" CUANDO el sistema detecta que los
+  combates (team matches) todavia no fueron generados -- referencia
+  visual prometida por el usuario, no llego a pegarse/discutirse en esta
+  sesion todavia. Sin tocar por ahora.
+
+## Sesion 2026-08-20 (2): barras de performance resueltas via endpoint interno /load-matches
+- Continuacion directa de la sesion (1) de hoy mismo -- el usuario
+  investigo la pestana Network del navegador (pedido explicito mio, sin
+  poder abrir un navegador yo mismo) y encontro el endpoint real que usa
+  el JS de mmradar para pintar las 6 barras:
+  ```
+  POST https://mmradar.gg/load-matches
+  Content-Type: application/json
+  { "matchId": null, "mode": "solo", "riotGameName": "OneShotOneKill",
+    "riotTagLine": "sigma" }
+  ```
+  Devuelve un array de partidas recientes con `participants[]` (10 por
+  partida); el jugador consultado tiene `isPlayer: true` y trae sus
+  `scores.{laning,farming,objectives,combat,teamfight,vision,total}` DE
+  ESA partida puntual (no un promedio -- el promedio que muestra el
+  perfil se calcula del lado del cliente).
+- **Decision explicita del usuario, marcada como riesgo aceptado (no
+  asumida en silencio)**: antes de tocar codigo se le planteo que este
+  endpoint es de naturaleza distinta al HTML publico que ya usaba el
+  resto de `mmradarScraper.ts` -- no documentado, interno, pensado para
+  el propio frontend de mmradar, mas fragil (puede cambiar/agregar
+  auth/rate-limit sin aviso) y sin cambiar el trade-off de la opcion
+  "navegador headless" (b) que seguia sin tener sentido por costo/
+  arquitectura. El usuario elgio explicitamente usarlo de todos modos.
+- **`packages/core/mmradarScraper.ts`**: nueva `fetchMatchScores(gameName,
+  tagLine)` (privada, no exportada) que hace el POST de arriba, filtra
+  `participants` por `isPlayer: true` en cada partida devuelta, y
+  promedia (redondeado) los 6 scores sobre todas las partidas con datos.
+  Nunca lanza -- mismo criterio que `fetchMmradarData` en
+  `actions/index.ts`: fuente opcional/secundaria, un fallo aca no debe
+  tirar abajo el resto de la consulta (currentRank/icono/nivel/titulos
+  del HTML publico siguen funcionando aunque esto falle). `fetchMmradarProfile`
+  ahora llama `fetchMatchScores` para poblar `performanceScores` en vez
+  de `parsePerformanceScores(html)` (que se deja en el archivo, sin usar,
+  documentada como "por que no alcanza" -- no se borro, el MCP de
+  filesystem no expone delete, mismo patron que otros archivos
+  deprecados del proyecto). `tsconfig.json` no tiene `noUnusedLocals` ni
+  `noUnusedParameters`, asi que esta funcion sin uso no rompe el build.
+- No se toco `actions/index.ts` ni ningun componente -- el cambio es
+  interno a `fetchMmradarProfile()`, que ya devolvia `performanceScores`
+  en su resultado; todo lo que consume ese resultado (`fetchMmradarData`,
+  `saveOwnParticipant`, `saveParticipant`, `refreshMmradarData`,
+  `MmradarPanel.tsx`, `PlayerCardLive.tsx`) sigue igual, ahora recibe
+  datos reales en vez de `null` cuando mmradar tiene partidas para ese
+  jugador.
+- Archivo tocado y confirmado con `read_text_file` posterior:
+  `packages/core/mmradarScraper.ts` (unico archivo de esta sub-sesion).
+- Pendiente para el usuario (sin bash real sobre el proyecto en esta
+  sesion tampoco, todo via filesystem MCP): correr `bun install` +
+  `bun run dev`, entrar a `/inscripcion` o a la ficha de un peleador con
+  Riot ID real cargado, y confirmar que las 6 barras de performance ya
+  muestran numeros en vez de "SIN DATOS AUN" (probar primero con
+  `OneShotOneKill#sigma`, que es el perfil que se uso para armar el fix).
+  Si en algun momento las barras vuelven a quedar vacias, sospechar
+  PRIMERO de que mmradar cambio la forma/nombre de `/load-matches` (o le
+  agrego auth) antes de tocar el parser del HTML -- inspeccionar la
+  pestana Network de nuevo es la forma de confirmarlo, no asumir.
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.
