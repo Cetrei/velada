@@ -35,12 +35,13 @@ const { predictions, matches, home } = PAGES;
 
 <Layout title={home.tabTitle}>
   <div class="snap-y snap-mandatory overflow-y-auto h-screen scroll-smooth" style="scroll-padding-top: 4rem;">
+    <div class="snap-start">
     <HeroBanner participants={participants} hero={home.hero}>
       <Countdown client:load targetIso={eventState.startTime} />
     </HeroBanner>
-
-    <section id="roster" class="h-screen snap-start flex flex-col items-center justify-center bg-lol-darkBg border-y border-lol-border py-4 overflow-y-auto overscroll-y-contain">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full min-h-full flex flex-col items-center justify-center gap-4">
+    </div>
+    
+      <section id="roster" class="h-screen snap-start flex flex-col items-center justify-center bg-lol-darkBg border-y border-lol-border py-4">      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full min-h-full flex flex-col items-center justify-center gap-4">
         <div class="w-full flex items-center justify-center">
           <ChampionSelectGrid client:load participants={participants} rivalByParticipantId={rivalByParticipantId} />
         </div>
