@@ -105,6 +105,25 @@ const copy = PAGES.fighterDetail;
             }}
             className="clip-edges"
           />
+          <div class="mt-4">
+            <MmradarPanel
+              client:load
+              participant={{
+                id: participant.id,
+                name: participant.name,
+                lolUsername: participant.lolUsername,
+                performanceRank: participant.performanceRank,
+                performanceScores: participant.performanceScores,
+                titles: participant.titles,
+                mmradarIconUrl: participant.mmradarIconUrl,
+                mmradarServer: participant.mmradarServer,
+                mmradarLevel: participant.mmradarLevel,
+                memeTitles: participant.memeTitles,
+                memeIconUrl: participant.memeIconUrl
+              }}
+              canUpdate={canUpdateMmradar}
+            />
+          </div>
           <div class="flex items-center gap-4 mt-4">
             {participant.instagramHandle && (
               <span class="flex items-center gap-1.5 text-slate-300 text-sm">
@@ -157,26 +176,6 @@ const copy = PAGES.fighterDetail;
           )}
 
           {participant.description && <p class="text-slate-300 leading-relaxed mb-8">{participant.description}</p>}
-
-          <div class="mb-8">
-            <MmradarPanel
-              client:load
-              participant={{
-                id: participant.id,
-                name: participant.name,
-                lolUsername: participant.lolUsername,
-                performanceRank: participant.performanceRank,
-                performanceScores: participant.performanceScores,
-                titles: participant.titles,
-                mmradarIconUrl: participant.mmradarIconUrl,
-                mmradarServer: participant.mmradarServer,
-                mmradarLevel: participant.mmradarLevel,
-                memeTitles: participant.memeTitles,
-                memeIconUrl: participant.memeIconUrl
-              }}
-              canUpdate={canUpdateMmradar}
-            />
-          </div>
 
           {hasMemeMatches && (
             <div class="bg-lol-cardBg border border-lol-border p-6 mb-8">

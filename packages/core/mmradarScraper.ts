@@ -41,6 +41,9 @@
  * del lado de ellos).
  */
 
+import type { TitleEngineMatch } from "./titleEngine";
+import { buildTitleEngineInput, evaluateTitles } from "./titleEngine";
+
 export type MmradarLookupErrorReason =
   | "not_found"
   | "invalid_riot_id"
@@ -85,6 +88,17 @@ export interface MmradarCurrentRank {
 export interface MmradarTitle {
   text: string;
   color: string | null;
+  /**
+   * Por que se otorgo el titulo, con los numeros reales del jugador (ej.
+   * "Combat 2140 y Teamfight 2310 de promedio") -- pedido explicito del
+   * usuario 2026-08-20: el hover de un titulo tiene que explicar el
+   * motivo, no solo mostrar el nombre. Los titulos que vienen del motor
+   * propio (ver titleEngine.ts, TITLE_DEFINITIONS[].reason) siempre traen
+   * esto poblado; queda null solo para titulos de meme
+   * (participant.memeTitles, ver MmradarPanel.tsx) que no pasan por el
+   * motor y no tienen un motivo real que mostrar.
+   */
+  reason: string | null;
 }
 
 export interface MmradarProfileResult {
@@ -284,6 +298,8 @@ function parsePerformanceScores(html: string): MmradarPerformanceScores | null {
 
 interface LoadMatchesParticipant {
   isPlayer: boolean;
+  championName?: string;
+  teamId?: number;
   scores?: {
     laning: number;
     farming: number;
@@ -297,6 +313,7 @@ interface LoadMatchesParticipant {
 
 interface LoadMatchesMatch {
   matchId: string;
+  winningTeam?: number;
   participants: LoadMatchesParticipant[];
 }
 
@@ -331,7 +348,22 @@ interface LoadMatchesMatch {
  * siguen funcionando aunque esto falle), asi que un fallo aca no debe
  * romper el resto de la consulta -- solo loguea y devuelve null.
  */
-async function fetchMatchScores(gameName: string, tagLine: string): Promise<MmradarPerformanceScores | null> {
+interface RawMatchesResult {
+  averageScores: MmradarPerformanceScores;
+  /** Partidas ya reducidas al shape que necesita titleEngine.ts (ver TitleEngineMatch). */
+  engineMatches: TitleEngineMatch[];
+}
+
+/**
+ * Ademas del promedio (ver comentario original mas abajo), esta funcion
+ * ahora tambien arma TitleEngineMatch[] para el motor de titulos propio
+ * (packages/core/titleEngine.ts) -- mismo POST a /load-matches, un solo
+ * fetch cubre ambas necesidades en vez de pegarle dos veces al mismo
+ * endpoint. "wasTopScoreInMatch" (insumo de la regla MVP del motor) se
+ * calcula comparando el total del jugador contra los otros 9
+ * participantes de esa partida puntual, ya presentes en el mismo payload.
+ */
+async function fetchRawMatches(gameName: string, tagLine: string): Promise<RawMatchesResult | null> {
   try {
     const response = await fetch("https://mmradar.gg/load-matches", {
       method: "POST",
@@ -364,21 +396,38 @@ async function fetchMatchScores(gameName: string, tagLine: string): Promise<Mmra
       vision: 0
     };
     let gamesCounted = 0;
+    const engineMatches: TitleEngineMatch[] = [];
 
     for (const match of matches) {
       const player = match.participants?.find((p) => p.isPlayer);
       if (!player?.scores) continue;
       for (const key of keys) totals[key] += player.scores[key];
       gamesCounted += 1;
+
+      const highestTotal = Math.max(...match.participants.map((p) => p.scores?.total ?? -Infinity));
+      engineMatches.push({
+        championName: player.championName ?? "?",
+        scores: {
+          laning: player.scores.laning,
+          farming: player.scores.farming,
+          objectives: player.scores.objectives,
+          combat: player.scores.combat,
+          teamfight: player.scores.teamfight,
+          vision: player.scores.vision,
+          total: player.scores.total
+        },
+        won: typeof match.winningTeam === "number" && player.teamId === match.winningTeam,
+        wasTopScoreInMatch: player.scores.total >= highestTotal
+      });
     }
 
     if (gamesCounted === 0) return null;
 
-    const averages = {} as MmradarPerformanceScores;
-    for (const key of keys) averages[key] = Math.round(totals[key] / gamesCounted);
-    return averages;
+    const averageScores = {} as MmradarPerformanceScores;
+    for (const key of keys) averageScores[key] = Math.round(totals[key] / gamesCounted);
+    return { averageScores, engineMatches };
   } catch (err) {
-    console.error(`fetchMatchScores fallo para ${gameName}#${tagLine}:`, err);
+    console.error(`fetchRawMatches fallo para ${gameName}#${tagLine}:`, err);
     return null;
   }
 }
@@ -648,18 +697,32 @@ export async function fetchMmradarProfile(lolUsername: string): Promise<MmradarP
     // parsePerformanceRank). Antes esto abortaba TODA la consulta con
     // unexpected_format, tirando tambien el currentRank oficial que si
     // funciona perfecto -- ahora simplemente se guarda null y se sigue.
-    // performanceScores: el HTML nunca los trae (ver parsePerformanceScores),
-    // asi que se consultan aparte via fetchMatchScores (endpoint
-    // /load-matches) -- fuente distinta, nunca lanza, un fallo ahi no
-    // aborta el resto de este resultado.
+    // performanceScores/titulos: el HTML nunca trae los 6 scores (ver
+    // parsePerformanceScores) y mmradar calcula sus propios titulos 100%
+    // en el cliente sin exponer un campo explicito en el JSON (ver
+    // decision del usuario 2026-08-20 en titleEngine.ts) -- ambos se
+    // derivan aca del mismo fetch a /load-matches (fetchRawMatches),
+    // fuente distinta del HTML, nunca lanza, un fallo ahi no aborta el
+    // resto de este resultado (currentRank/icono/nivel siguen andando).
     const [gameName, tagLine] = lolUsername.split("#");
-    const performanceScores = await fetchMatchScores(gameName, tagLine);
+    const currentRank = parseCurrentRank(html);
+    const performanceRank = parsePerformanceRank(html);
+    const raw = await fetchRawMatches(gameName, tagLine);
+
+    const titles = raw
+      ? evaluateTitles(
+          buildTitleEngineInput(raw.engineMatches, {
+            performanceRank,
+            currentRank: currentRank?.rank ?? null
+          })
+        )
+      : [];
 
     return {
-      currentRank: parseCurrentRank(html),
-      performanceRank: parsePerformanceRank(html),
-      performanceScores,
-      titles: parseTitles(html),
+      currentRank,
+      performanceRank,
+      performanceScores: raw?.averageScores ?? null,
+      titles,
       iconUrl: parseIconUrl(html),
       server: parseServer(html),
       level: parseSummonerLevel(html)

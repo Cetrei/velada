@@ -1650,6 +1650,69 @@ era el de arriba, no whitelist).
   ambos estados; y (2)/(3) recargando `/peleadores/[id]` de un jugador
   con `performanceScores` reales cargados.
 
+## Sesion 2026-08-20 (5): re-verificado MmradarPerformanceCard (ya wireado bien) + burger reforzado con fallback CSS
+- El usuario reporto (con captura de `/mi-perfil`) que el panel de barras
+  de mmradar NO aparecia debajo del fighter card, y que el hamburguesa
+  seguia visible en modo horizontal. Revisado todo el codigo real via
+  filesystem MCP antes de tocar nada.
+- **Panel de performance: confirmado que el wiring YA esta completo y
+  correcto** en `ParticipantProfileForm.tsx` -- el `<aside>` ya renderiza
+  `<PlayerCard />` seguido de `<MmradarPerformanceCard size="compact" ... />`
+  en el mismo flujo vertical (`MmradarPerformanceCard` tiene
+  `margin-top: 12px` en su variante compact), con `scores`/`performanceRank`/
+  `titles`/`iconUrl`/`level`/`riotId` todos tomando `riotCheck.<campo> ??
+  existingParticipant?.<campo>` como fallback -- exactamente el patron que
+  la sesion (19) documento como ya resuelto. No se encontro ningun bug de
+  codigo en este componente ni en `MmradarPerformanceCard.tsx`. Si en la
+  imagen del usuario segia sin aparecer, las hipotesis mas probables son:
+  (a) `riotCheck.status` todavia en `"idle"`/`"checking"` en el momento de
+  la captura (el fetch a `checkRiotProfile` tarda ~600ms de debounce + la
+  consulta real a mmradar.gg) -- `hasAnyContent` en `MmradarPerformanceCard`
+  devuelve `false` y el componente hace `return null` si no hay
+  `riotId`/`iconUrl`/`titles`/`scores`/`performanceRank`/`headerAction`
+  todavia; o (b) el participante en cuestion no tiene
+  `performanceScores`/`titles`/`mmradarIconUrl` guardados en la fila real
+  de Supabase (dato, no codigo -- ver sesiones (12)-(20) sobre el pipeline
+  de guardado). No se toco ningun archivo de este flujo esta sesion por no
+  encontrar nada que arreglar en el codigo.
+- **Hamburguesa: re-confirmada la misma conclusion que las sesiones (1)-(4)
+  de hoy y sesiones anteriores** -- `Layout.astro` usa `hidden md:flex`
+  (desktop) / `md:hidden` (burger) estandar, sin duplicados de layout, sin
+  CSS externo conflictivo en `global.css`/`combates.astro`/`peleadores.astro`,
+  `tailwind.config.cjs` sin override de breakpoints, `astro.config.mjs` con
+  el adapter/integraciones correctas. La imagen que mando el usuario
+  muestra el burger visible en un viewport claramente ancho (desktop), lo
+  cual es inconsistente con que sea un problema de breakpoint mal
+  calculado (768px es el default, no hay contenido de nav tan ancho como
+  para justificar subirlo) -- apunta a un build/dev-server stale mas que a
+  un bug de codigo, mismo patron ya documentado repetidas veces en este
+  AGENT.md (el proyecto no tiene bash real disponible en ninguna sesion
+  para confirmar esto en caliente).
+  Agregado de todos modos un refuerzo defensivo en `Layout.astro`: 2 reglas
+  `@media` con `!important` (`.mobile-nav-burger { display: none }` en
+  `min-width: 768px`, y el bloque `.hidden.md:flex` forzado a `display: none`
+  en `max-width: 767px`) que no deberian cambiar nada si Tailwind ya
+  funciona bien, pero blindan contra cualquier CSS externo con mayor
+  especificidad o un build cacheado sirviendo utilidades viejas.
+- Pendiente para el usuario (sin bash real sobre el proyecto en esta
+  sesion tampoco, todo via filesystem MCP): **matar cualquier proceso
+  `bun run dev`/`wrangler dev` viejo y arrancarlo de cero** (no solo
+  guardar archivos con el proceso corriendo -- ver la advertencia ya
+  documentada en la sesion 2026-08-18(2) sobre Vite/Astro leyendo `.env`
+  solo al arrancar, mismo principio aplica a cambios de layout/CSS con hot
+  reload desincronizado), luego probar en una ventana de navegador nueva
+  (o modo incognito, para descartar cache del browser) si el burger sigue
+  apareciendo en un viewport >= 768px. Si TODAVIA aparece despues de un
+  reinicio real y cache limpio, mandar el resultado de inspeccionar
+  `.mobile-nav-burger` con devtools (que regla especifica esta ganando la
+  cascada, con que archivo/linea de origen) -- eso es lo unico que puede
+  confirmar la causa real a esta altura, la lectura de codigo ya se agoto.
+  Para el panel de performance: confirmar con una captura de red (pestana
+  Network, no solo la UI) si `checkRiotProfile` esta devolviendo
+  `status: "found"` con `performanceScores` no nulo para el Riot ID de la
+  captura, y si el problema persiste con un participante que ya tenga
+  `performanceScores` guardados de antes (sin depender del check en vivo).
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.

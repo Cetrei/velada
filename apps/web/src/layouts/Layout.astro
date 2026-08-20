@@ -94,6 +94,25 @@ const isHome = Astro.url.pathname === "/";
         z-index: 60;
       }
 
+      /* Refuerzo defensivo: si por algun motivo (cache de build viejo,
+         CSS externo con mayor especificidad, extension del navegador)
+         md:hidden de Tailwind no gana la cascada, esta regla fuerza el
+         comportamiento correcto explicitamente en el mismo breakpoint
+         que usa el resto del proyecto (md = 768px, sin override en
+         tailwind.config.cjs). No cambia el comportamiento si Tailwind ya
+         esta funcionando bien -- es un cinturon de seguridad, no un fix
+         alternativo. */
+      @media (min-width: 768px) {
+        .mobile-nav-burger {
+          display: none !important;
+        }
+      }
+      @media (max-width: 767px) {
+        nav > div.max-w-7xl > div.hidden.md\:flex {
+          display: none !important;
+        }
+      }
+
       .mobile-nav-burger-line {
         display: block;
         width: 100%;
