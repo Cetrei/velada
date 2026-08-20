@@ -1307,6 +1307,73 @@ era el de arriba, no whitelist).
   servidor -- si en algun momento cambia, hay que actualizar
   `parsePerformanceScores` con un fetch real nuevo, no asumiendo.
 
+## Sesion 2026-08-19 (3): sitio caido en produccion (500) por typo en meme-participants.yml + parser sin proteccion
+- El usuario reporto el sitio caido (`velada.cetrei.dev` devolviendo 500
+  Internal Server Error en el navegador) poco despues de la sesion
+  anterior. El primer diagnostico (revisar `index.astro`, `supabase.ts`,
+  el deploy workflow) no encontro nada malo en el codigo tocado esa
+  sesion -- la causa real aparecio recien cuando el usuario mando el log
+  real de Cloudflare (no algo que se pueda ver sin logs del Worker):
+  ```
+  [ERROR] Error: Invalid meme-participants.yml: 0.memeFakeTeamMatch.result:
+  Invalid enum value. Expected 'win' | 'loss', received 'lose'
+    at parseMemeParticipants -> loadMemeParticipants -> loadParticipants
+  ```
+  Afectaba TODAS las rutas que llaman `loadParticipants()` (`/`,
+  `/peleadores`, `/peleadores/[id]`) con 500, no solo una pagina puntual.
+- **Causa de datos**: `apps/web/src/data/meme-participants.yml` tenia
+  `memeFakeTeamMatch.result: "lose"` en el unico participante meme
+  ("Fabitos Priv") -- el schema (`ParticipantSchema` en
+  `packages/core/schemas.ts`) exige el enum `"win" | "loss"` (ingles
+  correcto), no `"lose"`. Typo de tipeo simple, corregido a `"loss"`.
+  Confirmado con `read_text_file` sobre el archivo real antes y despues
+  del fix -- este typo NO fue introducido por la sesion anterior (no se
+  toco ese YAML en la (2)), ya estaba asi de una sesion mas vieja no
+  documentada.
+- **Causa de codigo (el bug real, el dato invalido solo lo disparo)**:
+  `parseParticipants`/`parseMemeParticipants` (`packages/core/utils.ts`)
+  hacen `throw new Error(...)` cuando el YAML no matchea el schema -- por
+  diseno, para que un problema de datos sea visible en vez de fallar en
+  silencio. El problema es que `loadYamlParticipants`/
+  `loadMemeParticipants` en `apps/web/src/lib/loadParticipants.ts` NO
+  atrapaban esa excepcion en absoluto (a diferencia del resto de
+  `loadParticipants()`, que si degrada con gracia cuando Supabase falla o
+  devuelve datos invalidos) -- la excepcion subia sin capturar hasta el
+  render SSR completo y tiraba abajo TODO el sitio con un 500, por un
+  typo en un solo campo de un YAML que ademas es contenido puramente
+  decorativo/opcional (participantes "de meme"). Ya habia pasado antes
+  segun el usuario ("ya me habia pasado eso una vez") -- consistente con
+  que sea facil de disparar por error humano al editar estos YAML a mano.
+  Fix: ambas funciones (`loadYamlParticipants`, `loadMemeParticipants`)
+  ahora envuelven su parseo en try/catch, loguean el error con
+  `console.error` (visible en los logs de Cloudflare, igual que el que
+  mando el usuario) y degradan a array vacio en vez de relanzar --
+  mismo criterio de "el sitio nunca debe quedar en blanco/caido por un
+  problema de datos" que ya aplicaba el resto de `loadParticipants()`.
+  Un typo futuro en cualquiera de los dos YAML ahora hace que ESE
+  contenido puntual desaparezca (roster real vacio, o sin participantes
+  meme) en vez de tirar el sitio entero -- se sigue viendo en los logs
+  para que no pase desapercibido.
+- Archivo tocado: `apps/web/src/lib/loadParticipants.ts` (fix real) y
+  `apps/web/src/data/meme-participants.yml` (dato puntual corregido).
+  Ambos editados con `filesystem:edit_file` sobre la ruta real y
+  releidos despues para confirmar.
+- Nota de herramienta: `filesystem:search_files` con el pattern
+  `"meme-participants.yml"` (sin wildcards) no encontro el archivo pese a
+  existir -- `list_directory` sobre `apps/web/src/data/` si lo mostro. Un
+  pattern con `*` (`"*.ts"`) si funciono bien en `packages/core/`. Para
+  la proxima sesion: si `search_files` no encuentra algo que se sabe que
+  existe, no asumir que no esta -- listar el directorio contenedor
+  directamente en vez de confiar en el resultado vacio de la busqueda.
+- Pendiente para el usuario (sin bash real sobre el proyecto en esta
+  sesion tampoco, todo via filesystem MCP, y sin acceso a los logs de
+  Cloudflare desde aca -- el usuario tuvo que pegarlos a mano): hacer
+  commit + push de ambos archivos para que se dispare el deploy
+  (`deploy.yml`) y confirmar en `velada.cetrei.dev` que el sitio vuelve a
+  cargar. Revisar los logs de Cloudflare despues del deploy por las dudas
+  de que haya otro error distinto tapado detras de este (el 500 pudo
+  haber estado ocultando otros problemas que no llegaban a ejecutarse).
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.

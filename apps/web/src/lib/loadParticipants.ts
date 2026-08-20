@@ -21,7 +21,16 @@ const MEME_PARTICIPANTS_YAML = Object.values(memeYamlModules)[0] ?? "";
 
 /** Bundled fallback used when Supabase isn't configured or the table is empty. */
 function loadYamlParticipants(): Participant[] {
-  return parseParticipants(PARTICIPANTS_YAML);
+  try {
+    return parseParticipants(PARTICIPANTS_YAML);
+  } catch (err) {
+    // Un typo/valor invalido en participants.yml no debe tirar todo el
+    // sitio (SSR) con un 500 -- ya paso una vez (ver AGENT.md). Se loguea
+    // y se degrada a roster vacio, mismo criterio que loadParticipants ya
+    // usa cuando Supabase falla o devuelve datos con formato invalido.
+    console.error("Invalid participants.yml, usando roster vacio:", err instanceof Error ? err.message : err);
+    return [];
+  }
 }
 
 /**
@@ -33,7 +42,18 @@ function loadYamlParticipants(): Participant[] {
  * fallback de demo, es contenido real que debe aparecer siempre.
  */
 function loadMemeParticipants(): Participant[] {
-  return parseMemeParticipants(MEME_PARTICIPANTS_YAML);
+  try {
+    return parseMemeParticipants(MEME_PARTICIPANTS_YAML);
+  } catch (err) {
+    // Bug real 2026-08-19: un solo typo en meme-participants.yml
+    // (memeFakeTeamMatch.result: "lose" en vez de "loss") tiraba el sitio
+    // entero (/, /peleadores, /peleadores/[id]) con un 500 -- este YAML es
+    // contenido decorativo/opcional, nunca deberia poder tumbar el resto
+    // del sitio. Se loguea y se degrada a sin participantes meme en vez de
+    // relanzar.
+    console.error("Invalid meme-participants.yml, se omiten los participantes meme:", err instanceof Error ? err.message : err);
+    return [];
+  }
 }
 
 interface ParticipantRow {
