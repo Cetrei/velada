@@ -3,6 +3,7 @@ import Layout from "../layouts/Layout.astro";
 import RouletteWheel from "../components/RouletteWheel";
 import { loadParticipants } from "../lib/loadParticipants";
 import { fetchEventState } from "../lib/eventState";
+import { fetchMatches } from "../lib/matches";
 import { PAGES } from "@velada/core";
 
 const allParticipants = await loadParticipants();
@@ -11,6 +12,16 @@ const allParticipants = await loadParticipants();
 // mostrado como gajo de la rueda.
 const participants = allParticipants.filter((p) => !p.excludeFromMatches);
 const eventState = await fetchEventState();
+
+// Combates ya generados por el sorteo (is_random: true, ver
+// AdminControl.triggerRandomMatch), para que RouletteWheel pueda listarlos
+// como resultados si el visitante entra despues de que el sorteo ya paso
+// -- antes la rueda solo reaccionaba al broadcast en vivo, asi que
+// entrar tarde mostraba la rueda vacia sin ningun rastro de lo ya
+// sorteado.
+const allMatches = await fetchMatches();
+const randomMatches = allMatches.filter((m) => m.isRandom);
+
 const copy = PAGES.raffle;
 ---
 
@@ -34,6 +45,7 @@ const copy = PAGES.raffle;
         client:load
         participants={participants}
         rouletteUnlocked={eventState.rouletteUnlocked}
+        existingMatches={randomMatches}
       />
     </div>
   </section>

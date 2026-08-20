@@ -50,6 +50,19 @@ const totalVotes = tally?.totalVotes ?? 0;
 const participantPct = totalVotes > 0 ? Math.round((participantVotes / totalVotes) * 1000) / 10 : 50;
 const rivalPct = totalVotes > 0 ? Math.round((100 - participantPct) * 10) / 10 : 50;
 
+// Contenido 100% de meme (ver ParticipantSchema.memeTitles/memeIconUrl/
+// memeFakeMatch/memeFakeTeamMatch y data/meme-participants.yml): solo
+// existe para participantes con excludeFromMatches, y solo se dibuja en
+// esta ficha puntual -- nunca en /combates, /sorteo, ni el balanceador de
+// equipos. hasMemeExtras controla si la seccion entera se muestra.
+const hasMemeExtras =
+  participant.excludeFromMatches &&
+  Boolean(
+    (participant.memeTitles && participant.memeTitles.length > 0) ||
+      participant.memeFakeMatch ||
+      participant.memeFakeTeamMatch
+  );
+
 const copy = PAGES.fighterDetail;
 ---
 
@@ -142,15 +155,111 @@ const copy = PAGES.fighterDetail;
               participant={{
                 id: participant.id,
                 name: participant.name,
+                lolUsername: participant.lolUsername,
                 performanceRank: participant.performanceRank,
                 performanceScores: participant.performanceScores,
                 titles: participant.titles,
                 mmradarIconUrl: participant.mmradarIconUrl,
-                mmradarServer: participant.mmradarServer
+                mmradarServer: participant.mmradarServer,
+                mmradarLevel: participant.mmradarLevel
               }}
               canUpdate={canUpdateMmradar}
             />
           </div>
+
+          {hasMemeExtras && (
+            <div class="bg-lol-cardBg border border-dashed border-lol-gold/50 p-6 mb-8">
+              <p class="text-lol-gold text-xs uppercase tracking-widest font-bold mb-4">
+                Contenido de broma -- no es un combate real del evento
+              </p>
+
+              {participant.memeIconUrl && (
+                <div class="flex items-center gap-3 mb-5">
+                  <img
+                    src={participant.memeIconUrl}
+                    alt=""
+                    class="w-12 h-12 rounded-full object-cover border-2 border-lol-gold"
+                    loading="lazy"
+                  />
+                  {participant.memeTitles && participant.memeTitles.length > 0 && (
+                    <div class="flex flex-wrap gap-2">
+                      {participant.memeTitles.map((title) => (
+                        <span class="text-[0.65rem] font-bold uppercase tracking-wide bg-lol-gold/10 border border-lol-gold/30 text-lol-gold px-2 py-1 rounded-sm">
+                          {title}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!participant.memeIconUrl && participant.memeTitles && participant.memeTitles.length > 0 && (
+                <div class="flex flex-wrap gap-2 mb-5">
+                  {participant.memeTitles.map((title) => (
+                    <span class="text-[0.65rem] font-bold uppercase tracking-wide bg-lol-gold/10 border border-lol-gold/30 text-lol-gold px-2 py-1 rounded-sm">
+                      {title}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {participant.memeFakeMatch && (
+                <div class="mb-6">
+                  <p class="text-slate-500 text-xs uppercase tracking-wide mb-2">Combate 1v1 (meme)</p>
+                  <div class="flex items-center justify-between gap-4 bg-lol-darkBg border border-lol-border p-4">
+                    <div class="text-center flex-1">
+                      <p class="text-white font-bold">{participant.name}</p>
+                      {participant.memeFakeMatch.result === "win" && (
+                        <span class="text-lol-gold text-xs uppercase font-bold">Ganador</span>
+                      )}
+                    </div>
+                    <span class="text-lol-blue font-bold text-sm">VS</span>
+                    <div class="text-center flex-1">
+                      <p class="text-white font-bold">{participant.memeFakeMatch.opponentName}</p>
+                      <p class="text-slate-500 text-xs italic">{participant.memeFakeMatch.opponentNickname}</p>
+                      {participant.memeFakeMatch.result === "loss" && (
+                        <span class="text-lol-gold text-xs uppercase font-bold">Ganador</span>
+                      )}
+                    </div>
+                  </div>
+                  {participant.memeFakeMatch.decision && (
+                    <p class="text-slate-500 text-xs text-center mt-2">{participant.memeFakeMatch.decision}</p>
+                  )}
+                </div>
+              )}
+
+              {participant.memeFakeTeamMatch && (
+                <div>
+                  <p class="text-slate-500 text-xs uppercase tracking-wide mb-2">Combate por equipos (meme)</p>
+                  <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-lol-darkBg border border-lol-border p-3">
+                      <p class="text-xs uppercase text-slate-400 mb-1">
+                        {participant.memeFakeTeamMatch.teamName ?? "Tu equipo"}
+                        {participant.memeFakeTeamMatch.result === "win" && <span class="text-lol-gold ml-1">★</span>}
+                      </p>
+                      <ul class="text-sm text-slate-300 space-y-0.5">
+                        <li class="text-white font-bold">{participant.name}</li>
+                        {participant.memeFakeTeamMatch.teammateNames.map((name) => (
+                          <li>{name}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div class="bg-lol-darkBg border border-lol-border p-3">
+                      <p class="text-xs uppercase text-slate-400 mb-1">
+                        {participant.memeFakeTeamMatch.rivalTeamName ?? "Rivales"}
+                        {participant.memeFakeTeamMatch.result === "loss" && <span class="text-lol-gold ml-1">★</span>}
+                      </p>
+                      <ul class="text-sm text-slate-300 space-y-0.5">
+                        {participant.memeFakeTeamMatch.rivalNames.map((name) => (
+                          <li>{name}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {rival && (
             <div class="flex items-center justify-between bg-lol-cardBg border border-lol-border p-5 mb-8">

@@ -148,6 +148,13 @@ ALTER TABLE participants ADD COLUMN IF NOT EXISTS titles JSONB;
 -- simplemente no lo muestra en ese caso, sin dejar espacio en blanco.
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS mmradar_icon_url TEXT;
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS mmradar_server TEXT;
+-- Nivel de invocador (parseSummonerLevel en mmradarScraper.ts), agregado
+-- 2026-08-19 junto con el rediseno de MmradarPanel/PerformancePreviewCard
+-- para que coincidan con la referencia visual del usuario (icono + nivel
+-- superpuesto, igual que mmradar.gg). Mismo criterio que el resto de
+-- columnas mmradar: se re-consulta junto con todo lo demas, nunca se
+-- escribe a mano.
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS mmradar_level INTEGER;
 
 -- Combates por equipos (5v5 o mezclas de 4v4/3v3) del evento mayor,
 -- separados de matches (que es siempre 1v1, de la ruleta). Un solo

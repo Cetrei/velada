@@ -2,23 +2,36 @@ import { useState } from "react";
 import { actions } from "astro:actions";
 import type { Participant, MmradarPerformanceScores } from "@velada/core";
 import { emitMmradarUpdate } from "../lib/mmradarUpdateBus";
+import { resolveTitleColor } from "../lib/mmradarTitleColor";
 
 /**
  * Bloque de datos de mmradar.gg para la ficha publica del jugador
- * (/peleadores/[id].astro): icono + nombre + server + titulos arriba,
- * barras de las 6 stats de performance abajo, y un boton "Actualizar"
- * opcional (solo si el visitante es el dueno del perfil o un admin de
- * panel) que llama refreshMmradarData para re-consultar la fuente sin
- * tener que editar el resto del formulario. Si mmradar nunca respondio
- * para este jugador (performanceScores null) no se muestra nada de las
- * barras, sin dejar un hueco vacio -- mismo criterio que el resto de
- * componentes que consumen datos opcionales de mmradar (icono/server
- * tambien caen sin romper el layout si faltan).
+ * (/peleadores/[id].astro): icono con nivel superpuesto + Riot ID +
+ * server + tags de colores arriba (igual a la referencia visual del
+ * usuario, ver captura de su propio perfil de mmradar.gg -- icono
+ * circular con el nivel de invocador en una esquina, tags coloreados
+ * segun el tipo de titulo, Riot ID grande, badge de servidor), barras de
+ * las 6 stats de performance abajo, y un boton "Actualizar" opcional
+ * (solo si el visitante es el dueno del perfil o un admin de panel) que
+ * llama refreshMmradarData para re-consultar la fuente sin tener que
+ * editar el resto del formulario. Si mmradar nunca respondio para este
+ * jugador (performanceScores null) no se muestra nada de las barras, sin
+ * dejar un hueco vacio -- mismo criterio que el resto de componentes que
+ * consumen datos opcionales de mmradar (icono/server/nivel tambien caen
+ * sin romper el layout si faltan).
  */
 
 type ParticipantMmradarData = Pick<
   Participant,
-  "id" | "name" | "performanceRank" | "performanceScores" | "titles" | "mmradarIconUrl" | "mmradarServer"
+  | "id"
+  | "name"
+  | "lolUsername"
+  | "performanceRank"
+  | "performanceScores"
+  | "titles"
+  | "mmradarIconUrl"
+  | "mmradarServer"
+  | "mmradarLevel"
 >;
 
 interface MmradarPanelProps {
@@ -63,10 +76,13 @@ export default function MmradarPanel({ participant, canUpdate, onUpdated }: Mmra
   const [titles, setTitles] = useState(participant.titles ?? null);
   const [iconUrl, setIconUrl] = useState(participant.mmradarIconUrl ?? null);
   const [server, setServer] = useState(participant.mmradarServer ?? null);
+  const [level, setLevel] = useState(participant.mmradarLevel ?? null);
   const [updating, setUpdating] = useState(false);
   const [status, setStatus] = useState<StatusMessage>(null);
 
-  const hasAnyData = Boolean(performanceRank || scores || (titles && titles.length > 0) || iconUrl || server);
+  const hasAnyData = Boolean(
+    performanceRank || scores || (titles && titles.length > 0) || iconUrl || server || level || participant.lolUsername
+  );
   if (!hasAnyData && !canUpdate) return null;
 
   const maxScore = scores ? Math.max(...Object.values(scores), 1) : 1;
@@ -88,6 +104,7 @@ export default function MmradarPanel({ participant, canUpdate, onUpdated }: Mmra
         setTitles(data.titles ?? null);
         setIconUrl(data.mmradarIconUrl ?? null);
         setServer(data.mmradarServer ?? null);
+        setLevel(data.mmradarLevel ?? null);
         setStatus({ type: "success", text: "Datos actualizados." });
         onUpdated?.({ performanceRank: data.performanceRank ?? null, performanceScores: data.performanceScores ?? null });
         // Antes no se mandaba performanceScores aca -- PlayerCardLive
@@ -111,30 +128,41 @@ export default function MmradarPanel({ participant, canUpdate, onUpdated }: Mmra
     <div className="mmradar-panel">
       {titles && titles.length > 0 && (
         <div className="mmradar-titles">
-          {titles.map((title) => (
-            <span key={title} className="mmradar-title-chip">
-              {title}
-            </span>
-          ))}
+          {titles.map((title) => {
+            const color = resolveTitleColor(title);
+            return (
+              <span
+                key={title.text}
+                className="mmradar-title-chip"
+                style={{ color: color.text, background: color.bg, borderColor: color.border }}
+              >
+                {title.text}
+              </span>
+            );
+          })}
         </div>
       )}
 
       <div className="mmradar-header">
         <div className="mmradar-identity">
           {iconUrl && (
-            <img
-              src={iconUrl}
-              alt=""
-              className="mmradar-icon"
-              loading="lazy"
-              decoding="async"
-              onError={(e) => {
-                e.currentTarget.style.display = "none";
-              }}
-            />
+            <span className="mmradar-icon-wrap">
+              <img
+                src={iconUrl}
+                alt=""
+                className="mmradar-icon"
+                loading="lazy"
+                decoding="async"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                }}
+              />
+              {level !== null && <span className="mmradar-level">{level}</span>}
+            </span>
           )}
           <div className="mmradar-identity-text">
             <p className="mmradar-name">{participant.name}</p>
+            {participant.lolUsername && <p className="mmradar-riot-id">{participant.lolUsername}</p>}
             <div className="mmradar-meta">
               {server && <span className="mmradar-server">{server}</span>}
               {performanceRank && <span className="mmradar-rank">{performanceRank}</span>}
@@ -186,7 +214,6 @@ export default function MmradarPanel({ participant, canUpdate, onUpdated }: Mmra
           font-weight: 700;
           text-transform: uppercase;
           letter-spacing: 0.04em;
-          color: #4FC3E8;
           background: rgba(79, 195, 232, 0.08);
           border: 1px solid rgba(79, 195, 232, 0.3);
           padding: 3px 8px;
@@ -208,14 +235,39 @@ export default function MmradarPanel({ participant, canUpdate, onUpdated }: Mmra
           min-width: 0;
         }
 
+        .mmradar-icon-wrap {
+          position: relative;
+          flex-shrink: 0;
+          display: inline-flex;
+        }
+
         .mmradar-icon {
           width: 48px;
           height: 48px;
           border-radius: 50%;
           object-fit: cover;
           border: 2px solid #C8AA6E;
-          flex-shrink: 0;
           background-color: #0A1428;
+        }
+
+        /* Nivel de invocador superpuesto sobre el icono, mismo criterio
+           visual que la referencia del usuario (numero chico anclado a
+           la esquina inferior del circulo). Solo se dibuja si
+           mmradar_level esta disponible (level !== null). */
+        .mmradar-level {
+          position: absolute;
+          bottom: -4px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: #0A1428;
+          border: 1px solid #C8AA6E;
+          color: #C8AA6E;
+          font-size: 0.6rem;
+          font-weight: 700;
+          line-height: 1;
+          padding: 2px 5px;
+          border-radius: 999px;
+          white-space: nowrap;
         }
 
         .mmradar-identity-text {
@@ -235,19 +287,32 @@ export default function MmradarPanel({ participant, canUpdate, onUpdated }: Mmra
           text-overflow: ellipsis;
         }
 
+        .mmradar-riot-id {
+          margin: 1px 0 0;
+          font-size: 0.7rem;
+          color: #4FC3E8;
+          font-style: italic;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
         .mmradar-meta {
           display: flex;
           align-items: center;
           gap: 8px;
-          margin-top: 2px;
+          margin-top: 4px;
         }
 
         .mmradar-server {
-          font-size: 0.7rem;
+          font-size: 0.65rem;
           font-weight: 700;
           color: #a09b8c;
           text-transform: uppercase;
           letter-spacing: 0.04em;
+          border: 1px solid rgba(200, 170, 110, 0.3);
+          border-radius: 3px;
+          padding: 1px 6px;
         }
 
         .mmradar-rank {

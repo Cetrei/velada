@@ -347,7 +347,7 @@ export const PARTICIPANT_MANAGER = {
   lolSectionTitle: "League of Legends",
   lookupCta: "Consultar",
   lookupCtaBusy: "...",
-  statsTitle: "Stats (libres, 0-100)",
+  statsTitle: "Stats (rango 0-100)",
   statsEmptyHint: "Sin stats. Ej: Mental, Toxicidad, Micro, Macro.",
   addStatCta: "+ Agregar stat",
   removeStatCta: "Quitar",

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { actions } from "astro:actions";
-import type { Participant, ParticipantStat, MmradarPerformanceScores } from "@velada/core";
+import type { Participant, ParticipantStat, MmradarPerformanceScores, MmradarTitle } from "@velada/core";
 import { PAGES, PARTICIPANT_MANAGER, COUNTRIES, flagForCountry, UNKNOWN_COUNTRY_FLAG, MAX_CUSTOM_STATS } from "@velada/core";
 import { compressImageFile, PHOTO_COMPRESSION, BANNER_COMPRESSION } from "@velada/core/imageCompression";
 import PlayerCard from "./PlayerCard";
@@ -145,6 +145,10 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
     reason?: string;
     performanceRank?: string | null;
     performanceScores?: MmradarPerformanceScores | null;
+    titles?: MmradarTitle[] | null;
+    iconUrl?: string | null;
+    server?: string | null;
+    level?: number | null;
   }>({
     status: "idle"
   });
@@ -195,7 +199,11 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
             status: "found",
             rank: data.rank,
             performanceRank: data.performanceRank,
-            performanceScores: data.performanceScores
+            performanceScores: data.performanceScores,
+            titles: data.titles,
+            iconUrl: data.iconUrl,
+            server: data.server,
+            level: data.level
           });
         } else if (data.status === "error") {
           setRiotCheck({ status: "error", reason: data.reason });
@@ -669,6 +677,10 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
           scores={riotCheck.performanceScores ?? existingParticipant?.performanceScores ?? null}
           performanceRank={riotCheck.performanceRank ?? existingParticipant?.performanceRank ?? null}
           status={riotCheck.status}
+          titles={riotCheck.titles ?? existingParticipant?.titles ?? null}
+          iconUrl={riotCheck.iconUrl ?? existingParticipant?.mmradarIconUrl ?? null}
+          level={riotCheck.level ?? existingParticipant?.mmradarLevel ?? null}
+          riotId={form.lolUsername || existingParticipant?.lolUsername || null}
         />
       </aside>
     </div>

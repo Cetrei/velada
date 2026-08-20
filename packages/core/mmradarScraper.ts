@@ -70,15 +70,34 @@ export interface MmradarCurrentRank {
   leaguePoints: number;
 }
 
+/**
+ * Un titulo otorgado por mmradar (ej. "OTP Kindred", "Duelist", "MVP")
+ * junto con su color, si el HTML lo trae. mmradar le pone a cada chip de
+ * titulo un color propio (visible en la referencia del usuario: azul,
+ * magenta, verde, dorado) -- se intenta leer ese color real del HTML
+ * (style inline en el propio <p class="player-title">, mismo patron que
+ * ya usa parseCurrentRank/parsePerformanceRank para leer
+ * style="color: rgb(...)"). Si el HTML no trae color para ese titulo
+ * puntual, color queda null: quien consuma esto (MmradarPanel,
+ * PerformancePreviewCard) decide como resolver la falta de color (nunca
+ * aca, este modulo solo scrapea lo que hay).
+ */
+export interface MmradarTitle {
+  text: string;
+  color: string | null;
+}
+
 export interface MmradarProfileResult {
   currentRank: MmradarCurrentRank | null;
   performanceRank: string | null;
   performanceScores: MmradarPerformanceScores | null;
-  titles: string[];
+  titles: MmradarTitle[];
   /** URL del icono de invocador (id="summoner-icon"). null si no se encontro -- no es un error, el componente que lo consume simplemente no lo muestra. */
   iconUrl: string | null;
   /** Servidor/region tal como lo muestra mmradar junto al nombre (id="region", ej. "LAN"). null si no se encontro. */
   server: string | null;
+  /** Nivel de invocador (id="summoner-level", numero suelto al lado del icono). null si no se encontro. */
+  level: number | null;
 }
 
 /**
@@ -269,14 +288,46 @@ function parsePerformanceScores(html: string): MmradarPerformanceScores | null {
  * Los titulos viven en <div id="player-titles"><p class="player-title
  * ..." data-tooltip="...">TEXTO</p>...</div>. Se extrae el texto interior
  * de cada <p class="player-title ...">, ignorando el tooltip.
+ *
+ * Color real (pedido explicito del usuario 2026-08-19, para no inventar
+ * colores que no vienen de mmradar): cada <p class="player-title"> puede
+ * traer su propio style inline (mismo patron ya usado por
+ * parseCurrentRank/parsePerformanceRank para leer "color: rgb(r, g, b)"
+ * de un style inline). Se busca ese patron DENTRO del tag de apertura del
+ * propio <p> (no en una ventana generica alrededor, para no capturar el
+ * color de un titulo vecino) y se convierte a hex para que los
+ * consumidores (MmradarPanel, PerformancePreviewCard) no tengan que lidiar
+ * con el formato rgb(). Si un titulo puntual no trae style de color en el
+ * HTML, color queda null -- no se rellena con un valor inventado aca, eso
+ * queda a criterio del componente que lo consume (ver colorForTitle en
+ * apps/web/src/lib/mmradarTitleColor.ts, que sirve como fallback visual
+ * SOLO cuando este color es null, nunca lo reemplaza si vino de la
+ * fuente).
  */
-function parseTitles(html: string): string[] {
+function parseTitles(html: string): MmradarTitle[] {
   const containerMatch = html.match(/id="player-titles">([\s\S]*?)<\/div>/);
   if (!containerMatch) return [];
 
   const container = containerMatch[1];
-  const titleMatches = [...container.matchAll(/class="player-title[^"]*"[^>]*>([^<]+)</g)];
-  return titleMatches.map((m) => m[1].trim()).filter((t) => t.length > 0);
+  const titleTagPattern = /<p class="player-title[^"]*"([^>]*)>([^<]+)</g;
+  const titles: MmradarTitle[] = [];
+
+  for (const match of container.matchAll(titleTagPattern)) {
+    const attrs = match[1];
+    const text = match[2].trim();
+    if (!text) continue;
+
+    const colorMatch = attrs.match(/color:\s*rgb\((\d+),\s*(\d+),\s*(\d+)\)/i);
+    const color = colorMatch
+      ? `#${[colorMatch[1], colorMatch[2], colorMatch[3]]
+          .map((n) => Number(n).toString(16).padStart(2, "0"))
+          .join("")}`
+      : null;
+
+    titles.push({ text, color });
+  }
+
+  return titles;
 }
 
 /**
@@ -291,6 +342,20 @@ function parseTitles(html: string): string[] {
 function parseIconUrl(html: string): string | null {
   const match = html.match(/id="summoner-icon"[^>]*src="([^"]+)"/i);
   return match ? match[1] : null;
+}
+
+/**
+ * El nivel de invocador vive en <p id="summoner-level">574</p>, numero
+ * suelto al lado del icono (ver captura de referencia del usuario:
+ * "574" superpuesto sobre el icono circular). No se usaba en absoluto
+ * hasta ahora -- documentado en el comentario de cabecera del archivo
+ * pero nunca parseado. Pedido explicito del usuario 2026-08-19: mostrar
+ * el nivel junto al icono en MmradarPanel/PerformancePreviewCard, igual
+ * que la referencia de mmradar.gg. null si no se encuentra.
+ */
+function parseSummonerLevel(html: string): number | null {
+  const match = html.match(/id="summoner-level"[^>]*>(\d+)</i);
+  return match ? Number(match[1]) : null;
 }
 
 /**
@@ -443,7 +508,8 @@ export async function fetchMmradarProfile(lolUsername: string): Promise<MmradarP
       performanceScores: parsePerformanceScores(html),
       titles: parseTitles(html),
       iconUrl: parseIconUrl(html),
-      server: parseServer(html)
+      server: parseServer(html),
+      level: parseSummonerLevel(html)
     };
   } catch (err) {
     if (err instanceof MmradarLookupError) throw err;

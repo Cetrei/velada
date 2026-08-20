@@ -1,11 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import type { Participant, SpinStartPayload } from "@velada/core";
+import type { Match, Participant, SpinStartPayload } from "@velada/core";
 import { getSupabaseClient, ROULETTE_CHANNEL, SPIN_START_EVENT } from "../lib/supabase";
 
 interface RouletteWheelProps {
   participants: Participant[];
   rouletteUnlocked: boolean;
+  /**
+   * Combates ya generados por la ruleta (is_random: true en la fila de
+   * matches, ver AdminControl.triggerRandomMatch y lib/matches.ts),
+   * pasados desde sorteo.astro. Antes RouletteWheel solo escuchaba el
+   * broadcast en vivo (canal SPIN_START_EVENT): si alguien entraba a
+   * /sorteo despues de que el sorteo ya se hizo -- o el admin ya la giro
+   * antes de que este visitante se conectara -- la pagina se veia
+   * "vacia" (rueda quieta, sin ningun combate) salvo que estuviera
+   * conectado exactamente en el momento del broadcast. Con esto, si hay
+   * matches generados y no hay nada girando ahora mismo, se listan como
+   * resultados del sorteo en vez de mostrar la rueda sin nada.
+   */
+  existingMatches: Match[];
 }
 
 const WHEEL_COLORS = ["#C8AA6E", "#050914"];
@@ -92,7 +105,7 @@ function easeOutQuart(t: number): number {
   return 1 - Math.pow(1 - t, 4);
 }
 
-export default function RouletteWheel({ participants, rouletteUnlocked }: RouletteWheelProps) {
+export default function RouletteWheel({ participants, rouletteUnlocked, existingMatches }: RouletteWheelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const angleRef = useRef(0);
   const isSpinningRef = useRef(false);
@@ -102,6 +115,24 @@ export default function RouletteWheel({ participants, rouletteUnlocked }: Roulet
   const [winnerPair, setWinnerPair] = useState<[Participant, Participant] | null>(null);
   const [isLive, setIsLive] = useState(false);
   const [unlocked, setUnlocked] = useState(rouletteUnlocked);
+  // Combates del sorteo ya generados (via prop) mas cualquiera que se
+  // agregue en esta misma sesion (broadcast recibido o giro local) -- asi
+  // la lista de "resultados del sorteo" crece en vivo sin recargar,
+  // ademas de arrancar poblada con lo que ya existia en la base.
+  const [pastPairs, setPastPairs] = useState<[Participant, Participant][]>(() =>
+    resolvePairsFromMatches(existingMatches, participants)
+  );
+
+  function resolvePairsFromMatches(matches: Match[], pool: Participant[]): [Participant, Participant][] {
+    const byId = new Map(pool.map((p) => [p.id, p]));
+    const pairs: [Participant, Participant][] = [];
+    for (const m of matches) {
+      const p1 = byId.get(m.player1Id);
+      const p2 = byId.get(m.player2Id);
+      if (p1 && p2) pairs.push([p1, p2]);
+    }
+    return pairs;
+  }
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -192,6 +223,7 @@ export default function RouletteWheel({ participants, rouletteUnlocked }: Roulet
         isSpinningRef.current = false;
         setIsSpinning(false);
         setWinnerPair([player1, player2]);
+        setPastPairs((prev) => [...prev, [player1, player2]]);
       }
     }
 
@@ -241,6 +273,50 @@ export default function RouletteWheel({ participants, rouletteUnlocked }: Roulet
         <p className="text-slate-400">
           El sorteo se habilitará cuando el evento comience. Vuelve pronto.
         </p>
+      </div>
+    );
+  }
+
+  // Si ya hay combates generados por el sorteo y no se esta girando nada
+  // ahora mismo (ni animacion local, ni un winnerPair recien resuelto en
+  // esta sesion), se listan como resultados en vez de mostrar la rueda
+  // "quieta" sin ningun dato -- cubre el caso de entrar a /sorteo despues
+  // de que el sorteo ya paso. Si el visitante ve un broadcast en vivo
+  // mientras esta parado en esta pantalla, winnerPair pasa a tener valor y
+  // esa rama toma prioridad (se sigue viendo la rueda + el resultado
+  // recien salido), y ese resultado ya quedo agregado a pastPairs arriba.
+  if (!isSpinning && !winnerPair && pastPairs.length > 0) {
+    return (
+      <div className="w-full">
+        <div className="bg-lol-cardBg border border-lol-border p-8 rounded-xl text-center mb-10">
+          <h3 className="font-display text-2xl font-bold text-white uppercase mb-2">Sorteo Ya Realizado</h3>
+          <p className="text-slate-400 text-sm">
+            Estos son los combates que salieron del sorteo. {isLive ? "Si se gira otro, aparecera aca en vivo." : ""}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {pastPairs.map(([p1, p2], i) => (
+            <div
+              key={`${p1.id}-${p2.id}-${i}`}
+              className="bg-black/50 backdrop-blur border border-lol-gold/60 rounded-xl p-6 text-center relative overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 border-lol-gold m-2" />
+              <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-lol-gold m-2" />
+              <div className="flex items-center justify-center gap-4">
+                {[p1, p2].map((fighter, idx) => (
+                  <div key={fighter.id} className="flex flex-col items-center">
+                    <p className="text-sm text-lol-gold font-display italic mb-1">"{fighter.nickname}"</p>
+                    <p className="text-lg font-display font-bold text-white uppercase tracking-wide">
+                      {fighter.name}
+                    </p>
+                    {idx === 0 && <span className="text-lol-blue font-bold mt-2 text-xs">VS</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }

@@ -13,6 +13,14 @@
 # real -- no hay ningun perfil de mmradar que consultar para ellos.
 #
 # El resto de los campos usa el mismo formato que participants.yml.
+#
+# Campos extra 100% de meme (memeTitles, memeIconUrl, memeFakeMatch,
+# memeFakeTeamMatch): SOLO se muestran en la ficha publica de este
+# participante puntual (peleadores/[id].astro), nunca en /combates,
+# /sorteo, el balanceador de equipos, ni en ningun otro listado -- son de
+# broma, no representan combates reales del evento. Ninguno es
+# obligatorio; lo que no se pone a mano simplemente no se dibuja en la
+# ficha.
 
 - id: "meme-1"
   name: "Fabitos Priv"
@@ -44,3 +52,23 @@
     teamfight: 2000
     vision: 1200
   excludeFromMatches: true
+  memeTitles:
+    - "El Inmortal"
+    - "Terror del Solo Queue"
+  memeIconUrl: "/images/participants/p1Photo.png"
+  memeFakeMatch:
+    opponentName: "El Pana Del Barrio"
+    opponentNickname: "Sombra"
+    opponentPhoto: "/images/participants/p1Banner.jpg"
+    result: "win"
+    decision: "KO tecnico en la ronda 1, por unanimidad de los jueces."
+  memeFakeTeamMatch:
+    teamName: "Los Inmortales"
+    teammateNames:
+      - "Copiloto Fantasma"
+      - "El Que Siempre Llega Tarde"
+    rivalTeamName: "Los Perdedores del Grupo"
+    rivalNames:
+      - "Feeder Anonimo"
+      - "AFK Legendario"
+    result: "win"

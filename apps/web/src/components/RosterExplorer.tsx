@@ -219,14 +219,19 @@ export default function RosterExplorer({ participants, votesById }: RosterExplor
                     />
                     {p.lolRank}
                   </span>
-                  <span className="hidden md:block w-28">
+                  <span className="hidden md:flex w-28 items-center gap-1.5">
                     {score !== null && (
-                      <span className="block h-1.5 rounded-full bg-black/40 border border-lol-border/40 overflow-hidden">
-                        <span
-                          className="block h-full rounded-full bg-gradient-to-r from-lol-blue to-lol-gold"
-                          style={{ width: `${Math.min(100, score)}%` }}
-                        />
-                      </span>
+                      <>
+                        <span className="flex-1 h-1.5 rounded-full bg-black/40 border border-lol-border/40 overflow-hidden">
+                          <span
+                            className="block h-full rounded-full bg-gradient-to-r from-lol-blue to-lol-gold"
+                            style={{ width: `${Math.min(100, score)}%` }}
+                          />
+                        </span>
+                        <span className="text-slate-400 text-[10px] font-bold w-9 text-right flex-shrink-0 tabular-nums">
+                          {Math.round(score)}
+                        </span>
+                      </>
                     )}
                   </span>
                   <span className="text-lol-gold text-xs font-bold w-16 text-right">

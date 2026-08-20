@@ -119,8 +119,11 @@ export default function PlayerCard({ data, className = "" }: PlayerCardProps) {
               <span className="player-card-performance-value">{data.performanceRank}</span>
             </div>
             {scores && (
-              <div className="player-card-performance-track">
-                <div className="player-card-performance-fill" style={{ width: `${performanceBarPct}%` }} />
+              <div className="player-card-performance-track-row">
+                <div className="player-card-performance-track">
+                  <div className="player-card-performance-fill" style={{ width: `${performanceBarPct}%` }} />
+                </div>
+                <span className="player-card-performance-score">{performanceAvg}</span>
               </div>
             )}
           </div>
@@ -340,8 +343,15 @@ export default function PlayerCard({ data, className = "" }: PlayerCardProps) {
            ningun indicador visual como el resto de la carta. Solo se
            dibuja cuando hay scores reales (ver "scores &&" en el JSX) --
            sin scores no hay con que normalizar un ancho con sentido. */
-        .player-card-performance-track {
+        .player-card-performance-track-row {
           margin-top: 5px;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .player-card-performance-track {
+          flex: 1;
           height: 4px;
           background: rgba(0,0,0,0.5);
           border: 1px solid rgba(79, 195, 232, 0.25);
@@ -352,6 +362,13 @@ export default function PlayerCard({ data, className = "" }: PlayerCardProps) {
         .player-card-performance-fill {
           height: 100%;
           background: linear-gradient(to right, #4FC3E8, #C8AA6E);
+        }
+
+        .player-card-performance-score {
+          flex-shrink: 0;
+          font-size: clamp(0.5rem, 1.6cqw, 0.62rem);
+          font-weight: 700;
+          color: #a09b8c;
         }
 
         .player-card-stats {

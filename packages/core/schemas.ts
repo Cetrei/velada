@@ -27,6 +27,18 @@ export const MmradarPerformanceScoresSchema = z.object({
   vision: z.number()
 });
 
+/**
+ * Un titulo de mmradar (ej. "OTP Kindred", "MVP") junto con su color real
+ * si el HTML de mmradar.gg lo trae (ver parseTitles en
+ * mmradarScraper.ts) -- color queda null cuando la fuente no expone un
+ * color para ese titulo puntual, nunca se rellena con un valor inventado
+ * aca en el schema.
+ */
+export const MmradarTitleSchema = z.object({
+  text: z.string().min(1),
+  color: z.string().nullable()
+});
+
 export const ParticipantSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -51,9 +63,10 @@ export const ParticipantSchema = z.object({
   stats: ParticipantStatsSchema.optional(),
   performanceRank: z.string().nullable().optional(),
   performanceScores: MmradarPerformanceScoresSchema.nullable().optional(),
-  titles: z.array(z.string()).nullable().optional(),
+  titles: z.array(MmradarTitleSchema).nullable().optional(),
   mmradarIconUrl: z.string().nullable().optional(),
   mmradarServer: z.string().nullable().optional(),
+  mmradarLevel: z.number().nullable().optional(),
   /**
    * Participante "de meme": aparece en el roster/grid de seleccion como
    * cualquier otro, pero se excluye de todo lo competitivo -- ruleta,
@@ -63,7 +76,38 @@ export const ParticipantSchema = z.object({
    * nunca se escribe desde el panel de admin ni desde /inscripcion, asi
    * que no hace falta persistirlo en Supabase.
    */
-  excludeFromMatches: z.boolean().optional()
+  excludeFromMatches: z.boolean().optional(),
+  /**
+   * Campos exclusivos de participantes "de meme" (excludeFromMatches:
+   * true), cargados a mano en meme-participants.yml -- nunca vienen de
+   * mmradar ni de ningun formulario real. Se muestran SOLO en la ficha
+   * publica de ese participante puntual (peleadores/[id].astro), nunca en
+   * /combates, /sorteo, el balanceador de equipos, ni en ningun otro
+   * listado -- son 100% de broma, no representan combates reales del
+   * evento. Un participante real (no-meme) nunca deberia tener estos
+   * campos poblados; no hay forma de escribirlos desde /inscripcion ni
+   * desde el panel de admin.
+   */
+  memeTitles: z.array(z.string()).optional(),
+  memeIconUrl: z.string().optional(),
+  memeFakeMatch: z
+    .object({
+      opponentName: z.string().min(1),
+      opponentNickname: z.string().min(1),
+      opponentPhoto: z.string().optional(),
+      result: z.enum(["win", "loss"]).optional(),
+      decision: z.string().optional()
+    })
+    .optional(),
+  memeFakeTeamMatch: z
+    .object({
+      teamName: z.string().optional(),
+      teammateNames: z.array(z.string()).default([]),
+      rivalTeamName: z.string().optional(),
+      rivalNames: z.array(z.string()).default([]),
+      result: z.enum(["win", "loss"]).optional()
+    })
+    .optional()
 });
 
 export const ParticipantListSchema = z.array(ParticipantSchema);
@@ -173,3 +217,4 @@ export type PredictionTally = z.infer<typeof PredictionTallySchema>;
 export type SpinStartPayload = z.infer<typeof SpinStartPayloadSchema>;
 export type TeamMatch = z.infer<typeof TeamMatchSchema>;
 export type MmradarPerformanceScores = z.infer<typeof MmradarPerformanceScoresSchema>;
+export type MmradarTitle = z.infer<typeof MmradarTitleSchema>;

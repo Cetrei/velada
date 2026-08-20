@@ -1,4 +1,5 @@
-import type { MmradarPerformanceScores } from "@velada/core";
+import type { MmradarPerformanceScores, MmradarTitle } from "@velada/core";
+import { resolveTitleColor } from "../lib/mmradarTitleColor";
 
 /**
  * Carta chica que va DEBAJO de la PlayerCard en el aside de vista previa
@@ -7,9 +8,16 @@ import type { MmradarPerformanceScores } from "@velada/core";
  * mismo checkRiotProfile que ya dispara el check verde/amarillo/rojo del
  * campo Riot ID -- no hace ninguna consulta propia. Es la version
  * "todavia no guardado" de lo que MmradarPanel muestra en la ficha
- * publica ya guardada (/peleadores/[id]): mismo patron visual de barras,
- * pero sin icono/server/titulos/boton actualizar, porque esos datos
- * recien existen en participants despues del primer submit.
+ * publica ya guardada (/peleadores/[id]): mismo patron visual (icono con
+ * nivel superpuesto, Riot ID, tags de titulos con color real/hash,
+ * barras de performance), pero sin el boton actualizar, porque ese solo
+ * tiene sentido una vez que el perfil ya existe guardado.
+ *
+ * Icono/riotId/nivel/tags llegan como props nuevos (antes esta carta solo
+ * mostraba las 6 barras + rango, quedando "pelada" comparada con
+ * MmradarPanel) -- se pasan desde ParticipantProfileForm usando la misma
+ * respuesta de checkRiotProfile que ya alimenta scores/performanceRank,
+ * asi que no dispara ninguna consulta adicional.
  *
  * A diferencia de la version anterior, esta carta SIEMPRE se monta (ya
  * no hace "if (!scores) return null") -- antes, un peleador sin
@@ -53,9 +61,25 @@ interface PerformancePreviewCardProps {
    * iguales en los tres casos, pero el texto de estado cambia.
    */
   status?: "idle" | "checking" | "found" | "not_found" | "invalid" | "error";
+  /** Riot ID tal como lo escribio el jugador (ej. "Nombre#TAG"). Opcional: sin esto, la fila de identidad no se dibuja. */
+  riotId?: string | null;
+  /** URL del icono de invocador (mismo dato que MmradarIconUrl en el perfil ya guardado). */
+  iconUrl?: string | null;
+  /** Nivel de invocador, se dibuja superpuesto sobre el icono igual que en MmradarPanel. */
+  level?: number | null;
+  /** Titulos otorgados por mmradar, con color real si vino de la fuente (ver MmradarTitle). */
+  titles?: MmradarTitle[] | null;
 }
 
-export default function PerformancePreviewCard({ scores, performanceRank, status = "idle" }: PerformancePreviewCardProps) {
+export default function PerformancePreviewCard({
+  scores,
+  performanceRank,
+  status = "idle",
+  riotId,
+  iconUrl,
+  level,
+  titles
+}: PerformancePreviewCardProps) {
   const hasScores = scores !== null;
   const displayScores = scores ?? EMPTY_SCORES;
   const values = Object.values(displayScores);
@@ -73,8 +97,50 @@ export default function PerformancePreviewCard({ scores, performanceRank, status
             ? null
             : "Sin datos aun";
 
+  const hasIdentity = Boolean(riotId || iconUrl || (titles && titles.length > 0));
+
   return (
     <div className="performance-preview-card">
+      {titles && titles.length > 0 && (
+        <div className="performance-preview-titles">
+          {titles.map((title) => {
+            const color = resolveTitleColor(title);
+            return (
+              <span
+                key={title.text}
+                className="performance-preview-title-chip"
+                style={{ color: color.text, background: color.bg, borderColor: color.border }}
+              >
+                {title.text}
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      {hasIdentity && (
+        <div className="performance-preview-identity">
+          {iconUrl && (
+            <span className="performance-preview-icon-wrap">
+              <img
+                src={iconUrl}
+                alt=""
+                className="performance-preview-icon"
+                loading="lazy"
+                decoding="async"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                }}
+              />
+              {level !== null && level !== undefined && (
+                <span className="performance-preview-level">{level}</span>
+              )}
+            </span>
+          )}
+          {riotId && <p className="performance-preview-riot-id">{riotId}</p>}
+        </div>
+      )}
+
       <div className="performance-preview-header">
         <span className="performance-preview-title">Performance</span>
         <span className={`performance-preview-total ${!hasScores ? "performance-preview-total-empty" : ""}`}>
@@ -105,6 +171,72 @@ export default function PerformancePreviewCard({ scores, performanceRank, status
           background: #0A1428;
           border: 1px solid rgba(200, 170, 110, 0.25);
           padding: 14px;
+        }
+
+        .performance-preview-titles {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin-bottom: 10px;
+        }
+
+        .performance-preview-title-chip {
+          font-size: 0.6rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          background: rgba(79, 195, 232, 0.08);
+          border: 1px solid rgba(79, 195, 232, 0.3);
+          padding: 2px 7px;
+          border-radius: 3px;
+        }
+
+        .performance-preview-identity {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin-bottom: 10px;
+        }
+
+        .performance-preview-icon-wrap {
+          position: relative;
+          flex-shrink: 0;
+          display: inline-flex;
+        }
+
+        .performance-preview-icon {
+          width: 34px;
+          height: 34px;
+          border-radius: 50%;
+          object-fit: cover;
+          border: 2px solid #C8AA6E;
+          background-color: #0A1428;
+        }
+
+        .performance-preview-level {
+          position: absolute;
+          bottom: -4px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: #0A1428;
+          border: 1px solid #C8AA6E;
+          color: #C8AA6E;
+          font-size: 0.52rem;
+          font-weight: 700;
+          line-height: 1;
+          padding: 1px 4px;
+          border-radius: 999px;
+          white-space: nowrap;
+        }
+
+        .performance-preview-riot-id {
+          margin: 0;
+          font-size: 0.68rem;
+          color: #4FC3E8;
+          font-style: italic;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
 
         .performance-preview-header {

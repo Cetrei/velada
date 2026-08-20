@@ -22,7 +22,8 @@ import {
   generateTeamMatches,
   type TeamGenerationMode,
   type MmradarPerformanceScores,
-  type MmradarProfileResult
+  type MmradarProfileResult,
+  type MmradarTitle
 } from "@velada/core";
 import type { AppSession, AdminSession } from "../lib/session";
 
@@ -123,9 +124,10 @@ interface MmradarLookupResult {
   lp: number;
   performanceRank: string | null;
   performanceScores: MmradarPerformanceScores | null;
-  titles: string[] | null;
+  titles: MmradarTitle[] | null;
   iconUrl: string | null;
   server: string | null;
+  level: number | null;
 }
 
 /**
@@ -149,7 +151,8 @@ async function fetchMmradarData(lolUsername: string): Promise<MmradarLookupResul
       performanceScores: result.performanceScores,
       titles: result.titles.length > 0 ? result.titles : null,
       iconUrl: result.iconUrl,
-      server: result.server
+      server: result.server,
+      level: result.level
     };
   } catch (err) {
     if (err instanceof MmradarLookupError) {
@@ -157,7 +160,7 @@ async function fetchMmradarData(lolUsername: string): Promise<MmradarLookupResul
     } else {
       console.warn(`[fetchMmradarData] ${lolUsername}: error inesperado`, err);
     }
-    return { rank: null, lp: 0, performanceRank: null, performanceScores: null, titles: null, iconUrl: null, server: null };
+    return { rank: null, lp: 0, performanceRank: null, performanceScores: null, titles: null, iconUrl: null, server: null, level: null };
   }
 }
 
@@ -456,6 +459,7 @@ export const server = {
         titles: mmradar.titles,
         mmradar_icon_url: mmradar.iconUrl,
         mmradar_server: mmradar.server,
+        mmradar_level: mmradar.level,
         updated_at: new Date().toISOString(),
         ...(photoUrl ? { photo: photoUrl } : {}),
         ...(bannerUrl ? { banner: bannerUrl } : {})
@@ -554,7 +558,7 @@ export const server = {
       // diferencia de saveOwnParticipant, aca no es obligatorio.
       const mmradar = input.lolUsername
         ? await fetchMmradarData(input.lolUsername)
-        : { performanceRank: null, performanceScores: null, titles: null, iconUrl: null, server: null };
+        : { performanceRank: null, performanceScores: null, titles: null, iconUrl: null, server: null, level: null };
 
       const row = {
         id: input.id,
@@ -581,6 +585,7 @@ export const server = {
         titles: mmradar.titles,
         mmradar_icon_url: mmradar.iconUrl,
         mmradar_server: mmradar.server,
+        mmradar_level: mmradar.level,
         updated_at: new Date().toISOString(),
         ...(photoUrl ? { photo: photoUrl } : {}),
         ...(bannerUrl ? { banner: bannerUrl } : {})
@@ -699,6 +704,7 @@ export const server = {
           titles: mmradar.titles,
           mmradar_icon_url: mmradar.iconUrl,
           mmradar_server: mmradar.server,
+          mmradar_level: mmradar.level,
           updated_at: new Date().toISOString()
         })
         .eq("id", id);
@@ -714,7 +720,8 @@ export const server = {
         performanceScores: mmradar.performanceScores,
         titles: mmradar.titles,
         mmradarIconUrl: mmradar.iconUrl,
-        mmradarServer: mmradar.server
+        mmradarServer: mmradar.server,
+        mmradarLevel: mmradar.level
       };
     }
   }),
@@ -877,7 +884,11 @@ export const server = {
         status: "found" as const,
         rank: mmradar.rank ?? fallbackRank ?? "Sin clasificar",
         performanceRank: mmradar.performanceRank,
-        performanceScores: mmradar.performanceScores
+        performanceScores: mmradar.performanceScores,
+        titles: mmradar.titles,
+        iconUrl: mmradar.iconUrl,
+        server: mmradar.server,
+        level: mmradar.level
       };
     }
   }),
