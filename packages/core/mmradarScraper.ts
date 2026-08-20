@@ -403,17 +403,64 @@ async function fetchMatchScores(gameName: string, tagLine: string): Promise<Mmra
  * SOLO cuando este color es null, nunca lo reemplaza si vino de la
  * fuente).
  */
-function parseTitles(html: string): MmradarTitle[] {
-  const containerMatch = html.match(/id="player-titles">([\s\S]*?)<\/div>/);
-  if (!containerMatch) return [];
+/**
+ * Los titulos viven en un contenedor con id="player-titles", cada uno como
+ * un <p class="player-title ..." data-tooltip="...">TEXTO</p>. Se extrae
+ * el texto interior de cada uno, ignorando el tooltip.
+ *
+ * Color real: confirmado 2026-08-20 contra el HTML real que mando el
+ * usuario que mmradar NO pone el color como style inline
+ * (color: rgb(...), que es lo que este parser asumia originalmente,
+ * copiando el mismo patron de parseCurrentRank/parsePerformanceRank) --
+ * en cambio, cada <p> trae una SEGUNDA clase CSS fija (ej.
+ * class="player-title title-blue", class="player-title title-green")
+ * que mmradar define en su propio summoner.css externo (confirmado con
+ * captura de DevTools del usuario: .title-green tiene color #2ebb7e).
+ * Como ese CSS externo no es algo que este proyecto pueda leer via
+ * fetch() del HTML solo, se hardcodea el mapa de las clases conocidas
+ * (TITLE_CLASS_COLORS abajo) a su hex real tal como aparecen en
+ * summoner.css. Si aparece una clase nueva no mapeada, o si mmradar
+ * alguna vez vuelve a poner un style inline con rgb() (se deja ese
+ * intento como fallback, no hace dano tenerlo), color queda null -- ahi
+ * es donde entra el fallback por hash de texto en
+ * apps/web/src/lib/mmradarTitleColor.ts, que nunca reemplaza un color
+ * real si vino de aca.
+ */
+const TITLE_CLASS_COLORS: Record<string, string> = {
+  "title-blue": "#4fc3e8",
+  "title-green": "#2ebb7e",
+  "title-purple": "#a855f7",
+  "title-yellow": "#eab308",
+  "title-red": "#ef4444",
+  "title-gold": "#c8aa6e"
+};
 
-  const container = containerMatch[1];
-  const titleTagPattern = /<p class="player-title[^"]*"([^>]*)>([^<]+)</g;
+function colorFromTitleClasses(classAttr: string): string | null {
+  for (const [cls, hex] of Object.entries(TITLE_CLASS_COLORS)) {
+    if (classAttr.includes(cls)) return hex;
+  }
+  return null;
+}
+
+function parseTitles(html: string): MmradarTitle[] {
+  // Se busca directo por el tag de apertura completo de cada
+  // <p class="player-title ..."> en TODO el html (no acotado a la
+  // ventana entre player-titles> y el primer </div> que le siga, como
+  // arrancaba este parser antes -- ese recorte era fragil: si mmradar
+  // anida cualquier otro </div> antes del cierre real del contenedor
+  // -ej. un div envolviendo un icono de tooltip-, el recorte se cortaba
+  // ahi y perdia el resto de los titulos, o los perdia todos si el
+  // primer </div> aparecia antes de tiempo). El id player-titles es
+  // unico en la pagina, asi que capturar cada <p class="player-title...
+  // en cualquier parte del documento es igual de seguro y mas tolerante
+  // a cambios de estructura interna del contenedor.
+  const titleTagPattern = /<p class="player-title([^"]*)"([^>]*)>([^<]+)</g;
   const titles: MmradarTitle[] = [];
 
-  for (const match of container.matchAll(titleTagPattern)) {
-    const attrs = match[1];
-    const text = match[2].trim();
+  for (const match of html.matchAll(titleTagPattern)) {
+    const classAttr = match[1];
+    const attrs = match[2];
+    const text = match[3].trim();
     if (!text) continue;
 
     const colorMatch = attrs.match(/color:\s*rgb\((\d+),\s*(\d+),\s*(\d+)\)/i);
@@ -421,7 +468,7 @@ function parseTitles(html: string): MmradarTitle[] {
       ? `#${[colorMatch[1], colorMatch[2], colorMatch[3]]
           .map((n) => Number(n).toString(16).padStart(2, "0"))
           .join("")}`
-      : null;
+      : colorFromTitleClasses(classAttr);
 
     titles.push({ text, color });
   }

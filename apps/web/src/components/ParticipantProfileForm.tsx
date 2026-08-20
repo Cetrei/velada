@@ -413,7 +413,7 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
       >
         {draftRestored && (
           <div className="text-xs p-2.5 rounded bg-lol-gold/10 text-lol-gold border border-lol-gold/30 flex items-center justify-between gap-3">
-            <span>Recuperamos un borrador que tenias sin guardar.</span>
+            <span>Datos recuperados</span>
             <button
               type="button"
               onClick={() => setDraftRestored(false)}

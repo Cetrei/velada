@@ -40,22 +40,22 @@ export const PAGES = {
     },
     predictions: {
       title: "Pronósticos",
-      subtitle: "Así está votando la comunidad. Elige tu ganador antes de que empiece.",
+      subtitle: "Predicciones sigmas, vota por un ganador antes de que empiece.",
       cta: "Ver todos los pronósticos",
       emptyState: "Aún no hay combates abiertos a pronóstico."
     },
     matches: {
       title: "Combates",
-      subtitle: "Resultados oficiales y tarjetas de los jueces.",
+      subtitle: "Resultados 100% oficiales mango skibidi.",
       cta: "Ver todos los combates",
       teamsSubtitle: "Combates por equipos de La Follada del Año.",
       teamsCta: "Ver todos los combates por equipos",
       lockedTitle: "Próximamente",
-      lockedSubtitle: "Los combates todavía no fueron generados. Volvé más tarde."
+      lockedSubtitle: "Los combates todavía no fueron generados."
     },
     raffle: {
       title: "Sorteo Oficial",
-      subtitleLive: "El sorteo ya está en vivo. Entra y descubre los cruces en tiempo real.",
+      subtitleLive: "El sorteo ya está en vivo; mira quien folla a quien en tiempo real.",
       subtitleWaiting:
         "La suerte decidira quien folla a quien. El sorteo se replica en vivo para todos.",
       ctaLive: "Entrar al sorteo en vivo",
@@ -66,7 +66,7 @@ export const PAGES = {
   fighters: {
     tabTitle: "Peleadores - La Follada en LoL",
     title: "Roster Completo",
-    subtitle: (fighterCount: number) => `${fighterCount} combatientes listos para la Grieta del Invocador.`,
+    subtitle: (fighterCount: number) => `${fighterCount} combatientes listos para la Grieta del Follador.`,
     searchPlaceholder: "Buscar por nombre o apodo...",
     filterRoleLabel: "Rol",
     filterRoleAll: "Todos",
@@ -95,7 +95,7 @@ export const PAGES = {
     noRivalYet: "Rival por definir",
     predictionTitle: "Pronóstico de la comunidad",
     noCombatTitle: "Sin definir",
-    noCombatSubtitle: "Todavía no se generó ningún combate para este peleador. Volvé más tarde.",
+    noCombatSubtitle: "Todavía no se generó ningún combate para este peleador.",
     notFoundTitle: "Peleador no encontrado",
     notFoundSubtitle: "Puede que el link esté roto o el participante ya no exista.",
     notFoundCta: "Volver al roster"
@@ -122,15 +122,15 @@ export const PAGES = {
   predictions: {
     tabTitle: "Pronósticos - La Follada del Año",
     title: "Pronósticos",
-    subtitle: "Así pronosticó la comunidad los combates de La Follada del Año.",
-    communityLabel: "Pronóstico de la comunidad",
+    subtitle: "Así pronosticaron los sigmas los combates de La Follada del Año.",
+    communityLabel: "Pronóstico de los papus",
     votesLabel: (count: number) => `${count.toLocaleString("es")} votos`,
     votedLabel: "Ya votaste",
     voteCta: "Votar",
     emptyState: "No hay combates abiertos a pronóstico todavía.",
     closedLabel: "Pronóstico cerrado",
     votingPhaseClosedTitle: "Votaciones cerradas",
-    votingPhaseClosedSubtitle: "El host todavía no habilitó la fase de votaciones. Volvé a intentarlo más tarde."
+    votingPhaseClosedSubtitle: "El host todavía no habilitó la fase de votaciones."
   },
 
   raffle: {
@@ -332,8 +332,8 @@ export const PARTICIPANT_MANAGER = {
     lolServer: "Servidor",
     lolRank: "Rango *",
     description: "Descripcion",
-    photo: "Foto (desde archivos o camara del celular)",
-    banner: "Banner (foto grande, se usa en la selección de peleador)"
+    photo: "Icono (pequeña y cuadrada)",
+    banner: "Banner (grande a lo ancho y alto)"
   },
   placeholders: {
     weight: "75 kg",
