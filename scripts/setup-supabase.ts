@@ -171,6 +171,17 @@ ALTER TABLE participants ADD COLUMN IF NOT EXISTS duel_confidence REAL;
 -- del usuario 2026-08-20 junto con abrir ese boton a cualquier jugador
 -- logueado, no solo el dueno del perfil.
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS mmradar_updated_at TIMESTAMPTZ;
+-- Partidas individuales crudas devueltas por mmradar.gg /load-matches, ya
+-- reducidas al shape de TitleEngineMatch (ver packages/core/titleEngine.ts
+-- y MmradarProfileResult.engineMatches en mmradarScraper.ts). Se persisten
+-- SOLO para poder calibrar packages/core/performanceRank.ts contra datos
+-- reales sin tener que pegarle a mmradar.gg en cada corrida del test (ver
+-- scripts/test-rank-calibration.test.ts) -- el pipeline real de la app
+-- (skillRating/duelRating/titleEngine en runtime) sigue recalculando todo
+-- en caliente en cada fetchMmradarProfile, esta columna nunca se lee ahi.
+-- Se sobreescribe entera en cada refresh (nunca se le hace append), y
+-- puede quedar NULL si el jugador no tuvo partidas recientes.
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS mmradar_engine_matches JSONB;
 
 -- Combates por equipos (5v5 o mezclas de 4v4/3v3) del evento mayor,
 -- separados de matches (que es siempre 1v1, de la ruleta). Un solo

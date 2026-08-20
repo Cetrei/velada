@@ -1,0 +1,8 @@
+[
+  { "riotId": "YourDaddyDrinks#KEY", "expectedRank": "Gold I" },
+  { "riotId": "Nashi#FF15", "expectedRank": "Platinum II" },
+  { "riotId": "sovieticboy dou#lan", "expectedRank": "Platinum I" },
+  { "riotId": "L9 LegenPaPaNoel#TVIS", "expectedRank": "Gold III" },
+  { "riotId": "CiaN L9#Mango", "expectedRank": "Emerald IV" },
+  { "riotId": "OneShotOneKill#sigma", "expectedRank": "Emerald IV" }
+]

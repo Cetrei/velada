@@ -24,6 +24,22 @@ export const MmradarTitleSchema = z.object({
   reason: z.string().nullable().optional()
 });
 
+/**
+ * Una partida individual ya reducida al shape que necesita titleEngine.ts
+ * (TitleEngineMatch). Duplicado deliberado del type de
+ * packages/core/titleEngine.ts en vez de importarlo -- este schema es lo
+ * que valida la fila cruda de Supabase (mmradar_engine_matches), y
+ * titleEngine.ts no expone su interface como schema Zod. Si el shape de
+ * TitleEngineMatch cambia, este tiene que actualizarse a mano en el mismo
+ * cambio.
+ */
+export const EngineMatchSchema = z.object({
+  championName: z.string(),
+  scores: MmradarPerformanceScoresSchema.extend({ total: z.number() }),
+  won: z.boolean(),
+  wasTopScoreInMatch: z.boolean()
+});
+
 export const ParticipantSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -56,6 +72,14 @@ export const ParticipantSchema = z.object({
   duelRating: z.number().nullable().optional(),
   duelConfidence: z.number().nullable().optional(),
   mmradarUpdatedAt: z.string().nullable().optional(),
+  /**
+   * Partidas crudas de mmradar.gg persistidas solo para calibracion offline
+   * (ver scripts/test-rank-calibration.test.ts) -- nunca se usa en el
+   * render de ninguna pagina ni componente, es intencionalmente pesado
+   * (hasta ~20 partidas por jugador) y no se selecciona en el select() de
+   * loadParticipants.ts para no inflar el payload de cada carga de pagina.
+   */
+  mmradarEngineMatches: z.array(EngineMatchSchema).nullable().optional(),
   excludeFromMatches: z.boolean().optional(),
   
   memeTitles: z.array(z.string()).optional(),

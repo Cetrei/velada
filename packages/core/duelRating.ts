@@ -5,9 +5,9 @@ import { skillRatingFromLolRank } from "./skillRating";
 
 const STAT_WEIGHTS: Record<keyof MmradarPerformanceScores, number> = {
   combat: 0.4,
-  teamfight: 0.25,
+  teamfight: 0.15,
   laning: 0.3,
-  objectives: 0.1,
+  objectives: 0.05,
   farming: 0.05,
   vision: 0.02
 };

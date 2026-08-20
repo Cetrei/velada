@@ -1960,6 +1960,70 @@ era el de arriba, no whitelist).
   aplique en produccion (`velada.cetrei.dev`), ya que el bug afecta por
   igual al build de Cloudflare Workers (mismo `packages/core/schemas.ts`).
 
+## Sesion 2026-08-20 (9): completado el pendiente de calibracion via cache de Supabase + script de backup de la DB a JSON
+- Retomando un chat previo (no en este AGENT.md) que dejo
+  `apps/web/src/actions/index.ts` con un import duplicado de `z` (rompia
+  el build) y `fetchMmradarData`/`saveOwnParticipant`/`saveParticipant`/
+  `refreshMmradarData` sin persistir `mmradar_engine_matches` pese a que
+  la columna ya existia en `scripts/setup-supabase.ts` desde antes.
+  Revisado todo el codigo real via filesystem MCP (nunca bash/create_file
+  sobre esta ruta) antes de tocar nada, confirmando cada edit con
+  `read_text_file` posterior:
+  - `actions/index.ts`: sacado el `import { z } from "astro:schema"`
+    duplicado (ya se importaba arriba, linea 2). `fetchMmradarData` ahora
+    devuelve tambien `engineMatches` (viene de
+    `MmradarProfileResult.engineMatches`, que `mmradarScraper.ts` ya
+    poblaba desde una sesion anterior). `saveOwnParticipant`,
+    `saveParticipant`, y `refreshMmradarData` ahora escriben
+    `mmradar_engine_matches: mmradar.engineMatches` en cada upsert/update
+    -- esto era el pedido explicito del usuario en el chat previo ("tras
+    hacer refresh desde la pagina, guarde los datos necesarios para el
+    test en la base de datos").
+  - `scripts/test-rank-calibration.test.ts`: reescrito para leer
+    PRIMERO `participants.mmradar_engine_matches` de Supabase (matcheado
+    por `lol_username` contra los Riot ID del fixture) antes de pegarle a
+    mmradar.gg. Solo cae al fetch en vivo (con el mismo delay/retry contra
+    bloqueos de Cloudflare que ya tenia) para los jugadores que todavia no
+    tienen cache -- una vez que alguien aprieta "Actualizar" en su perfil
+    una vez, ese jugador deja de necesitar la consulta en vivo en
+    corridas futuras del test. Cliente de Supabase standalone nuevo
+    (`createStandaloneSupabaseClient`, via `PUBLIC_SUPABASE_URL` +
+    `SUPABASE_SERVICE_ROLE_KEY` de `process.env`, que `bun test` carga
+    solo desde el `.env` de la raiz) -- no reusa
+    `apps/web/src/lib/supabaseServer.ts` porque ese depende de un
+    `locals` de Astro/Cloudflare que no existe fuera de un request real.
+    El resumen final del test ahora marca `[db]`/`[live]` por jugador.
+- **Nuevo pedido de esta sesion: script de backup de la DB**.
+  `scripts/backup-db.ts` (nuevo, mismo patron standalone que el punto
+  anterior): vuelca cada tabla real del schema
+  (`event_state`/`participants`/`participant_users`/`matches`/
+  `predictions`/`team_matches`) a su propio JSON en
+  `data/<timestamp>/<tabla>.json`, mas un `manifest.json` con fecha,
+  cantidad de filas por tabla, y errores si los hubo. Excluye a proposito
+  `sessions` (efimera, sin valor de respaldo) y
+  `participant_users.password_hash` (nunca se vuelca un hash de
+  contrasena a disco aunque sea PBKDF2, se trae el resto de la fila
+  nomas). `data/` en la raiz del repo ya estaba en `.gitignore` desde
+  antes de esta sesion (confirmado), asi que los backups nunca se
+  commitean por accidente. Indexado en `package.json` como
+  `bun run backup:db`.
+- Archivos tocados y confirmados con `read_text_file` posterior:
+  `apps/web/src/actions/index.ts`, `scripts/test-rank-calibration.test.ts`,
+  `scripts/backup-db.ts` (nuevo), `package.json`.
+- Pendiente para el usuario (sin bash real sobre el proyecto en esta
+  sesion tampoco, todo via filesystem MCP): correr `bun install` (si el
+  MCP no expone instalar dependencias) para confirmar que
+  `@supabase/supabase-js` resuelve bien desde `scripts/`, luego
+  `bun run backup:db` para confirmar que genera `data/<timestamp>/*.json`
+  con las filas reales. Correr `bun run calibrate:rank` una vez sin que
+  ningun jugador tenga `mmradar_engine_matches` cargado (deberia caer
+  entero a `[live]`, igual que antes), despues entrar a `/mi-perfil` o al
+  panel y apretar "Actualizar" para uno de los 6 Riot IDs del fixture, y
+  correr `calibrate:rank` de nuevo para confirmar que ESE jugador ahora
+  sale marcado `[db]` sin pegarle a mmradar.gg. Confirmar tambien que
+  `apps/web/src/actions/index.ts` compila (`bun run build` o el typecheck
+  del editor) ahora que el import duplicado de `z` se saco.
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.

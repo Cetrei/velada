@@ -21,3 +21,4 @@ apps/web/.env.local
 *.log
 
 assets/
+data/

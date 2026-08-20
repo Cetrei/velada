@@ -20,12 +20,15 @@ import {
   fetchMmradarProfile,
   MmradarLookupError,
   generateTeamMatches,
+  EngineMatchSchema,
   type TeamGenerationMode,
   type MmradarPerformanceScores,
   type MmradarProfileResult,
   type MmradarTitle
 } from "@velada/core";
 import type { AppSession, AdminSession } from "../lib/session";
+
+type EngineMatch = z.infer<typeof EngineMatchSchema>;
 
 function requireSession(session: AppSession | null): AppSession {
   if (!session) {
@@ -105,6 +108,14 @@ interface MmradarLookupResult {
   /** Habilidad 1v1 propia (ver packages/core/duelRating.ts). null si no hubo partidas suficientes. */
   duelRating: number | null;
   duelConfidence: number | null;
+  /**
+   * Partidas crudas ya reducidas al shape de TitleEngineMatch (ver
+   * MmradarProfileResult.engineMatches en mmradarScraper.ts), persistidas
+   * en participants.mmradar_engine_matches SOLO para calibracion offline
+   * (scripts/test-rank-calibration.test.ts) -- nunca se usa en el render
+   * de ninguna pagina. null si no hubo partidas recientes disponibles.
+   */
+  engineMatches: EngineMatch[] | null;
 }
 
 async function fetchMmradarData(lolUsername: string): Promise<MmradarLookupResult> {
@@ -120,7 +131,8 @@ async function fetchMmradarData(lolUsername: string): Promise<MmradarLookupResul
       server: result.server,
       level: result.level,
       duelRating: result.duelRating?.rating ?? null,
-      duelConfidence: result.duelRating?.confidence ?? null
+      duelConfidence: result.duelRating?.confidence ?? null,
+      engineMatches: result.engineMatches
     };
   } catch (err) {
     if (err instanceof MmradarLookupError) {
@@ -138,7 +150,8 @@ async function fetchMmradarData(lolUsername: string): Promise<MmradarLookupResul
       server: null,
       level: null,
       duelRating: null,
-      duelConfidence: null
+      duelConfidence: null,
+      engineMatches: null
     };
   }
 }
@@ -400,6 +413,7 @@ export const server = {
         mmradar_level: mmradar.level,
         duel_rating: mmradar.duelRating,
         duel_confidence: mmradar.duelConfidence,
+        mmradar_engine_matches: mmradar.engineMatches,
         mmradar_updated_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         ...(photoUrl ? { photo: photoUrl } : {}),
@@ -504,7 +518,8 @@ export const server = {
             server: null,
             level: null,
             duelRating: null,
-            duelConfidence: null
+            duelConfidence: null,
+            engineMatches: null
           };
 
       const row = {
@@ -535,6 +550,7 @@ export const server = {
         mmradar_level: mmradar.level,
         duel_rating: mmradar.duelRating,
         duel_confidence: mmradar.duelConfidence,
+        mmradar_engine_matches: mmradar.engineMatches,
         mmradar_updated_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         ...(photoUrl ? { photo: photoUrl } : {}),
@@ -637,6 +653,7 @@ export const server = {
           mmradar_level: mmradar.level,
           duel_rating: mmradar.duelRating,
           duel_confidence: mmradar.duelConfidence,
+          mmradar_engine_matches: mmradar.engineMatches,
           mmradar_updated_at: updatedAt,
           updated_at: updatedAt
         })

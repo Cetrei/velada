@@ -46,6 +46,15 @@ export interface MmradarProfileResult {
   level: number | null;
   /** Habilidad 1v1 propia (ver duelRating.ts). null si no hubo partidas suficientes para calcularla. */
   duelRating: DuelRatingResult | null;
+  /**
+   * Partidas ya reducidas al shape de TitleEngineMatch, tal como se le
+   * pasaron a computePerformanceRank/evaluateTitles/computeDuelRatingFromMatches
+   * internamente. Se expone solo para diagnostico/calibracion (ver
+   * scripts/test-rank-calibration.test.ts) -- el pipeline real de la app no
+   * la necesita, ya recibe los resultados ya calculados arriba. null si no
+   * hubo partidas recientes disponibles.
+   */
+  engineMatches: TitleEngineMatch[] | null;
 }
 
 export function riotIdToMmradarSlug(lolUsername: string): string {
@@ -463,7 +472,8 @@ export async function fetchMmradarProfile(lolUsername: string): Promise<MmradarP
       iconUrl: parseIconUrl(html),
       server: parseServer(html),
       level: parseSummonerLevel(html),
-      duelRating
+      duelRating,
+      engineMatches: raw?.engineMatches ?? null
     };
   } catch (err) {
     if (err instanceof MmradarLookupError) throw err;

@@ -43,10 +43,6 @@ const TIER_THRESHOLDS: { tier: RankTier; minTotal: number }[] = [
   { tier: "Challenger", minTotal: 12000 }
 ];
 
-/**
- * Ampliado a 6 escalones. Necesitamos este margen para que un perfil como
- * LegenPaPaNoel pueda caer desde Platino II (base) hasta Oro III (final).
- */
 const MAX_ADJUSTMENT_STEPS = 6;
 
 /**
@@ -81,6 +77,28 @@ export interface PerformanceRankResult {
   rank: string;
   tier: RankTier;
   divisionIndex: number;
+}
+
+/**
+ * Desglose completo del calculo, pensado para calibracion (ver
+ * scripts/test-rank-calibration.test.ts). Nunca se usa en el pipeline real
+ * de la app -- computePerformanceRank ya devuelve lo unico que se persiste.
+ */
+export interface PerformanceRankDebug {
+  gamesPlayed: number;
+  avgTotal: number;
+  winRate: number;
+  wins: number;
+  baseTierIndex: number;
+  baseTierLabel: RankTier;
+  fractionalInTier: number;
+  totalSteps: number;
+  winRateAdjustment: number;
+  consistencyAdjustment: number;
+  rawAdjustment: number;
+  clampedAdjustment: number;
+  finalSteps: number;
+  result: PerformanceRankResult | null;
 }
 
 export function computePerformanceRank(matches: TitleEngineMatch[]): PerformanceRankResult | null {
@@ -119,6 +137,61 @@ export function computePerformanceRank(matches: TitleEngineMatch[]): Performance
   const rank = hasDivisions ? `${tier} ${divisionLabels[finalDivisionIndex]}` : tier;
 
   return { rank, tier, divisionIndex: finalDivisionIndex };
+}
+
+/**
+ * Misma logica que computePerformanceRank, pero devolviendo cada numero
+ * intermedio en vez de solo el resultado final -- para poder ver, jugador
+ * por jugador, por que el motor dio el rango que dio y ajustar las
+ * constantes de arriba (TIER_THRESHOLDS, multiplicadores de
+ * winRateAdjustment/consistencyAdjustment) con datos reales delante en vez
+ * de a ciegas. No se usa en el pipeline real de la app.
+ */
+export function computePerformanceRankDebug(matches: TitleEngineMatch[]): PerformanceRankDebug | null {
+  if (matches.length === 0) return null;
+
+  const totals = matches.map((m) => m.scores.total);
+  const avgTotal = average(totals);
+  const wins = matches.filter((m) => m.won).length;
+  const winRate = matches.length > 0 ? wins / matches.length : 0;
+
+  let baseTierIndex = 0;
+  for (let i = TIER_THRESHOLDS.length - 1; i >= 0; i--) {
+    if (avgTotal >= TIER_THRESHOLDS[i].minTotal) {
+      baseTierIndex = i;
+      break;
+    }
+  }
+
+  const currentMin = TIER_THRESHOLDS[baseTierIndex].minTotal;
+  const nextMin = TIER_THRESHOLDS[baseTierIndex + 1]?.minTotal ?? currentMin + 600;
+  const fractionalInTier = Math.max(0, Math.min(1, (avgTotal - currentMin) / (nextMin - currentMin)));
+
+  const totalSteps = baseTierIndex * 4 + Math.round(fractionalInTier * 3);
+
+  const wrAdj = winRateAdjustment(winRate, matches.length);
+  const consAdj = consistencyAdjustment(matches);
+  const rawAdjustment = wrAdj + consAdj;
+  const clampedAdjustment = Math.max(-MAX_ADJUSTMENT_STEPS, Math.min(MAX_ADJUSTMENT_STEPS, rawAdjustment));
+
+  const finalSteps = Math.max(0, Math.min(RANK_TIERS.length * 4 - 1, totalSteps + Math.round(clampedAdjustment)));
+
+  return {
+    gamesPlayed: matches.length,
+    avgTotal,
+    winRate,
+    wins,
+    baseTierIndex,
+    baseTierLabel: TIER_THRESHOLDS[baseTierIndex].tier,
+    fractionalInTier,
+    totalSteps,
+    winRateAdjustment: wrAdj,
+    consistencyAdjustment: consAdj,
+    rawAdjustment,
+    clampedAdjustment,
+    finalSteps,
+    result: computePerformanceRank(matches)
+  };
 }
 
 export const PERFORMANCE_RANK_EXPLANATION = {

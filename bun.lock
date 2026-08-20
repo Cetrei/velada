@@ -4,6 +4,10 @@
   "workspaces": {
     "": {
       "name": "velada-lol-workspace",
+      "devDependencies": {
+        "@supabase/supabase-js": "^2.45.4",
+        "zod": "^3.22.4",
+      },
     },
     "apps/web": {
       "name": "web",
