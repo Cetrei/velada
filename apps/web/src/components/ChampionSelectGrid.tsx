@@ -10,19 +10,6 @@ interface ChampionSelectGridProps {
 type RoleFilter = Participant["mainRole"];
 type SortDirection = "asc" | "desc";
 
-/**
- * Iconos de rol reales del wiki de LoL, no dibujados a mano. Los intentos
- * anteriores (Font Awesome fa-bow-arrow/fa-staff-snake, despues paths SVG
- * propios) no se leian bien o directamente no existian en el set free.
- * El usuario descarga los 5 PNG de
- * https://wiki.leagueoflegends.com/en-us/Category:Role_icons (paginas
- * File:Top_icon.png, File:Jungle_icon.png, File:Middle_icon.png,
- * File:Bottom_icon.png, File:Support_icon.png -> boton "Original file",
- * 136x136) y los coloca en apps/web/public/images/roles/ con estos
- * nombres exactos. Si un archivo todavia no esta, onError en el <img>
- * oculta el icono en vez de mostrar el roto del navegador (mismo patron
- * que ya usa rankIcon.ts para los PNGs de rango).
- */
 const ROLE_FILTERS: Array<{ role: RoleFilter; label: string; icon: string }> = [
   { role: "Top", label: "Top", icon: "/images/roles/top.png" },
   { role: "Jungle", label: "Jungle", icon: "/images/roles/jungle.png" },
@@ -39,18 +26,15 @@ export default function ChampionSelectGrid({
   participants,
   rivalByParticipantId = {}
 }: ChampionSelectGridProps) {
-  // Estados para controlar la selección y el modo "Lock In" (Fijado)
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isLockedIn, setIsLockedIn] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
 
-  // Resolviendo el participante seleccionado y su rival usando tu lógica
   const selected = participants.find((p) => p.id === selectedId) ?? null;
   const rival = selected ? rivalByParticipantId[selected.id] : undefined;
 
-  // Filtrado por nombre/apodo y por rol principal, luego orden alfabetico segun sortDirection
   const filteredParticipants = participants
     .filter((p) => {
       const q = searchQuery.trim().toLowerCase();
@@ -64,9 +48,6 @@ export default function ChampionSelectGrid({
       return sortDirection === "asc" ? cmp : -cmp;
     });
 
-  // Elige un participante al azar dentro de los resultados filtrados actuales
-  // (respeta busqueda + filtro de rol activos), igual que el boton de
-  // random del cliente real de LoL.
   function pickRandom() {
     if (isLockedIn || filteredParticipants.length === 0) return;
     const pool = filteredParticipants.filter((p) => p.id !== selectedId);
@@ -76,11 +57,27 @@ export default function ChampionSelectGrid({
   }
 
   return (
-    <div className="relative w-full bg-[#010a13] text-[#f0e6d2] flex flex-col items-center overflow-hidden lol-main-bg py-2 sm:py-3 px-3 sm:px-6">
+    <div className="relative w-full bg-[#010a13] text-[#f0e6d2] flex flex-col items-center overflow-hidden lol-main-bg py-2 sm:py-3 px-3 sm:px-6 z-0">
       <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
 
-      {/* BANNER DEL JUGADOR: fila propia arriba, deja de ser absoluto para no solaparse en mobile */}
-      <div className={`player-banner w-full max-w-2xl ${isLockedIn ? 'locked-state-banner' : 'picking-state'}`}>
+      {/* FONDO SPLASH GLOBAL: Abarca todo el contenedor principal sin afectar el flujo */}
+      <div className={`splash-background transition-opacity duration-500 ${isLockedIn ? 'opacity-100' : 'opacity-0'}`}>
+          {selected && (
+              <img
+                  src={selected.banner ?? selected.photo ?? fallbackPhoto(selected)}
+                  alt="Background"
+                  decoding="async"
+                  onError={(e) => {
+                      const fallback = fallbackPhoto(selected);
+                      if (e.currentTarget.src !== fallback) e.currentTarget.src = fallback;
+                  }}
+              />
+          )}
+          <div className="splash-background-fade" />
+      </div>
+
+      {/* BANNER DEL JUGADOR: z-10 para estar por encima del fondo */}
+      <div className={`player-banner relative z-10 w-full max-w-2xl ${isLockedIn ? 'locked-state-banner' : 'picking-state'}`}>
         <div className="banner-bg"></div>
 
         <div className="hidden sm:flex flex-col gap-1 ml-4 z-10">
@@ -117,34 +114,23 @@ export default function ChampionSelectGrid({
         </div>
       </div>
 
-      {/* TÍTULO PRINCIPAL: solo se muestra en el estado fijado, ya no hay hint de "elige un peleador" */}
-      {isLockedIn && (
-        <h2 className="transition-all duration-300 text-center px-2 text-xl sm:text-2xl text-[#f0e6d2] font-bold tracking-[2px] beaufort-font mt-2 mb-1 uppercase">
+      {/* TÍTULO PRINCIPAL: Siempre ocupa espacio pero cambia su opacidad para no mover nada */}
+      <div className={`relative z-10 transition-opacity duration-300 mt-2 mb-1 flex justify-center ${isLockedIn ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+        <h2 className="text-center px-2 text-xl sm:text-2xl text-[#f0e6d2] font-bold tracking-[2px] beaufort-font uppercase">
           CHOOSE YOUR LOADOUT!
         </h2>
-      )}
-      <div className="timer-text">67</div>
+      </div>
+      
+      <div className="timer-text relative z-10">67</div>
 
-      {/* CONTENEDOR CENTRAL: Cambia entre la Grid (Cuadricula) y el Splash Art.
-          Ambas vistas viven superpuestas (position: absolute, inset: 0)
-          dentro de este contenedor -- el contenedor en si NO cambia de
-          alto entre estados, solo el hijo activo. Antes se le agregaba
-          min-height extra a este div compartido cuando isLockedIn era
-          true (para darle mas "lienzo" al splash), pero como el mismo
-          div tambien envuelve la grilla en el flujo normal del layout,
-          crecerlo empujaba TODO lo que viene despues (titulo, action bar)
-          fuera de la vista -- eso es el descuadre de las imagenes. El
-          alto real que necesita el splash ahora vive en
-          .splash-view (min-height propio, position: absolute dentro de
-          este contenedor), no en el contenedor compartido. */}
+      {/* CONTENEDOR CENTRAL */}
       <div
-        className="relative w-full max-w-4xl flex justify-center items-start min-h-[220px] sm:min-h-[260px]"
+        className="relative z-10 w-full max-w-4xl flex justify-center items-start min-h-[220px] sm:min-h-[260px]"
         style={{ perspective: '1000px' }}
       >
         
-        {/* VISTA 1: CUADRÍCULA (GRID) DE PARTICIPANTES */}
+        {/* VISTA 1: CUADRÍCULA (GRID) */}
         <div className={`champ-grid-container w-full transition-opacity duration-400 ${isLockedIn ? 'opacity-0 pointer-events-none absolute' : 'opacity-100 relative'}`}>
-            
             <div className="controls-bar w-full max-w-2xl flex flex-wrap justify-between items-center gap-3 mb-2 px-2 sm:px-[20px] pb-[10px] border-b border-[#c8aa6e]/30">
                 <div className="role-filters flex flex-nowrap items-center gap-2.5 sm:gap-[15px] text-[#a09b8c] text-base sm:text-base order-2 sm:order-1 flex-shrink-0">
                     {ROLE_FILTERS.map(({ role, label, icon }) => (
@@ -194,7 +180,6 @@ export default function ChampionSelectGrid({
             </div>
 
             <div className="champ-grid-scroll grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 gap-2 auto-rows-[64px]">
-                {/* Boton de seleccion al azar dentro de los resultados filtrados actuales */}
                 <button
                     type="button"
                     onClick={pickRandom}
@@ -206,7 +191,6 @@ export default function ChampionSelectGrid({
                     <i className="fa-solid fa-question random-icon" aria-hidden="true"></i>
                     <div className="champ-name">Random</div>
                 </button>
-                {/* Mapeo de TUS participantes reales */}
                 {filteredParticipants.map(p => {
                     const isSelected = selectedId === p.id;
                     return (
@@ -241,33 +225,8 @@ export default function ChampionSelectGrid({
             </div>
         </div>
 
-        {/* VISTA 2: LOADOUT / SPLASH BACKGROUND. position: absolute saca
-            este bloque del flujo del documento, asi que darle su propio
-            min-height (splash-view-active) no empuja nada del contenedor
-            padre ni de lo que viene despues -- a diferencia del intento
-            anterior (min-height en el contenedor compartido de mas
-            arriba), que si empujaba todo por seguir en flujo normal. */}
+        {/* VISTA 2: LOADOUT / SPLASH INFO (El fondo ahora está arriba del todo) */}
         <div className={`absolute inset-x-0 top-0 w-full transition-all duration-500 ${isLockedIn ? 'splash-view-active opacity-100 z-10' : 'h-full opacity-0 pointer-events-none -z-10'}`}>
-            
-            <div className="splash-background">
-                 {selected && (
-                     <img
-                         src={selected.banner ?? selected.photo ?? fallbackPhoto(selected)}
-                         alt="Background"
-                         decoding="async"
-                         onError={(e) => {
-                             // Si la URL guardada (banner o photo) esta rota o vacia, cae al
-                             // placeholder generico en vez de quedar en blanco — antes no
-                             // habia ningun manejo de error aca, asi que una URL invalida
-                             // simplemente no mostraba nada.
-                             const fallback = fallbackPhoto(selected);
-                             if (e.currentTarget.src !== fallback) e.currentTarget.src = fallback;
-                         }}
-                     />
-                 )}
-                 <div className="splash-background-fade" />
-            </div>
-
             <div className="hextech-arcs">
                 <div className="arc-left"></div>
                 <div className="arc-right"></div>
@@ -276,7 +235,6 @@ export default function ChampionSelectGrid({
             
             <div className="loadout-content w-full h-full">
                 <div className="skin-selector">
-                    {/* Renderizamos la info del RIVAL si existe */}
                     {rival && (
                         <div className="mb-4 text-center bg-black/40 px-6 py-2 rounded border border-lol-border/40 backdrop-blur-sm">
                             <span className="text-[#c8aa6e] font-bold text-lg beaufort-font mr-2">{CHAMPION_SELECT.vsLabel}</span>
@@ -296,9 +254,8 @@ export default function ChampionSelectGrid({
       </div>
 
       {/* BOTONES DE ACCIÓN INFERIORES */}
-      <div className="action-bar">
+      <div className="action-bar relative z-10">
         
-        {/* Botón de Cancelar / Atrás */}
         <div className="action-bar-side justify-end">
             <button 
                 type="button"
@@ -310,7 +267,6 @@ export default function ChampionSelectGrid({
             </button>
         </div>
 
-        {/* Botón Central FIJAR (Lock In) */}
         <div className="lock-in-container">
             <button 
                 type="button"
@@ -323,7 +279,6 @@ export default function ChampionSelectGrid({
             </button>
         </div>
 
-        {/* Enlace hacia el perfil usando tu prop viewProfileCta */}
         <div className="action-bar-side justify-start">
             <a 
                 href={selected ? `/peleadores/${selected.id}` : '#'}
@@ -539,18 +494,6 @@ export default function ChampionSelectGrid({
             filter: brightness(0.8) contrast(1.2);
         }
 
-        /* Alto real del bloque de splash (retrato vertical de banner/foto)
-           cuando esta activo. Vive en este elemento (position: absolute,
-           fuera del flujo) en vez de en el contenedor compartido de mas
-           arriba, asi que crecerlo no empuja el titulo/action-bar que
-           vienen despues en el layout -- ese fue el bug del descuadre en
-           una vuelta anterior. Subido de min(480px, 46dvh) a
-           min(640px, 62dvh): el usuario pidio explicitamente que el
-           banner ocupe mas espacio real (referencia visual: recuadro
-           dibujado a mano marcando un area bastante mas grande que la
-           anterior). La seccion #roster en index.astro tiene
-           overflow-y-auto como red de seguridad para viewports bajos
-           donde este alto no entrara completo. */
         .splash-view-active {
             min-height: min(640px, 62dvh);
         }
@@ -560,18 +503,18 @@ export default function ChampionSelectGrid({
             }
         }
 
+        /* Cambiado a absolute inset-0 para abarcar todo el componente principal */
         .splash-background {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            inset: 0;
             z-index: 0;
             overflow: hidden;
             pointer-events: none;
             display: flex;
             justify-content: center;
             align-items: center;
+            width: 100%;
+            height: 100%;
         }
 
         .splash-background img {
@@ -582,29 +525,13 @@ export default function ChampionSelectGrid({
             filter: blur(2px) brightness(0.55);
         }
 
-        /* Antes la imagen de fondo llevaba una mask-image radial propia,
-           que la hacia ver "cortada"/desvanecida en el centro en vez de
-           cubrir todo el contenedor como pedia el usuario ("deberia ser
-           el fondo"). Ahora la imagen cubre el 100% sin mascara, y en su
-           lugar este overlay hace un degradado vertical. El primer
-           intento (0.75 -> 0.15 -> 0.15 -> 0.85 con una meseta plana en
-           22%-70%) seguía viendose como un corte brusco: la transicion de
-           0.15 a 0.75/0.85 pasaba demasiado rapido cerca de los bordes.
-           Este degradado usa mas paradas intermedias para que la caída sea
-           gradual de punta a punta, sin ninguna meseta plana. */
+        /* Degradado en los 4 lados usando gradientes lineales superpuestos */
         .splash-background-fade {
             position: absolute;
             inset: 0;
-            background: linear-gradient(
-                to bottom,
-                rgba(1, 10, 19, 0.85) 0%,
-                rgba(1, 10, 19, 0.45) 12%,
-                rgba(1, 10, 19, 0.08) 30%,
-                rgba(1, 10, 19, 0.08) 55%,
-                rgba(1, 10, 19, 0.35) 75%,
-                rgba(1, 10, 19, 0.7) 90%,
-                rgba(1, 10, 19, 0.92) 100%
-            );
+            background: 
+                linear-gradient(to bottom, rgba(1, 10, 19, 1) 0%, rgba(1, 10, 19, 0) 15%, rgba(1, 10, 19, 0) 85%, rgba(1, 10, 19, 1) 100%),
+                linear-gradient(to right, rgba(1, 10, 19, 1) 0%, rgba(1, 10, 19, 0) 15%, rgba(1, 10, 19, 0) 85%, rgba(1, 10, 19, 1) 100%);
             pointer-events: none;
         }
 
@@ -613,9 +540,6 @@ export default function ChampionSelectGrid({
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            /* Escala con min()/% en vez de un tamano fijo para seguir
-               viendose completo sin recortes sin importar el alto real de
-               .splash-view-active (ver ese comentario para el porque). */
             width: min(760px, 92%);
             height: min(760px, 88%);
             z-index: 1;
@@ -707,8 +631,6 @@ export default function ChampionSelectGrid({
             margin-top: 12px;
             width: 100%;
             max-width: 480px;
-            position: relative;
-            z-index: 20;
         }
 
         .action-bar-side {
@@ -735,200 +657,126 @@ export default function ChampionSelectGrid({
         }
 
         .lock-in-btn {
-            background: linear-gradient(to bottom, #1a2a3a, #0d1620);
+            background: linear-gradient(to bottom, #1e282d, #0d1518);
             border: 2px solid #3c3c41;
             color: #5c5c5c;
             font-family: 'Beaufort for LOL', serif;
             font-size: 1.1rem;
-            font-weight: 700;
+            font-weight: bold;
             letter-spacing: 2px;
-            padding: 10px 28px;
-            cursor: not-allowed;
-            text-transform: uppercase;
+            padding: 8px 30px;
+            cursor: pointer;
             transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-            white-space: nowrap;
-            clip-path: polygon(10% 0, 90% 0, 100% 50%, 90% 100%, 10% 100%, 0 50%);
+            text-transform: uppercase;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
+            width: 160px;
         }
 
         .lock-in-btn.active {
-            border-color: #0bd4d4;
-            color: #ffffff;
-            cursor: pointer;
-            background: linear-gradient(to bottom, #0a3a4a, #051a25);
+            border-color: #c8aa6e;
+            color: #f0e6d2;
+            background: linear-gradient(to bottom, #1e282d, #0d1518);
+            box-shadow: 0 0 15px rgba(200, 170, 110, 0.3), inset 0 0 10px rgba(0,0,0,0.8);
         }
 
         .lock-in-btn.active:hover {
-            border-color: #00ffff;
-            text-shadow: 0 0 8px rgba(255,255,255,0.7);
-            box-shadow: 0 0 15px rgba(11, 212, 212, 0.3);
+            background: linear-gradient(to bottom, #2a363d, #121c21);
+            box-shadow: 0 0 20px rgba(200, 170, 110, 0.5), inset 0 0 10px rgba(0,0,0,0.8);
+            text-shadow: 0 0 8px rgba(240, 230, 210, 0.5);
         }
-
-        .lock-in-btn.active:active { transform: scale(0.98); }
 
         .lock-in-btn.locked-state {
-            border-color: #0bd4d4;
-            color: #ffffff;
-            background: linear-gradient(to bottom, #0a3a4a, #051a25);
-            cursor: default;
-            animation: magicPulse 1.5s infinite alternate;
-            text-shadow: 0 0 10px #0bd4d4;
+            background: linear-gradient(to bottom, #0ac8b9, #03978c);
+            border-color: #e0f8f8;
+            color: #010a13;
+            box-shadow: 0 0 25px rgba(10, 200, 185, 0.6), inset 0 0 15px rgba(255,255,255,0.4);
+            text-shadow: none;
         }
-
-        .lock-in-btn.locked-state::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 50%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(11, 212, 212, 0.5), transparent);
-            transform: skewX(-25deg);
-            animation: magicShine 2.5s infinite;
-        }
-        
-        .lock-in-btn.locked-state:hover { transform: none; }
 
         .cancel-btn {
-            width: 44px;
-            height: 44px;
-            border-radius: 50%;
-            border: 2px solid #3c3c41;
-            color: #5c5c5c;
             background: transparent;
+            border: 2px solid #c8aa6e;
+            color: #c8aa6e;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
+            cursor: pointer;
             transition: all 0.3s ease;
-            flex-shrink: 0;
-            z-index: 10;
+            opacity: 0;
+            transform: scale(0.8);
         }
 
         .cancel-btn.cancel-active {
-            border-color: #c8aa6e;
-            color: #c8aa6e;
-            background: radial-gradient(circle, #3a2a15 0%, #1a120a 100%);
-            cursor: pointer;
-            box-shadow: 0 0 10px rgba(200, 170, 110, 0.3);
-            pointer-events: auto;
+            opacity: 1;
+            transform: scale(1);
         }
 
-        .cancel-btn.cancel-active:hover {
+        .cancel-btn:hover {
+            background: rgba(200, 170, 110, 0.2);
+            box-shadow: 0 0 10px rgba(200, 170, 110, 0.5);
             color: #f0e6d2;
-            background: radial-gradient(circle, #4a3a25 0%, #2a1a0f 100%);
-            box-shadow: 0 0 15px rgba(200, 170, 110, 0.6), inset 0 0 5px rgba(200, 170, 110, 0.4);
-            transform: scale(1.05);
+            border-color: #f0e6d2;
         }
-        
-        .cancel-btn.cancel-active:active { transform: scale(0.95); }
 
         .ver-ficha-btn {
-            background: linear-gradient(to bottom, #051a25, #020a10);
-            border: 1px solid #0bd4d4;
-            color: #0bd4d4;
+            background: rgba(1, 10, 19, 0.8);
+            border: 1px solid #0ac8b9;
+            color: #0ac8b9;
             font-family: 'Beaufort for LOL', serif;
-            font-size: 0.7rem;
-            font-weight: 700;
-            letter-spacing: 0.5px;
-            padding: 10px 14px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            letter-spacing: 1px;
+            padding: 8px 15px;
             cursor: pointer;
             text-transform: uppercase;
-            transition: all 0.3s ease;
-            clip-path: polygon(10% 0, 100% 0, 100% 70%, 90% 100%, 0 100%, 0 30%);
-            white-space: nowrap;
-            z-index: 10;
             text-decoration: none;
-        }
-
-        @media (min-width: 480px) {
-            .ver-ficha-btn {
-                font-size: 0.85rem;
-                letter-spacing: 1px;
-                padding: 10px 18px;
-            }
+            box-shadow: 0 0 10px rgba(10, 200, 185, 0.2);
         }
 
         .ver-ficha-btn:hover {
-            background: linear-gradient(to bottom, #0a3a4a, #051a25);
-            color: #ffffff;
-            box-shadow: 0 0 15px rgba(11, 212, 212, 0.4);
-            border-color: #00ffff;
+            background: rgba(10, 200, 185, 0.15);
+            box-shadow: 0 0 15px rgba(10, 200, 185, 0.4);
+            color: #e0f8f8;
         }
 
         .player-banner {
             position: relative;
-            width: 100%;
-            height: 68px;
             display: flex;
             align-items: center;
-            z-index: 30;
-            transition: all 0.4s ease;
-            border-radius: 4px;
-            overflow: hidden;
+            height: 60px;
+            background: linear-gradient(to right, rgba(30,35,40,0) 0%, rgba(30,35,40,0.8) 15%, rgba(30,35,40,0.9) 50%, rgba(30,35,40,0.8) 85%, rgba(30,35,40,0) 100%);
+            border-top: 1px solid rgba(200, 170, 110, 0.3);
+            border-bottom: 1px solid rgba(200, 170, 110, 0.3);
+            margin-bottom: 4px;
+            transition: all 0.5s ease;
         }
 
         .banner-bg {
             position: absolute;
             inset: 0;
-            z-index: -1;
-            mask-image: linear-gradient(to right, black 70%, transparent 100%);
-            -webkit-mask-image: linear-gradient(to right, black 70%, transparent 100%);
-            overflow: hidden;
+            background-size: cover;
+            background-position: center;
+            opacity: 0.3;
+            mix-blend-mode: overlay;
+            transition: opacity 0.3s ease;
         }
 
-        .banner-bg::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            transform: skewX(-20deg);
-        }
-
-        .player-banner.picking-state .banner-bg {
-            background: linear-gradient(to right, rgba(80, 60, 20, 0.8) 0%, rgba(160, 120, 40, 0.4) 60%, transparent 100%);
+        .picking-state .dynamic-border-color { border-color: #c8aa6e; }
+        .picking-state .avatar-border { border-color: #c8aa6e; box-shadow: 0 0 10px rgba(200, 170, 110, 0.3); }
+        .picking-state .dynamic-text-color { color: #c8aa6e; }
+        
+        .locked-state-banner {
+            background: linear-gradient(to right, rgba(10,200,185,0) 0%, rgba(10,200,185,0.15) 15%, rgba(10,200,185,0.25) 50%, rgba(10,200,185,0.15) 85%, rgba(10,200,185,0) 100%);
+            border-top-color: rgba(10, 200, 185, 0.5);
+            border-bottom-color: rgba(10, 200, 185, 0.5);
         }
         
-        .player-banner.picking-state .banner-bg::after {
-            background: linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.25), transparent);
-            animation: sweepGold 2s infinite linear;
-        }
-
-        .player-banner.picking-state .avatar-border {
-            border-color: #c8aa6e;
-            box-shadow: 0 0 10px rgba(200, 170, 110, 0.5);
-        }
-
-        .player-banner.picking-state .dynamic-text-color { color: #c8aa6e; }
-        .player-banner.picking-state .dynamic-border-color { border-color: rgba(200, 170, 110, 0.4); }
-
-        .player-banner.locked-state-banner .banner-bg {
-            background: linear-gradient(to right, rgba(5, 30, 40, 0.9) 0%, rgba(11, 212, 212, 0.4) 60%, transparent 100%);
-        }
-
-        .player-banner.locked-state-banner .banner-bg::after {
-            background: linear-gradient(90deg, transparent, rgba(11, 212, 212, 0.4), transparent);
-            animation: sweepCyan 2.5s infinite linear;
-        }
-
-        .player-banner.locked-state-banner .avatar-border {
-            border-color: #0bd4d4;
-            box-shadow: 0 0 12px rgba(11, 212, 212, 0.7);
-        }
-
-        .player-banner.locked-state-banner .dynamic-text-color { color: #0bd4d4; }
-        .player-banner.locked-state-banner .dynamic-border-color { border-color: rgba(11, 212, 212, 0.5); }
-
-        @keyframes magicPulse {
-            0% { box-shadow: 0 0 10px rgba(0, 200, 200, 0.4); }
-            50% { box-shadow: 0 0 25px rgba(11, 212, 212, 0.8), inset 0 0 15px rgba(11, 212, 212, 0.4); }
-            100% { box-shadow: 0 0 10px rgba(0, 200, 200, 0.4); }
-        }
-        @keyframes magicShine { 0% { left: -150%; } 100% { left: 150%; } }
-        @keyframes sweepGold { 0% { left: -100%; } 100% { left: 100%; } }
-        @keyframes sweepCyan { 0% { left: -100%; } 100% { left: 100%; } }
+        .locked-state-banner .dynamic-border-color { border-color: #0ac8b9; background-color: rgba(10, 200, 185, 0.2); }
+        .locked-state-banner .avatar-border { border-color: #0ac8b9; box-shadow: 0 0 15px rgba(10, 200, 185, 0.5); }
+        .locked-state-banner .dynamic-text-color { color: #0ac8b9; text-shadow: 0 0 5px rgba(10, 200, 185, 0.5); }
       `}</style>
     </div>
   );
