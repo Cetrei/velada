@@ -89,13 +89,24 @@ function clamp(value: number, min: number, max: number): number {
 
 function weightedCombatPower(scores: MmradarPerformanceScores): number {
   return (Object.keys(STAT_WEIGHTS) as (keyof MmradarPerformanceScores)[]).reduce(
-    (sum, key) => sum + scores[key] * STAT_WEIGHTS[key] * 6,
+    (sum, key) => sum + scores[key] * STAT_WEIGHTS[key],
     0
   );
-  // *6 porque STAT_WEIGHTS ya suma 1.0 entre los 6 keys -- sin el factor,
-  // el resultado quedaria en la escala de UN stat individual (~1000-2400)
-  // en vez de reflejar que se estan combinando los 6, perdiendo la
-  // separacion util para la curva logistica de abajo.
+  // BUG REAL (2026-08-20): esta funcion tenia un "* 6" extra al final del
+  // reduce. STAT_WEIGHTS ya suma 1.0 entre los 6 keys, asi que el reduce
+  // por si solo ya da un PROMEDIO PONDERADO en la misma escala que cada
+  // stat individual (~1300-2400, la escala real de Combat/Teamfight/etc.
+  // vista en las capturas) -- exactamente la escala que CURVE_MIDPOINT
+  // (1750) espera. El *6 multiplicaba ese promedio ponderado como si
+  // fuera una suma de 6 stats sin ponderar, disparando el resultado a
+  // ~11000+ (6-7x el midpoint de la curva) para CUALQUIER jugador, sin
+  // importar que tan bueno o malo fuera -- eso saturaba la sigmoide de
+  // logisticCurve a 1.0 antes de que la diferencia real entre perfiles
+  // pudiera importar, y el clamp(..., 1, 99) hacia que TODOS terminaran
+  // en 99. Confirmado con los datos reales de OneShotOneKill (Laning 1780/
+  // Farming 1799/Objectives 1550/Combat 2220/Teamfight 2037/Vision 1773):
+  // el promedio ponderado real es ~1963, ya cerca del rango esperado
+  // (perfil fuerte, deberia caer bien arriba de 50 sin necesitar saturar).
 }
 
 /**
