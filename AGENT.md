@@ -1821,6 +1821,66 @@ era el de arriba, no whitelist).
   constantes sueltas pensadas para tocarse libremente sin afectar el
   resto del motor, no hace falta reescribir la logica para recalibrar.
 
+## Sesion 2026-08-20 (7): verificado el gate de refreshMmradarData ("cualquier jugador logueado") + mmradar_updated_at end-to-end
+- Retomando lo que dejo a medias otra sesion (resumen pegado por el
+  usuario, no en este AGENT.md): revisado TODO el codigo real via
+  filesystem MCP (nunca bash/create_file sobre esta ruta, ver leccion de
+  la sesion (5) de mas arriba) antes de tocar nada. Los 6 archivos que el
+  resumen decia haber tocado ya estaban completos y consistentes:
+  - `apps/web/src/actions/index.ts` -- `refreshMmradarData` ya exige solo
+    `getSession` (jugador) O `getAdminSession` (panel), sin comparar
+    ownership; persiste `mmradar_updated_at` en el UPDATE y lo devuelve en
+    la respuesta. `saveOwnParticipant`/`saveParticipant` tambien setean
+    `mmradar_updated_at` en cada upsert.
+  - `packages/core/schemas.ts` (el resumen decia "apps/web/src/lib/
+    schemas.ts", ruta que NUNCA existio en este proyecto -- confirmado
+    con `search_files`/`directory_tree`, el archivo real siempre vivio en
+    `packages/core/`, ver estructura documentada arriba en "Que es esto") --
+    `mmradarUpdatedAt: z.string().datetime().nullable().optional()` ya
+    esta en `ParticipantSchema`.
+  - `apps/web/src/lib/loadParticipants.ts` -- `mmradar_updated_at` ya en
+    el `select()` de `loadParticipants`/`findParticipantByOwner` y
+    mapeado en `toParticipant`.
+  - `apps/web/src/pages/peleadores/[id].astro` -- `canUpdateMmradar =
+    !!session || !!adminSession` (cualquier jugador logueado o admin, sin
+    chequeo de ownership), pasado como `canUpdate` a `MmradarPanel` junto
+    con `mmradarUpdatedAt`.
+  - `apps/web/src/components/MmradarPanel.tsx` -- estado `updatedAt`
+    inicializado desde el participante, actualizado tras
+    `refreshMmradarData`, pasado a `MmradarPerformanceCard`.
+  - `apps/web/src/components/MmradarPerformanceCard.tsx` --
+    `formatRelativeUpdatedAt` ("hace 5 min" / "hace 3 h" / fecha corta
+    pasada una semana) + prop `updatedAt` renderizada junto al boton
+    "Actualizar" en modo `full`.
+- **Unico cambio real hecho esta sesion**: el JSDoc de `canUpdate` en
+  `MmradarPanel.tsx` seguia diciendo "Solo el dueno del perfil o un admin
+  de panel puede forzar una re-consulta" -- desalineado con el
+  comportamiento ya implementado (cualquier jugador logueado). Corregido
+  el comentario para que no confunda a una sesion futura sobre cual es el
+  gate real vigente.
+- **DDL de `mmradar_updated_at` YA estaba en `scripts/setup-supabase.ts`**
+  desde una sesion no documentada en este AGENT.md (`ALTER TABLE
+  participants ADD COLUMN IF NOT EXISTS mmradar_updated_at TIMESTAMPTZ;`
+  en `SETUP_SQL`, con comentario explicando el proposito). Como en
+  practicamente todas las sesiones anteriores con columnas nuevas (ver
+  sesion 2026-08-20(3): `mmradar_level` rompio en produccion porque el
+  usuario nunca habia corrido el script), **no hay forma de confirmar
+  desde aca si esta columna ya existe en el proyecto Supabase real** --
+  sin acceso de red autenticado a la Management API en esta sesion. Dado
+  el patron repetido de este mismo bug en el proyecto, se asume que NO
+  esta confirmado hasta que el usuario lo corra.
+- Pendiente para el usuario (sin bash real sobre el proyecto en esta
+  sesion tampoco, todo via filesystem MCP): correr `bun run
+  scripts/setup-supabase.ts` (sin `--reset-data`, no hace falta) para que
+  `mmradar_updated_at` exista de verdad en la base real -- si no se corre
+  esto, `refreshMmradarData`/`saveOwnParticipant`/`saveParticipant` van a
+  fallar con el mismo error de "column not found in schema cache" ya visto
+  en la sesion 2026-08-20(3). Despues de eso, `bun install` + `bun run
+  dev`, entrar a la ficha de cualquier peleador SIN estar logueado como su
+  dueno (para confirmar que el boton "Actualizar" igual aparece si hay
+  sesion de jugador) y apretarlo, confirmando que "Actualizado hace
+  instantes" aparece junto al boton sin recargar la pagina.
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.

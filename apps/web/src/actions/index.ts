@@ -478,6 +478,7 @@ export const server = {
         mmradar_level: mmradar.level,
         duel_rating: mmradar.duelRating,
         duel_confidence: mmradar.duelConfidence,
+        mmradar_updated_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         ...(photoUrl ? { photo: photoUrl } : {}),
         ...(bannerUrl ? { banner: bannerUrl } : {})
@@ -615,6 +616,7 @@ export const server = {
         mmradar_level: mmradar.level,
         duel_rating: mmradar.duelRating,
         duel_confidence: mmradar.duelConfidence,
+        mmradar_updated_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         ...(photoUrl ? { photo: photoUrl } : {}),
         ...(bannerUrl ? { banner: bannerUrl } : {})
@@ -671,12 +673,19 @@ export const server = {
   /**
    * Re-consulta mmradar.gg para un participante ya guardado y actualiza
    * SOLO los campos que vienen de ahi (lol_rank, performance rank,
-   * performance scores, titles, mmradar_icon_url, mmradar_server).
-   * Pensada para el boton "Update" en la ficha publica del jugador
-   * (/peleadores/[id]), que tambien mueve la barra de performance de la
-   * carta izquierda porque toca la misma fila.
-   * Permitido al dueno del perfil o a un admin de panel; nadie mas puede
-   * forzar una re-consulta de un perfil ajeno.
+   * performance scores, titles, mmradar_icon_url, mmradar_server,
+   * mmradar_updated_at). Pensada para el boton "Actualizar" en la ficha
+   * publica del jugador (/peleadores/[id]), que tambien mueve la barra de
+   * performance de la carta izquierda porque toca la misma fila.
+   *
+   * Permisos (aclarado por el usuario 2026-08-20, cambia el diseno
+   * original): esto NO es "editar mis datos personales", es forzar un
+   * re-calculo de performance/duel rating que puede pedir cualquier
+   * JUGADOR LOGUEADO sobre CUALQUIER perfil, no solo el propio. Se sigue
+   * exigiendo sesion de jugador (o admin de panel) para evitar abuso
+   * anonimo -- lo unico que se quito es la comparacion isOwner/adminSession
+   * que antes bloqueaba el refresh de perfiles ajenos.
+   *
    * Igual que saveOwnParticipant, si mmradar no responde se conserva el
    * lol_rank ya guardado en vez de pisarlo con "Sin clasificar".
    */
@@ -684,17 +693,17 @@ export const server = {
     accept: "form",
     input: z.object({ id: z.string().min(1) }),
     handler: async ({ id }, context) => {
-      // El dueno del perfil se resuelve con la sesion de jugador; un admin
-      // (sesion separada, ver lib/session.ts) tambien puede forzar el
-      // refresh de cualquier perfil. Ninguna de las dos otorga la otra —
-      // se piden ambas por separado en vez de una sola sesion con flags.
+      // Sesion de jugador (participant_users/sessions) o de admin de panel
+      // (sesion separada, ver lib/session.ts) -- cualquiera de las dos
+      // alcanza para forzar el refresh de CUALQUIER perfil, no solo el
+      // propio. Solo se bloquea al visitante sin ninguna sesion.
       const [playerSession, adminSession] = await Promise.all([
         getSession(context.cookies, context),
         getAdminSession(context.cookies)
       ]);
 
       if (!playerSession && !adminSession) {
-        throw new ActionError({ code: "UNAUTHORIZED", message: "No autenticado." });
+        throw new ActionError({ code: "UNAUTHORIZED", message: "Inicia sesion para poder actualizar un perfil." });
       }
 
       const [admin, msg] = createSupabaseAdminClient(context.locals);
@@ -704,17 +713,12 @@ export const server = {
 
       const { data: existing, error: fetchError } = await admin
         .from("participants")
-        .select("id, owner_user_id, lol_username, lol_rank")
+        .select("id, lol_username, lol_rank")
         .eq("id", id)
         .maybeSingle();
 
       if (fetchError || !existing) {
         throw new ActionError({ code: "NOT_FOUND", message: "Participante no encontrado." });
-      }
-
-      const isOwner = playerSession ? existing.owner_user_id === playerSession.userId : false;
-      if (!isOwner && !adminSession) {
-        throw new ActionError({ code: "FORBIDDEN", message: "No podes actualizar el perfil de otro jugador." });
       }
 
       if (!existing.lol_username) {
@@ -723,6 +727,7 @@ export const server = {
 
       const mmradar = await fetchMmradarData(existing.lol_username);
       const rank = mmradar.rank ?? existing.lol_rank ?? "Sin clasificar";
+      const updatedAt = new Date().toISOString();
 
       const { error } = await admin
         .from("participants")
@@ -736,7 +741,8 @@ export const server = {
           mmradar_level: mmradar.level,
           duel_rating: mmradar.duelRating,
           duel_confidence: mmradar.duelConfidence,
-          updated_at: new Date().toISOString()
+          mmradar_updated_at: updatedAt,
+          updated_at: updatedAt
         })
         .eq("id", id);
 
@@ -754,7 +760,8 @@ export const server = {
         mmradarServer: mmradar.server,
         mmradarLevel: mmradar.level,
         duelRating: mmradar.duelRating,
-        duelConfidence: mmradar.duelConfidence
+        duelConfidence: mmradar.duelConfidence,
+        mmradarUpdatedAt: updatedAt
       };
     }
   }),

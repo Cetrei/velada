@@ -47,6 +47,26 @@ function barPct(value: number): number {
   return Math.min(100, Math.round((value / BAR_RENDER_MAX) * 100));
 }
 
+/**
+ * Texto corto tipo "hace 5 min" / "hace 3 h" / "hace 2 dias" para mostrar
+ * junto al boton "Actualizar" (pedido del usuario 2026-08-20, para que se
+ * note si alguien lo uso hace poco). Cae a fecha corta (dd/mm) pasada una
+ * semana, donde un relativo ya no aporta nada util.
+ */
+function formatRelativeUpdatedAt(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const diffMs = Date.now() - then;
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return "hace instantes";
+  if (minutes < 60) return `hace ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `hace ${hours} h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `hace ${days} ${days === 1 ? "dia" : "dias"}`;
+  return new Date(iso).toLocaleDateString("es", { day: "2-digit", month: "2-digit" });
+}
+
 export type MmradarCardStatus = "idle" | "checking" | "found" | "not_found" | "invalid" | "error";
 
 export interface MmradarPerformanceCardProps {
@@ -65,6 +85,8 @@ export interface MmradarPerformanceCardProps {
   statusMessage?: { type: "success" | "error"; text: string } | null;
   /** "full" = ficha publica, "compact" = preview lateral de /mi-perfil. */
   size?: "full" | "compact";
+  /** Ultima vez que se recalcularon estos datos (ISO). Solo se muestra en modo "full". */
+  updatedAt?: string | null;
 }
 
 export default function MmradarPerformanceCard({
@@ -78,7 +100,8 @@ export default function MmradarPerformanceCard({
   status = "idle",
   headerAction,
   statusMessage,
-  size = "full"
+  size = "full",
+  updatedAt
 }: MmradarPerformanceCardProps) {
   const hasScores = Boolean(scores);
   const displayScores = scores ?? EMPTY_SCORES;
@@ -154,7 +177,12 @@ export default function MmradarPerformanceCard({
             </div>
           </div>
 
-          {headerAction}
+          <div className="mmradar-header-action-col">
+            {headerAction}
+            {!compact && updatedAt && (
+              <span className="mmradar-updated-at">Actualizado {formatRelativeUpdatedAt(updatedAt)}</span>
+            )}
+          </div>
         </div>
       )}
 
@@ -363,6 +391,20 @@ export default function MmradarPerformanceCard({
 
         .mmradar-status-error {
           color: #e35d5d;
+        }
+
+        .mmradar-header-action-col {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          gap: 4px;
+          flex-shrink: 0;
+        }
+
+        .mmradar-updated-at {
+          font-size: 0.62rem;
+          color: #7a7566;
+          white-space: nowrap;
         }
 
         .mmradar-update-btn {

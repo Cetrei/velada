@@ -19,6 +19,7 @@ type ParticipantMmradarData = Pick<
   | "mmradarLevel"
   | "duelRating"
   | "duelConfidence"
+  | "mmradarUpdatedAt"
   | "memeTitles"
   | "memeIconUrl"
 >;
@@ -32,7 +33,7 @@ export interface DuelRivalData {
 
 interface MmradarPanelProps {
   participant: ParticipantMmradarData;
-  /** Solo el dueno del perfil o un admin de panel puede forzar una re-consulta. */
+  /** Cualquier jugador logueado (o admin de panel) puede forzar una re-consulta sobre cualquier perfil. */
   canUpdate: boolean;
   /** Notifica al padre (PlayerCardLive) cuando hay datos nuevos, ver mmradarUpdateBus. */
   onUpdated?: (data: { performanceRank: string | null; performanceScores: MmradarPerformanceScores | null }) => void;
@@ -67,6 +68,7 @@ export default function MmradarPanel({ participant, canUpdate, onUpdated, rival 
   const [level, setLevel] = useState(participant.mmradarLevel ?? null);
   const [duelRating, setDuelRating] = useState(participant.duelRating ?? null);
   const [duelConfidence, setDuelConfidence] = useState(participant.duelConfidence ?? null);
+  const [updatedAt, setUpdatedAt] = useState(participant.mmradarUpdatedAt ?? null);
   const [updating, setUpdating] = useState(false);
   const [status, setStatus] = useState<StatusMessage>(null);
 
@@ -109,6 +111,7 @@ export default function MmradarPanel({ participant, canUpdate, onUpdated, rival 
         setLevel(data.mmradarLevel ?? null);
         setDuelRating(data.duelRating ?? null);
         setDuelConfidence(data.duelConfidence ?? null);
+        setUpdatedAt(data.mmradarUpdatedAt ?? null);
         setStatus({ type: "success", text: "Datos actualizados." });
         onUpdated?.({ performanceRank: data.performanceRank ?? null, performanceScores: data.performanceScores ?? null });
         emitMmradarUpdate({
@@ -135,6 +138,7 @@ export default function MmradarPanel({ participant, canUpdate, onUpdated, rival 
         server={server}
         performanceRank={performanceRank}
         scores={scores}
+        updatedAt={updatedAt}
         statusMessage={status}
         headerAction={
           canUpdate ? (

@@ -86,6 +86,7 @@ interface ParticipantRow {
   mmradar_level: number | null;
   duel_rating: number | null;
   duel_confidence: number | null;
+  mmradar_updated_at: string | null;
 }
 
 function toParticipant(row: ParticipantRow): Participant {
@@ -118,7 +119,8 @@ function toParticipant(row: ParticipantRow): Participant {
     mmradarServer: row.mmradar_server ?? undefined,
     mmradarLevel: row.mmradar_level ?? undefined,
     duelRating: row.duel_rating ?? undefined,
-    duelConfidence: row.duel_confidence ?? undefined
+    duelConfidence: row.duel_confidence ?? undefined,
+    mmradarUpdatedAt: row.mmradar_updated_at ?? undefined
   };
 }
 
@@ -142,7 +144,7 @@ export async function loadParticipants(): Promise<Participant[]> {
   const { data, error } = await supabase
     .from("participants")
     .select(
-      "id, name, nickname, photo, banner, age, weight, height, country, country_flag, instagram_handle, instagram_followers, x_handle, x_followers, lol_rank, lol_username, lol_server, main_role, fav_champion, description, stats, performance_rank, performance_scores, titles, mmradar_icon_url, mmradar_server, mmradar_level, duel_rating, duel_confidence"
+      "id, name, nickname, photo, banner, age, weight, height, country, country_flag, instagram_handle, instagram_followers, x_handle, x_followers, lol_rank, lol_username, lol_server, main_role, fav_champion, description, stats, performance_rank, performance_scores, titles, mmradar_icon_url, mmradar_server, mmradar_level, duel_rating, duel_confidence, mmradar_updated_at"
     )
     .order("created_at", { ascending: true });
 
@@ -181,7 +183,7 @@ export async function findParticipantByOwner(
   const { data, error } = await admin
     .from("participants")
     .select(
-      "id, name, nickname, photo, banner, age, weight, height, country, country_flag, instagram_handle, instagram_followers, x_handle, x_followers, lol_rank, lol_username, lol_server, main_role, fav_champion, description, stats, performance_rank, performance_scores, titles, mmradar_icon_url, mmradar_server, mmradar_level, duel_rating, duel_confidence"
+      "id, name, nickname, photo, banner, age, weight, height, country, country_flag, instagram_handle, instagram_followers, x_handle, x_followers, lol_rank, lol_username, lol_server, main_role, fav_champion, description, stats, performance_rank, performance_scores, titles, mmradar_icon_url, mmradar_server, mmradar_level, duel_rating, duel_confidence, mmradar_updated_at"
     )
     .eq("owner_user_id", ownerUserId)
     .maybeSingle();

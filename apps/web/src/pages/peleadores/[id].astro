@@ -3,7 +3,7 @@ import Layout from "../../layouts/Layout.astro";
 import PlayerCardLive from "../../components/PlayerCardLive";
 import MmradarPanel from "../../components/MmradarPanel";
 import { getSession, getAdminSession } from "../../lib/session";
-import { loadParticipants, findParticipantByOwner } from "../../lib/loadParticipants";
+import { loadParticipants } from "../../lib/loadParticipants";
 import { fetchMatches, fetchPredictionTallies } from "../../lib/matches";
 import { fetchTeamMatches } from "../../lib/teamMatches";
 import TeamRoster from "../../components/TeamRoster.astro";
@@ -18,23 +18,18 @@ if (!participant) {
   return Astro.rewrite("/404");
 }
 
-// El boton "Actualizar" de MmradarPanel solo se muestra si el visitante es
-// el dueno de este perfil o un admin de panel ya autenticado (mismo
-// criterio de permisos que refreshMmradarData en actions/index.ts). La
-// sesion de admin es completamente separada de la de jugador (ver
-// lib/session.ts) -- se consultan ambas por separado, ninguna otorga la
-// otra. No se expone ownerUserId al cliente: se re-consulta el perfil
-// propio del visitante (si hay sesion de jugador) y se compara el id,
-// igual que hace /mi-perfil para saber si ya existe una ficha.
+// El boton "Actualizar" de MmradarPanel se muestra a CUALQUIER visitante
+// con sesion (de jugador o de admin de panel), no solo al dueno de este
+// perfil -- decision explicita del usuario 2026-08-20: refrescar el
+// calculo de mmradar no es "editar mis datos personales", es un
+// recalculo que cualquier jugador logueado puede pedir sobre cualquier
+// perfil (mismo criterio de permisos que refreshMmradarData en
+// actions/index.ts). Solo se bloquea a un visitante sin ninguna sesion.
 const [session, adminSession] = await Promise.all([
   getSession(Astro.cookies, Astro),
   getAdminSession(Astro.cookies)
 ]);
-let canUpdateMmradar = !!adminSession;
-if (!canUpdateMmradar && session) {
-  const ownProfile = await findParticipantByOwner(session.userId, Astro.locals);
-  canUpdateMmradar = ownProfile?.id === participant.id;
-}
+const canUpdateMmradar = !!session || !!adminSession;
 
 const participantsById = Object.fromEntries(participants.map((p) => [p.id, p]));
 const allMatches = await fetchMatches();
@@ -121,6 +116,7 @@ const copy = PAGES.fighterDetail;
                 mmradarLevel: participant.mmradarLevel,
                 duelRating: participant.duelRating,
                 duelConfidence: participant.duelConfidence,
+                mmradarUpdatedAt: participant.mmradarUpdatedAt,
                 memeTitles: participant.memeTitles,
                 memeIconUrl: participant.memeIconUrl
               }}

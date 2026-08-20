@@ -163,6 +163,14 @@ ALTER TABLE participants ADD COLUMN IF NOT EXISTS mmradar_level INTEGER;
 -- de victoria en un duelo contra otro participante.
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS duel_rating INTEGER;
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS duel_confidence REAL;
+-- Cuando fue la ultima vez que se re-consulto mmradar para este perfil
+-- (refreshMmradarData/saveOwnParticipant/saveParticipant en actions/
+-- index.ts, todos tocan esta columna junto con el resto de datos de
+-- mmradar). Se muestra en la ficha publica ("Ultima actualizacion") para
+-- que se note si alguien uso el boton "Actualizar" hace poco -- pedido
+-- del usuario 2026-08-20 junto con abrir ese boton a cualquier jugador
+-- logueado, no solo el dueno del perfil.
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS mmradar_updated_at TIMESTAMPTZ;
 
 -- Combates por equipos (5v5 o mezclas de 4v4/3v3) del evento mayor,
 -- separados de matches (que es siempre 1v1, de la ruleta). Un solo

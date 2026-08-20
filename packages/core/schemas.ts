@@ -82,6 +82,14 @@ export const ParticipantSchema = z.object({
   duelRating: z.number().nullable().optional(),
   duelConfidence: z.number().nullable().optional(),
   /**
+   * Cuando fue la ultima vez que se re-consulto mmradar para este perfil
+   * (se pisa junto con el resto de datos de mmradar en
+   * saveOwnParticipant/saveParticipant/refreshMmradarData). Se muestra en
+   * la ficha publica junto al boton "Actualizar" -- null solo si nunca se
+   * consulto mmradar para este perfil (alta sin Riot ID, por ejemplo).
+   */
+  mmradarUpdatedAt: z.string().datetime().nullable().optional(),
+  /**
    * Participante "de meme": aparece en el roster/grid de seleccion como
    * cualquier otro, pero se excluye de todo lo competitivo -- ruleta,
    * combates 1v1, generacion/balanceo de team matches, y tallies de
