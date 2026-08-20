@@ -171,14 +171,20 @@ export function buildTitleEngineInput(
 }
 
 /**
- * Umbrales elegidos a ojo sobre la escala real de mmradar (scores
- * individuales suelen rondar 800-3000, ver ejemplos reales en el JSON de
- * /load-matches) -- no representan ningun corte oficial, son el criterio
- * propio de este proyecto y se pueden retocar libremente sin tocar el
- * resto del motor.
+ * Recalibrado 2026-08-20: el umbral original (2000) estaba elegido a ojo
+ * y resulto ser mas alto que la realidad -- el propio perfil del usuario
+ * (Laning 1910 / Farming 1814) tiene el titulo real "Monopolist" en
+ * mmradar.gg, pero con 2000 como piso esta regla nunca lo hubiera
+ * otorgado aca (1814 < 2000). Bajado a 1700 (con margen debajo del piso
+ * real observado de 1814, no pegado exacto) para que el titulo real mas
+ * bajo confirmado por el usuario si se otorgue. ELITE_STAT_THRESHOLD
+ * baja en la misma proporcion (mismo margen de 300 sobre STRONG que
+ * tenia antes). Sigue siendo un criterio propio ajustable, no un corte
+ * oficial de mmradar -- con un solo titulo real confirmado no alcanza
+ * para una calibracion perfecta, pero corrige el caso conocido.
  */
-const STRONG_STAT_THRESHOLD = 2000;
-const ELITE_STAT_THRESHOLD = 2300;
+const STRONG_STAT_THRESHOLD = 1700;
+const ELITE_STAT_THRESHOLD = 2000;
 const MIN_GAMES_FOR_OTP = 3;
 const OTP_SHARE_THRESHOLD = 0.5;
 /** Opuesto de OTP: pool amplio de campeones, ningun campeon domina tus partidas. */
