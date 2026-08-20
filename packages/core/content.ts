@@ -1,9 +1,3 @@
-/**
- * Fuente de verdad de todo el copy del sitio: titulos, subtitulos, textos de
- * navegacion y metadata de cada pagina (title de tab + description). Cambiar
- * texto visible del sitio se hace aqui, no en los .astro.
- */
-
 export const SITE = {
   name: "La Follada del Año",
   shortName: "VL",

@@ -34,16 +34,6 @@ function requireSession(session: AppSession | null): AppSession {
   return session;
 }
 
-/**
- * Panel auth ya NO deriva de la sesion de jugador (participant_users) ni
- * de ADMIN_EMAILS + passphrase-como-paso-aparte. Es una sesion propia
- * (ver lib/session.ts, createAdminSession/getAdminSession) que se obtiene
- * SOLO en /panel-login, pidiendo email + PANEL_PASSPHRASE juntos en el
- * mismo formulario -- antes admitAsAdmin en el login unificado dejaba
- * pasar a cualquier email listado en ADMIN_EMAILS sin pedir nada, y la
- * passphrase quedaba como gate posterior opcional. Cuenta de admin !=
- * cuenta de inscripcion: una no otorga la otra.
- */
 function requirePanelAuth(session: AdminSession | null): AdminSession {
   if (!session) {
     throw new ActionError({ code: "FORBIDDEN", message: "No autenticado como host." });
@@ -51,12 +41,6 @@ function requirePanelAuth(session: AdminSession | null): AdminSession {
   return session;
 }
 
-/**
- * Mensajes de error pensados para el jugador que llena el formulario, sin
- * mencionar de donde viene el dato ni como se obtiene (nada de "scraping",
- * "HTML", nombres de sitios de terceros, etc.) — solo lo que puede hacer
- * al respecto.
- */
 function mmradarErrorMessage(reason: MmradarLookupError["reason"]): string {
   switch (reason) {
     case "not_found":
@@ -88,16 +72,6 @@ interface OfficialRankResult {
   lp: number;
 }
 
-/**
- * Fuente unica del rango "oficial" de un peleador (el que se guarda como
- * lolRank y se muestra en las fichas): el Current Rank de mmradar.gg (ver
- * packages/core/mmradarScraper.ts). LeagueOfGraphs/rankScraper.ts se
- * elimino por completo — decision explicita del usuario 2026-08-18, ya no
- * se consulta ningun servidor/region para esto, mmradar lo resuelve solo.
- * Lanza ActionError solo para fallas reales (Riot ID invalido, no
- * encontrado, fuente caida) — usada por lookupRank/checkRiotProfile que
- * si necesitan distinguir esos casos del usuario.
- */
 async function fetchOfficialRank(lolUsername: string): Promise<OfficialRankResult> {
   try {
     const result = await fetchMmradarProfile(lolUsername);
@@ -133,17 +107,6 @@ interface MmradarLookupResult {
   duelConfidence: number | null;
 }
 
-/**
- * Consulta mmradar.gg una sola vez y devuelve TODO lo que se guarda de ahi
- * (rango oficial, performance rank, scores, titulos) — reemplaza los dos
- * fetches separados que habia antes (uno para el rango "oficial" via
- * LeagueOfGraphs, otro para performance/scores via mmradar). A diferencia
- * de fetchOfficialRank, esto NUNCA lanza: se usa en el flujo de guardado,
- * donde una fuente externa caida no debe romper el guardado del perfil de
- * nadie — si falla, se guardan nulls y el peleador puede reintentar mas
- * tarde (el rango previo en la fila no se pisa con un valor invalido
- * gracias a esto).
- */
 async function fetchMmradarData(lolUsername: string): Promise<MmradarLookupResult> {
   try {
     const result: MmradarProfileResult = await fetchMmradarProfile(lolUsername);
@@ -203,18 +166,6 @@ const ownParticipantFields = {
 };
 
 export const server = {
-  /**
-   * Login de HOST unicamente, usado solo desde /panel-login. Pide email +
-   * PANEL_PASSPHRASE (clave global) juntos en el mismo paso -- antes el
-   * login unificado dejaba pasar a cualquier email en ADMIN_EMAILS sin
-   * pedir nada, y la passphrase quedaba como gate posterior opcional que
-   * en la practica dejaba a un admin "a medio loguear" en el sitio. No
-   * toca participant_users/sessions en absoluto: ver
-   * createAdminSession en lib/session.ts. El email no necesita estar en
-   * ADMIN_EMAILS para intentar el login -- conocer PANEL_PASSPHRASE es
-   * el unico secreto real; ADMIN_EMAILS ya no se usa en ningun lado (ver
-   * nota mas abajo).
-   */
   adminLogin: defineAction({
     accept: "form",
     input: z.object({
@@ -238,15 +189,6 @@ export const server = {
     }
   }),
 
-  /**
-   * Step 1 of the email-first auth flow on /inscripcion: given just an
-   * email, tells the client whether an account already exists so the UI
-   * can ask for "tu contrasena" (login) vs "crea una contrasena"
-   * (register). /inscripcion es 100% para jugadores -- ya no hay ninguna
-   * rama de admin aca, un email listado en ADMIN_EMAILS no recibe ningun
-   * trato especial (esa deteccion se saco por completo, cuenta de admin
-   * != cuenta de inscripcion).
-   */
   checkEmailExists: defineAction({
     accept: "form",
     input: z.object({ email: z.string().email() }),
@@ -267,12 +209,6 @@ export const server = {
     }
   }),
 
-  /**
-   * Self-registration for fighters: creates a row in participant_users
-   * with a PBKDF2 password hash, then logs them in immediately (no
-   * separate login step) so /inscripcion can go straight from "crea tu
-   * contrasena" to the profile form in one submit.
-   */
   registerParticipant: defineAction({
     accept: "form",
     input: z.object({
@@ -367,15 +303,6 @@ export const server = {
     }
   }),
 
-  /**
-   * Creates or updates the caller's own participant profile. The row is
-   * matched by owner_user_id (never by a client-supplied id), and lolRank is
-   * always re-derived server-side here (mmradar.gg, ver fetchMmradarData) —
-   * the form only ever sends lolUsername, never a free-text rank, so
-   * nobody can claim Challenger by typing it in. Una sola consulta a
-   * mmradar cubre tanto el rango oficial como performance/scores/titulos
-   * (antes eran dos fetches a fuentes distintas).
-   */
   saveOwnParticipant: defineAction({
     accept: "form",
     input: z.object(ownParticipantFields),
@@ -393,11 +320,6 @@ export const server = {
         .maybeSingle();
 
       const mmradar = await fetchMmradarData(input.lolUsername);
-      // Si mmradar no devolvio rango (fuente caida, bloqueo anti-bot, etc.)
-      // se conserva el rango ya guardado en vez de pisarlo con "Sin
-      // clasificar" — eso confundiria a un jugador que si tiene rango real
-      // pero la fuente fallo momentaneamente. Solo se usa "Sin clasificar"
-      // cuando no hay ningun valor previo (alta nueva) ni nuevo.
       const rank = mmradar.rank ?? existing?.lol_rank ?? "Sin clasificar";
 
       const participantId = existing?.id ?? session.userId;
@@ -572,9 +494,6 @@ export const server = {
         }
       }
 
-      // mmradar solo se puede consultar si hay un Riot ID cargado (el panel
-      // permite crear/editar participantes sin lolUsername a mano) -- a
-      // diferencia de saveOwnParticipant, aca no es obligatorio.
       const mmradar = input.lolUsername
         ? await fetchMmradarData(input.lolUsername)
         : {
@@ -670,33 +589,10 @@ export const server = {
     }
   }),
 
-  /**
-   * Re-consulta mmradar.gg para un participante ya guardado y actualiza
-   * SOLO los campos que vienen de ahi (lol_rank, performance rank,
-   * performance scores, titles, mmradar_icon_url, mmradar_server,
-   * mmradar_updated_at). Pensada para el boton "Actualizar" en la ficha
-   * publica del jugador (/peleadores/[id]), que tambien mueve la barra de
-   * performance de la carta izquierda porque toca la misma fila.
-   *
-   * Permisos (aclarado por el usuario 2026-08-20, cambia el diseno
-   * original): esto NO es "editar mis datos personales", es forzar un
-   * re-calculo de performance/duel rating que puede pedir cualquier
-   * JUGADOR LOGUEADO sobre CUALQUIER perfil, no solo el propio. Se sigue
-   * exigiendo sesion de jugador (o admin de panel) para evitar abuso
-   * anonimo -- lo unico que se quito es la comparacion isOwner/adminSession
-   * que antes bloqueaba el refresh de perfiles ajenos.
-   *
-   * Igual que saveOwnParticipant, si mmradar no responde se conserva el
-   * lol_rank ya guardado en vez de pisarlo con "Sin clasificar".
-   */
     refreshMmradarData: defineAction({
     accept: "form",
     input: z.object({ id: z.string().min(1) }),
     handler: async ({ id }, context) => {
-      // Sesion de jugador (participant_users/sessions) o de admin de panel
-      // (sesion separada, ver lib/session.ts) -- cualquiera de las dos
-      // alcanza para forzar el refresh de CUALQUIER perfil, no solo el
-      // propio. Solo se bloquea al visitante sin ninguna sesion.
       const [playerSession, adminSession] = await Promise.all([
         getSession(context.cookies, context),
         getAdminSession(context.cookies)
@@ -777,16 +673,6 @@ export const server = {
     }
   }),
 
-  /**
-   * Crea o edita un combate a mano desde /gestion-roster-x9f2 (pestana
-   * Evento). Cubre lo mismo que la ruleta (player1/player2) mas todo lo
-   * que la ruleta no toca: nombre del combate (etiqueta libre, ej.
-   * "Semifinal"), numero de orden, resultado oficial (winnerId +
-   * decision), tarjetas de jueces, y si esta abierto a pronosticos. Sin
-   * id -> crea; con id -> actualiza esa fila (nunca upsert por otra
-   * clave, a diferencia de participants no hay ningun campo natural tipo
-   * owner_user_id para eso aca).
-   */
   saveMatch: defineAction({
     accept: "form",
     input: z.object({
@@ -861,24 +747,6 @@ export const server = {
     }
   }),
 
-  /**
-   * Live-check for the Riot ID as the fighter types it in /inscripcion,
-   * driving the green check / yellow spinner / red X indicator next to
-   * the field before they submit. Tambien devuelve performanceScores (y
-   * el resto de lo que trae mmradar) para que el preview en vivo
-   * (ParticipantProfileForm) pueda dibujar las barras de performance
-   * antes de guardar -- antes solo devolvia el rango, asi que el preview
-   * nunca tenia con que mostrar esa carta mientras el jugador todavia
-   * estaba completando el formulario. Ya no recibe/valida lolServer —
-   * mmradar no lo necesita (resuelve la region del lado de ellos).
-   * Requires a logged-in session (not full panel auth) so it stays usable
-   * by fighters self-registering. Never throws for the expected "still
-   * typing" or "typo" states (not_found / invalid) — only real infra
-   * failures (fuente externa caida/formato inesperado) throw, matching
-   * fetchOfficialRank's own error semantics (sigue usando
-   * fetchOfficialRank solo para distinguir esos casos de error; el resto
-   * de datos vienen de fetchMmradarData, que nunca lanza).
-   */
   checkRiotProfile: defineAction({
     accept: "form",
     input: z.object({
@@ -935,15 +803,6 @@ export const server = {
     }
   }),
 
-  /**
-   * Crea o edita un team match a mano desde /gestion-roster-x9f2 (pestana
-   * Equipos): usado tanto para el editor manual (elegir team A/B a mano)
-   * como para persistir el resultado (winnerTeam) de un match ya generado.
-   * Sin id -> crea (generationMode "manual" por default, ver
-   * generateTeamMatchesAction para el resto de modos); con id -> actualiza
-   * esa fila. teamAIds/teamBIds llegan como JSON (arrays de participant
-   * ids) porque FormData no serializa arrays de forma nativa util aca.
-   */
   saveTeamMatch: defineAction({
     accept: "form",
     input: z.object({
@@ -1016,18 +875,6 @@ export const server = {
     }
   }),
 
-  /**
-   * Genera uno o mas team matches de una sola vez a partir de los
-   * participantes disponibles (el cliente ya filtro los excluidos via el
-   * checklist de /gestion-roster-x9f2 antes de llamar esto -- ver decision
-   * del usuario: no hay exclusion automatica por resultado pendiente, es
-   * el admin quien marca a mano). Trae el skill rating de cada uno desde
-   * participants (performance_scores / lol_rank) para que
-   * generateTeamMatches (packages/core/teamBalancer.ts) pueda balancear
-   * balanced/unfair, arma los bloques (5v5, o mezclas de 4v4/3v3 si el
-   * total no es multiplo de 10 -- ver planTeamBlockSizes), y persiste cada
-   * bloque como una fila de team_matches en un solo insert.
-   */
   generateTeamMatchesAction: defineAction({
     accept: "form",
     input: z.object({

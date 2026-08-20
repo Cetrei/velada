@@ -64,26 +64,9 @@ const MOCK_PARTICIPANTS: Participant[] = [
   }
 ];
 
-/**
- * Parses and validates the participants YAML content.
- * Falls back to mock data when the source is empty so pages never render blank
- * before real rosters are added.
- */
 export function parseParticipants(yamlContent: string): Participant[] {
   const raw = parse(yamlContent);
 
-  // Comentado a pedido del usuario: ya no se quiere que aparezcan
-  // participantes mock ("El Toro de la Toplane", "Koreano del Sur", etc.)
-  // cuando participants.yml esta vacio/invalido -- antes este fallback
-  // hacia que el ChampionSelectGrid mostrara 4 peleadores falsos en vez
-  // de reflejar que no hay participantes reales cargados todavia. Con
-  // esto comentado, un YAML vacio simplemente devuelve un array vacio
-  // (mismo comportamiento que ya tenia parseMemeParticipants para su
-  // propio YAML). MOCK_PARTICIPANTS se deja definido mas arriba por si
-  // se quiere reactivar esto en el futuro.
-  // if (!raw || !Array.isArray(raw) || raw.length === 0) {
-  //   return MOCK_PARTICIPANTS;
-  // }
   if (!raw || !Array.isArray(raw) || raw.length === 0) {
     return [];
   }
@@ -103,12 +86,6 @@ export function isMockParticipant(participant: Participant): boolean {
   return participant.id.startsWith("mock-");
 }
 
-/**
- * Parsea meme-participants.yml (participantes "de meme": excludeFromMatches).
- * A diferencia de parseParticipants, NUNCA cae a MOCK_PARTICIPANTS -- un
- * archivo vacio simplemente significa "no hay participantes meme esta vez",
- * no un estado invalido que necesite un fallback de demo.
- */
 export function parseMemeParticipants(yamlContent: string): Participant[] {
   const raw = parse(yamlContent);
 

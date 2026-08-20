@@ -10,19 +10,6 @@ interface ChampionSelectGridProps {
 type RoleFilter = Participant["mainRole"];
 type SortDirection = "asc" | "desc";
 
-/**
- * Iconos de rol reales del wiki de LoL, no dibujados a mano. Los intentos
- * anteriores (Font Awesome fa-bow-arrow/fa-staff-snake, despues paths SVG
- * propios) no se leian bien o directamente no existian en el set free.
- * El usuario descarga los 5 PNG de
- * https://wiki.leagueoflegends.com/en-us/Category:Role_icons (paginas
- * File:Top_icon.png, File:Jungle_icon.png, File:Middle_icon.png,
- * File:Bottom_icon.png, File:Support_icon.png -> boton "Original file",
- * 136x136) y los coloca en apps/web/public/images/roles/ con estos
- * nombres exactos. Si un archivo todavia no esta, onError en el <img>
- * oculta el icono en vez de mostrar el roto del navegador (mismo patron
- * que ya usa rankIcon.ts para los PNGs de rango).
- */
 const ROLE_FILTERS: Array<{ role: RoleFilter; label: string; icon: string }> = [
   { role: "Top", label: "Top", icon: "/images/roles/top.png" },
   { role: "Jungle", label: "Jungle", icon: "/images/roles/jungle.png" },
@@ -64,9 +51,6 @@ export default function ChampionSelectGrid({
       return sortDirection === "asc" ? cmp : -cmp;
     });
 
-  // Elige un participante al azar dentro de los resultados filtrados actuales
-  // (respeta busqueda + filtro de rol activos), igual que el boton de
-  // random del cliente real de LoL.
   function pickRandom() {
     if (isLockedIn || filteredParticipants.length === 0) return;
     const pool = filteredParticipants.filter((p) => p.id !== selectedId);
@@ -79,14 +63,6 @@ export default function ChampionSelectGrid({
     <div className="relative w-full bg-[#010a13] text-[#f0e6d2] flex flex-col items-center overflow-hidden lol-main-bg py-2 sm:py-3 px-3 sm:px-6">
       <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
 
-      {/* FONDO SPLASH GLOBAL: cubre TODO el componente (inset-0, absolute) sin
-          afectar el flujo del layout -- a diferencia de la version anterior,
-          donde el fondo vivia adentro del contenedor central y quedaba
-          recortado por su min-height propio. Vive como primer hijo del root
-          y en z-index 0 (todo lo demas de aca abajo va con z-10 relative
-          para flotar encima), asi que banner/titulo/grid/action-bar quedan
-          siempre por encima sin necesidad de tocar su propio z-index
-          individualmente uno por uno. */}
       <div className={`splash-background transition-opacity duration-500 ${isLockedIn ? 'opacity-100' : 'opacity-0'}`}>
           {selected && (
               <img
@@ -152,14 +128,6 @@ export default function ChampionSelectGrid({
 
       <div className="timer-text relative z-10">67</div>
 
-      {/* CONTENEDOR CENTRAL: Cambia entre la Grid (Cuadricula) y el Splash Art.
-          Ambas vistas viven superpuestas (position: absolute, inset: 0)
-          dentro de este contenedor -- el contenedor en si NO cambia de
-          alto entre estados, solo el hijo activo. El alto real que
-          necesita el splash vive en .splash-view-active (min-height
-          propio, position: absolute dentro de este contenedor), no en el
-          contenedor compartido, para no empujar el titulo/action-bar que
-          vienen despues en el layout. */}
       <div
         className="relative z-10 w-full max-w-4xl flex justify-center items-start min-h-[220px] sm:min-h-[260px]"
         style={{ perspective: '1000px' }}
@@ -264,12 +232,6 @@ export default function ChampionSelectGrid({
             </div>
         </div>
 
-        {/* VISTA 2: LOADOUT / INFO. El fondo con la foto/banner del seleccionado
-            ya NO vive aca adentro -- se movio al fondo global de arriba del
-            todo (.splash-background, primer hijo del root) para cubrir el
-            componente completo en vez de quedar acotado a este contenedor
-            central. Aca solo quedan los arcos hextech y el texto, que si
-            siguen siendo propios de la vista de loadout. */}
         <div className={`absolute inset-x-0 top-0 w-full transition-all duration-500 ${isLockedIn ? 'splash-view-active opacity-100 z-10' : 'h-full opacity-0 pointer-events-none -z-10'}`}>
             <div className="hextech-arcs">
                 <div className="arc-left"></div>

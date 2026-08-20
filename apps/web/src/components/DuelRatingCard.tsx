@@ -1,15 +1,6 @@
 import { DUEL_RATING_EXPLANATION, computeDuelWinProbability, type DuelInput } from "@velada/core";
 import InfoModal from "./InfoModal";
 
-/**
- * Bloque de habilidad 1v1 propia (ver packages/core/duelRating.ts):
- * puntaje 0-100 + probabilidad de victoria contra un rival, si se pasa
- * uno (ej. el rival ya asignado en la ruleta, ver peleadores/[id].astro).
- * Se ubica debajo de MmradarPerformanceCard en la ficha publica y en el
- * preview de /mi-perfil -- mismo patron de "no fetch, no estado propio",
- * quien lo monta decide de donde salen los datos.
- */
-
 export interface DuelRatingCardProps {
   /** Rating 0-100 ya cacheado (o null si no hubo partidas suficientes). */
   duelRating?: number | null;

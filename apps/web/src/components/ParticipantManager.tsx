@@ -53,10 +53,7 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
-  // Skipea el auto-lookup en el primer render de loadIntoForm/reset -- solo
-  // debe dispararse cuando el ADMIN escribe un lolUsername nuevo, no cada
-  // vez que se abre el modal con un valor ya cargado del participante
-  // (eso pegaria a mmradar en cada click de "Editar" sin necesidad).
+ 
   const skipNextLookup = useRef(false);
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lookupRequestId = useRef(0);
@@ -82,10 +79,6 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
     setStats((prev) => (prev.length >= MAX_CUSTOM_STATS ? prev : [...prev, { ...EMPTY_STAT, _key: makeStatKey() }]));
   }
 
-  // Mismo criterio que ParticipantProfileForm.tsx: comprime en el
-  // navegador antes de guardar en el estado (ver
-  // packages/core/imageCompression.ts). El panel tambien puede recibir
-  // fotos sin comprimir de un admin subiendo desde el celular.
   async function handlePhotoChange(fileList: FileList | null) {
     const raw = fileList?.[0] ?? null;
     if (!raw) {
@@ -176,12 +169,6 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
     }
   }
 
-  // Auto-consulta el rango ~600ms despues de que el admin termina de
-  // escribir el Riot ID, mismo patron que el debounce de
-  // checkRiotProfile en ParticipantProfileForm.tsx (self-service) -- antes
-  // el panel exigia apretar "Consultar" a mano, un flujo distinto al de
-  // inscripcion que quedo desactualizado. El boton manual se deja ademas
-  // por si el admin quiere forzar un reintento sin editar el campo.
   useEffect(() => {
     if (lookupTimer.current) clearTimeout(lookupTimer.current);
 

@@ -73,36 +73,15 @@ function formFromParticipant(p: Participant | null): typeof EMPTY_FORM {
 const copy = PAGES.miPerfil;
 
 export default function ParticipantProfileForm({ existingParticipant }: ParticipantProfileFormProps) {
-  // Scope del borrador en localStorage: el id ya existente si esta
-  // editando un perfil guardado, "new" si es alta nueva (/inscripcion sin
-  // fila propia todavia). Ver lib/formDraft.ts.
   const draftScopeId = existingParticipant?.id ?? "new";
 
   const [form, setForm] = useState(formFromParticipant(existingParticipant));
-  // IMPORTANTE: el _key inicial de cada stat existente NO puede venir de
-  // crypto.randomUUID()/Math.random() aca. Este useState corre tanto en el
-  // render de servidor (SSR) como en el primer render del cliente durante
-  // la hidratacion, y un valor no-determinista generaria un _key distinto
-  // en cada lado -> React detecta el mismatch y descarta todo el arbol
-  // hidratado (los errores #425/#423 en consola, que dejan el resto de la
-  // pagina - incluido el boton de cerrar sesion - sin JS funcionando).
-  // El indice es estable porque viene de datos ya guardados (mismo orden
-  // en servidor y cliente). Los randomUUID de verdad siguen usandose en
-  // addStat(), que solo corre en el cliente despues de la hidratacion.
   const [stats, setStats] = useState<StatWithKey[]>(
     (existingParticipant?.stats ?? []).map((s, i) => ({ ...s, _key: `existing-${i}` }))
   );
   const [draftRestored, setDraftRestored] = useState(false);
   const draftHydrated = useRef(false);
 
-  // Lee el flag que dejo el reload de handleSubmit tras una creacion
-  // exitosa (ver mas abajo, "?created=1") para mostrar el mensaje de
-  // exito DESPUES del refresh -- el estado de React normal no sobrevive
-  // un window.location.reload(), asi que el unico lugar donde queda
-  // constancia de que se acaba de crear el perfil es la URL. Se limpia
-  // con history.replaceState apenas se lee, para que un refresh posterior
-  // (F5) no vuelva a mostrar el mensaje de "creado" sobre un perfil que ya
-  // existia.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
@@ -112,18 +91,6 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
     setStatus({ type: "success", text: copy.successCreated });
   }, []);
 
-  // Restaura el borrador guardado en localStorage, si hay uno, DESPUES
-  // del primer render (nunca en el useState inicial de arriba): igual que
-  // el comentario de _key de justo encima, el valor inicial de
-  // form/stats tiene que ser identico en servidor y cliente para que la
-  // hidratacion no se rompa. localStorage no existe en el servidor, asi
-  // que leerlo recien en un useEffect (que solo corre en el cliente,
-  // despues de que la hidratacion ya matcheo) es el momento seguro.
-  // Un borrador se restaura siempre que exista (tanto para alta nueva
-  // como para edicion de un perfil ya guardado): lo peor que puede pasar
-  // si el borrador esta desactualizado es que el jugador tenga que
-  // retocar algun campo, nunca se pierde un guardado real (ese vive en
-  // Supabase, no en localStorage).
   useEffect(() => {
     if (draftHydrated.current) return;
     draftHydrated.current = true;
@@ -136,11 +103,6 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
     setDraftRestored(true);
   }, [draftScopeId]);
 
-  // Autoguarda el borrador en cada cambio de form/stats, con un pequeno
-  // debounce (300ms) para no escribir a localStorage en cada tecla. Se
-  // salta el primer render (antes de que el efecto de restauracion de
-  // arriba corra) para no pisar un borrador real con el estado vacio
-  // inicial del formulario.
   useEffect(() => {
     if (!draftHydrated.current) return;
     const timer = setTimeout(() => {
@@ -173,23 +135,6 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
   const riotCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const riotCheckRequestId = useRef(0);
 
-  // Debounced live check: pings checkRiotProfile ~600ms after the fighter
-  // stops typing a Riot ID / server so the check/spinner/x icon updates
-  // before they submit, instead of only finding out the profile doesn't
-  // exist after clicking submit.
-  //
-  // Este mismo efecto es tambien el auto-fetch de performanceScores al
-  // cargar /mi-perfil: form.lolUsername arranca poblado con el Riot ID ya
-  // guardado (ver formFromParticipant mas arriba), asi que el primer
-  // disparo de este efecto en el mount ya corre la consulta sola -- no
-  // hace falta un segundo useEffect separado "solo para el mount". Antes,
-  // PerformancePreviewCard se montaba con riotCheck.performanceScores en
-  // null y existingParticipant?.performanceScores como unico fallback: si
-  // esa columna estaba vacia en la fila guardada (perfil creado antes de
-  // que existiera esta feature, o cuyo ultimo submit no encontro nada en
-  // mmradar), la carta se quedaba en null hasta que el jugador retocara
-  // el campo a mano. Con esto, en vez de depender de eso, ya alcanza con
-  // abrir la pagina.
   useEffect(() => {
     if (riotCheckTimer.current) clearTimeout(riotCheckTimer.current);
 
@@ -238,10 +183,6 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
     };
   }, [form.lolUsername]);
 
-  // Genera un object URL local para previsualizar la foto/banner elegidos
-  // en la PlayerCard antes de subirlos de verdad (recien se suben al hacer
-  // submit). Se revoca el URL anterior en cada cambio y al desmontar para
-  // no filtrar memoria.
   useEffect(() => {
     if (!photoFile) {
       setPhotoPreviewUrl(null);
@@ -277,12 +218,6 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
     setStats((prev) => (prev.length >= MAX_CUSTOM_STATS ? prev : [...prev, { ...EMPTY_STAT, _key: makeStatKey() }]));
   }
 
-  // Comprime la foto/banner elegida en el navegador antes de guardarla en
-  // el estado (y por lo tanto antes de subirla) -- ver
-  // packages/core/imageCompression.ts para el porque. El archivo original
-  // nunca se usa mas alla de este punto; si la compresion falla por algun
-  // motivo, compressImageFile devuelve el original tal cual, asi que el
-  // formulario nunca se bloquea por esto.
   async function handlePhotoChange(fileList: FileList | null) {
     const raw = fileList?.[0] ?? null;
     if (!raw) {
@@ -342,12 +277,6 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
     if (form.height) data.set("height", form.height);
     if (form.country) {
       data.set("country", form.country);
-      // La bandera se resuelve sola a partir del texto escrito (lista de
-      // paises conocidos con fallback generico) — el jugador nunca la
-      // completa a mano, asi que si el pais no matchea ningun conocido
-      // no se manda ninguna bandera especifica (queda el fallback en el
-      // resto del sitio, ver participant.countryFlag ?? UNKNOWN_COUNTRY_FLAG
-      // donde se usa).
       const resolvedFlag = flagForCountry(form.country);
       data.set("countryFlag", resolvedFlag);
     }
@@ -376,24 +305,9 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
     }
 
     setCurrentRank(result.lolRank);
-    // El guardado exitoso ya vive en Supabase -- el borrador local queda
-    // obsoleto y restaurarlo despues de esto solo pisaria datos ya
-    // guardados con una version potencialmente vieja.
     clearDraft(draftScopeId);
     setDraftRestored(false);
 
-    // Alta nueva (existingParticipant era null): mi-perfil.astro calcula
-    // existingParticipant server-side una sola vez al renderizar la pagina,
-    // asi que sin un reload real el formulario se queda mostrando "Crear mi
-    // perfil"/el titulo de ficha incompleta indefinidamente, aunque la fila
-    // ya exista en Supabase -- recien se corrige si el usuario recarga a
-    // mano. Recargar por protocolo ademas re-renderiza el form ya en modo
-    // edicion. Una edicion sobre un perfil ya existente no lo necesita
-    // (existingParticipant ya era correcto desde antes), asi que solo se
-    // recarga en la creacion; para ese caso alcanza con el mensaje de
-    // exito in-place. El "?created=1" sobrevive al reload y lo lee el
-    // useEffect de mas arriba para mostrar el mensaje de exito ya en el
-    // render post-recarga.
     if (!existingParticipant) {
       const url = new URL(window.location.href);
       url.searchParams.set("created", "1");
@@ -747,16 +661,6 @@ function Field({
   );
 }
 
-/**
- * Bandera del pais escrito, mostrada al lado de la etiqueta "Pais" en vez
- * de superpuesta dentro del input (ahi se pisaba con el texto escrito --
- * algunas banderas emoji regional-indicator se renderizan mas anchas que
- * el padding reservado, ver captura del usuario con China). Cuando el
- * texto no matchea ningun pais conocido, en vez del emoji de bandera
- * blanca generico (UNKNOWN_COUNTRY_FLAG, "poco lindo" segun el pedido) se
- * muestra un globo en SVG propio, y directamente no se muestra nada si el
- * campo todavia esta vacio.
- */
 function CountryFlagBadge({ country }: { country: string }) {
   if (!country.trim()) return null;
   const flag = flagForCountry(country);

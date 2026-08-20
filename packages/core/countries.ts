@@ -1,16 +1,3 @@
-/**
- * Lista de paises (nombre en espanol + bandera emoji) para el campo
- * "Pais" del formulario de perfil. Se usa con un <input list> +
- * <datalist>: el jugador puede escribir libremente (autocompletado
- * sugiere de esta lista) pero tambien puede dejar un valor que no este
- * en la lista — en ese caso countryFlag no se resuelve y el fallback de
- * bandera (un icono generico) se muestra en su lugar.
- *
- * Las banderas son emoji Unicode (regional indicator symbols), no
- * archivos de imagen — no dependen de ningun asset local ni de un CDN de
- * terceros, y se ven bien en cualquier dispositivo/SO moderno.
- */
-
 export interface CountryOption {
   name: string;
   flag: string;
@@ -91,19 +78,8 @@ export const COUNTRIES: CountryOption[] = [
   { name: "Vietnam", flag: "🇻🇳" }
 ].sort((a, b) => a.name.localeCompare(b.name, "es"));
 
-/**
- * Bandera generica para cuando el pais escrito no matchea ninguno de la
- * lista (el input permite texto libre a proposito, ver comentario
- * arriba) — mejor mostrar un icono neutro que nada o un emoji roto.
- */
 export const UNKNOWN_COUNTRY_FLAG = "🏳️";
 
-/**
- * Busca la bandera exacta (case-insensitive, sin importar tildes) para un
- * nombre de pais. Devuelve UNKNOWN_COUNTRY_FLAG si no hay match exacto —
- * nunca intenta adivinar con matching parcial, para no asignar una
- * bandera incorrecta a un texto libre que se parece a otro pais.
- */
 export function flagForCountry(countryName: string | null | undefined): string {
   if (!countryName) return UNKNOWN_COUNTRY_FLAG;
   const normalized = countryName.trim().toLowerCase();

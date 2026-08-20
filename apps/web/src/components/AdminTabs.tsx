@@ -17,25 +17,9 @@ type Tab = "participants" | "event" | "matches" | "teams";
 
 const copy = PAGES.rosterManager;
 
-/**
- * Pestanas del panel de host: separa gestion de participantes (roster) de
- * control del evento (fases: inscripciones, ruleta, votaciones, inicio,
- * fecha) para que ambas cosas vivan en /gestion-roster-x9f2 sin quedar
- * amontonadas una debajo de la otra. AdminControl ya existia como
- * componente completo pero no estaba montado en ninguna pagina — este
- * archivo es solo el layout de pestanas que lo conecta junto a
- * ParticipantManager, sin tocar la logica interna de ninguno de los dos.
- */
 export default function AdminTabs({ initialParticipants, eventState, initialMatches, initialTeamMatches }: AdminTabsProps) {
   const [tab, setTab] = useState<Tab>("participants");
 
-  // Los participantes "de meme" (excludeFromMatches, ver
-  // ParticipantSchema) viven solo en meme-participants.yml, nunca en la
-  // tabla de Supabase que este panel edita/borra -- por eso se excluyen
-  // de los 4 sub-paneles administrativos (edicion de fichas, ruleta,
-  // combates 1v1, equipos). El grid publico de seleccion SI los sigue
-  // mostrando (ChampionSelectGrid no filtra esto), solo la parte
-  // competitiva/administrativa los ignora.
   const realParticipants = initialParticipants.filter((p) => !p.excludeFromMatches);
 
   return (

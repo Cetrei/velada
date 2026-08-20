@@ -106,8 +106,6 @@ export default function MmradarPerformanceCard({
   const hasScores = Boolean(scores);
   const displayScores = scores ?? EMPTY_SCORES;
   const values = Object.values(displayScores);
-  // Mismo total que calcula mmradar.gg (ver fetchMatchScores en
-  // packages/core/mmradarScraper.ts), no un promedio aritmetico simple.
   const average = hasScores ? Math.round(values.reduce((sum, v) => sum + v, 0) / values.length) : null;
   const averagePct = average !== null ? barPct(average) : 0;
 

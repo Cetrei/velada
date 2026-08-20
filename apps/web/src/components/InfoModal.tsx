@@ -1,13 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 
-/**
- * Icono "!" que abre un modal de ayuda con texto explicativo -- patron
- * compartido para todos los bloques de ayuda del sitio (Scores Explained
- * por stat, Performance Rank, Habilidad 1v1). Cerrable con el boton X, con
- * click fuera del modal, o con Escape. No tiene estado propio mas alla de
- * abierto/cerrado: el contenido lo decide quien lo monta via `children`.
- */
-
 export interface InfoModalProps {
   /** Texto accesible del boton "!" (ej. "Como se calcula el Performance Rank"). */
   label: string;

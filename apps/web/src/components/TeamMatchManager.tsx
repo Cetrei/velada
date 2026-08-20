@@ -75,10 +75,6 @@ export default function TeamMatchManager({ initialTeamMatches, participants }: T
       return;
     }
 
-    // generateTeamMatchesAction only returns created count + leftover ids,
-    // not the full inserted rows (avoids a second round-trip server-side
-    // just to shape them) -- simplest correct way to show the new rows in
-    // this list is a full reload, same as landing on the tab fresh.
     setStatus({
       type: "success",
       text:

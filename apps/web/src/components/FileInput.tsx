@@ -1,13 +1,3 @@
-/**
- * Input de archivo estilizado (boton "Elegir archivo" + texto de estado
- * separado, en vez del <input type="file"> nativo con pseudo-clases
- * file:*). Extraido de ParticipantProfileForm.tsx (self-service) para que
- * ParticipantManager.tsx (panel admin) use exactamente el mismo layout --
- * antes el panel usaba un input raw con file:* que rendereaba con altura
- * y ancho inconsistentes entre navegadores dentro del grid de 2 columnas
- * (icono/banner), causando el desalineo reportado por el usuario.
- */
-
 export function FileInput({
   fileName,
   hasExisting,

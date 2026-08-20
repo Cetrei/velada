@@ -1,13 +1,6 @@
 import { rankIconPath } from "@velada/core";
 import type { ParticipantStat } from "@velada/core";
 
-/**
- * Version "reducida" de los datos de un participante que alcanza para
- * dibujar la tarjeta: acepta tanto un Participant completo (fichas ya
- * guardadas, /peleadores/[id]) como el estado en vivo de
- * ParticipantProfileForm mientras el usuario todavia esta escribiendo (sin
- * id todavia, banner/photo como File en vez de URL ya subida).
- */
 export interface PlayerCardData {
   name: string;
   nickname: string;
@@ -17,15 +10,6 @@ export interface PlayerCardData {
   photo?: string | null;
   banner?: string | null;
   stats?: ParticipantStat[];
-  /**
-   * performanceRank/performanceScores de mmradar ya NO se dibujan en esta
-   * carta (se movieron por completo a MmradarPanel/PerformancePreviewCard,
-   * que ahora muestran su propio bloque de performance con el rango
-   * correspondiente al performance, no al rango oficial de Riot -- ver
-   * esos componentes). Se quitaron estos dos campos de PlayerCardData
-   * porque ya no los consume nada aca: mostrar performance en dos lugares
-   * de la misma pagina (esta carta Y el panel de al lado) era redundante.
-   */
 }
 
 interface PlayerCardProps {
@@ -37,23 +21,7 @@ function fallbackImg(nickname: string): string {
   return `https://placehold.co/600x800/0A1428/C8AA6E?text=${encodeURIComponent(nickname || "?")}`;
 }
 
-/**
- * Tarjeta compacta tipo "carta de jugador": banner/foto de fondo a toda
- * altura. El bloque de identidad (rol, avatar, nombre, apodo, rango) vive
- * ARRIBA de la carta, sobre la franja superior del banner -- antes vivia
- * anclado abajo (justify-content: flex-end en .player-card, todo un solo
- * bloque .player-card-content), lo cual dejaba el nombre pegado al borde
- * inferior tapando la mitad de la imagen. Ahora .player-card-header (rol +
- * identidad) es un bloque propio arriba y .player-card-footer (performance
- * + stats custom) es otro bloque propio abajo, cada uno con su propio
- * scrim para legibilidad sobre la imagen de fondo.
- */
 export default function PlayerCard({ data, className = "" }: PlayerCardProps) {
-  // El banner es el fondo a toda la carta; la foto es un icono circular
-  // superpuesto abajo a la izquierda (como el retrato de invocador sobre el
-  // splash art en el cliente de LoL). Si no hay banner, la foto sirve de
-  // fondo tambien para no dejar la carta vacia; si no hay ninguna de las
-  // dos, placeholder generado con el apodo.
   const bgImage = data.banner || data.photo || fallbackImg(data.nickname);
   const avatarImage = data.photo || null;
   const visibleStats = (data.stats ?? []).filter((s) => s.label.trim().length > 0).slice(0, 4);

@@ -36,12 +36,6 @@ export default function AuthGate() {
   const [status, setStatus] = useState<StatusMessage>(null);
   const [isBusy, setIsBusy] = useState(false);
 
-  // Live email check: debounced ~500ms after the fighter stops typing,
-  // mirrors the pattern used for the Riot ID check in
-  // ParticipantProfileForm.tsx (checkRiotProfile). Drives the green
-  // check / yellow spinner / red X icon inside the email field itself,
-  // before they ever hit "Continuar". requestId discards stale responses
-  // if the fighter keeps typing while an older check is still in flight.
   const [emailCheck, setEmailCheck] = useState<EmailCheckStatus>("idle");
   const emailCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emailCheckRequestId = useRef(0);
@@ -331,13 +325,6 @@ export default function AuthGate() {
   );
 }
 
-/**
- * Green check / yellow spinner / red X next to the email field, same
- * visual language as RiotCheckIcon in ParticipantProfileForm.tsx. "invalid"
- * covers both a malformed address (client-side regex, instant) and a
- * failed checkEmailExists call (rare, e.g. offline) — either way there's
- * nothing to do but fix the email or retry, so one icon state covers both.
- */
 function EmailCheckIcon({ status }: { status: EmailCheckStatus }) {
   if (status === "idle") return null;
   if (status === "checking") return <span className="auth-check-spinner" role="status" aria-label="Verificando..." />;
@@ -388,13 +375,6 @@ function EmailCheckHint({ status }: { status: EmailCheckStatus }) {
   return <p className="text-xs mt-1.5 text-green-400">{text}</p>;
 }
 
-/**
- * Shows only the requirements still pending, so the list shrinks as the
- * fighter types instead of always displaying all three (avoids clutter).
- * Once every rule is met it collapses to a single compact "valida" line
- * instead of an empty checklist. Nothing renders until the field has any
- * input, so a fresh empty password field isn't greeted with a wall of red.
- */
 function PasswordChecklist({
   password,
   rules,

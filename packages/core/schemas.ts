@@ -5,15 +5,6 @@ export const ParticipantStatSchema = z.object({
   value: z.number().min(0).max(100)
 });
 
-/**
- * Maximo de stats custom por peleador. Definido como constante exportada
- * (no un numero hardcodeado repetido en cada formulario) para que el
- * limite del schema (fuente de verdad server-side) y los inputs del
- * cliente (ParticipantProfileForm.tsx, ParticipantManager.tsx) usen
- * exactamente el mismo valor. 4 es el maximo visual razonable segun el
- * render de la carta (PlayerCard.tsx) -- mas de 4 barras no entra bien en
- * el espacio disponible bajo el header.
- */
 export const MAX_CUSTOM_STATS = 4;
 
 export const ParticipantStatsSchema = z.array(ParticipantStatSchema).min(0).max(MAX_CUSTOM_STATS);
@@ -27,21 +18,9 @@ export const MmradarPerformanceScoresSchema = z.object({
   vision: z.number()
 });
 
-/**
- * Un titulo de mmradar (ej. "OTP Kindred", "MVP") junto con su color real
- * si el HTML de mmradar.gg lo trae (ver parseTitles en
- * mmradarScraper.ts) -- color queda null cuando la fuente no expone un
- * color para ese titulo puntual, nunca se rellena con un valor inventado
- * aca en el schema.
- */
 export const MmradarTitleSchema = z.object({
   text: z.string().min(1),
   color: z.string().nullable(),
-  /**
-   * Por que se otorgo el titulo, con los numeros reales del jugador (ver
-   * TitleDefinition.reason en titleEngine.ts). null solo para titulos de
-   * meme (participant.memeTitles) que no pasan por el motor propio.
-   */
   reason: z.string().nullable().optional()
 });
 
@@ -73,57 +52,12 @@ export const ParticipantSchema = z.object({
   mmradarIconUrl: z.string().nullable().optional(),
   mmradarServer: z.string().nullable().optional(),
   mmradarLevel: z.number().nullable().optional(),
-  /**
-   * Habilidad 1v1 propia (ver packages/core/duelRating.ts): 0-100, con
-   * confidence 0-1 segun cuantas partidas hubo detras del calculo.
-   * Cacheados igual que el resto de datos de mmradar -- se recalculan al
-   * guardar/actualizar el perfil, nunca en cada render.
-   */
+
   duelRating: z.number().nullable().optional(),
   duelConfidence: z.number().nullable().optional(),
-  /**
-   * Cuando fue la ultima vez que se re-consulto mmradar para este perfil
-   * (se pisa junto con el resto de datos de mmradar en
-   * saveOwnParticipant/saveParticipant/refreshMmradarData). Se muestra en
-   * la ficha publica junto al boton "Actualizar" -- null solo si nunca se
-   * consulto mmradar para este perfil (alta sin Riot ID, por ejemplo).
-   */
-  /**
-   * z.string() sin .datetime(): Postgres TIMESTAMPTZ devuelve algo como
-   * "2026-08-20 14:32:10.123456+00" (espacio en vez de "T", offset sin
-   * "Z", microsegundos) -- Zod's .datetime() exige ISO 8601 estricto y
-   * rechaza ese formato. Bug real encontrado 2026-08-20: esto hacia fallar
-   * ParticipantListSchema.safeParse() para CUALQUIER fila con
-   * mmradar_updated_at seteado, descartando el roster real COMPLETO de
-   * Supabase (loadParticipants.ts cae al fallback de participants.yml
-   * vacio + el participante meme) sin ningun error visible para el
-   * usuario, solo un console.warn. El valor se muestra formateado
-   * (formatRelativeUpdatedAt en MmradarPerformanceCard.tsx), nunca se
-   * re-parsea como Date en un contexto que necesite ISO estricto, asi que
-   * validar solo que sea string es suficiente.
-   */
   mmradarUpdatedAt: z.string().nullable().optional(),
-  /**
-   * Participante "de meme": aparece en el roster/grid de seleccion como
-   * cualquier otro, pero se excluye de todo lo competitivo -- ruleta,
-   * combates 1v1, generacion/balanceo de team matches, y tallies de
-   * pronosticos. Solo lo pueden traer los participantes meme del YAML
-   * (ver apps/web/src/data/meme-participants.yml + loadParticipants.ts);
-   * nunca se escribe desde el panel de admin ni desde /inscripcion, asi
-   * que no hace falta persistirlo en Supabase.
-   */
   excludeFromMatches: z.boolean().optional(),
-  /**
-   * Campos exclusivos de participantes "de meme" (excludeFromMatches:
-   * true), cargados a mano en meme-participants.yml -- nunca vienen de
-   * mmradar ni de ningun formulario real. Se muestran SOLO en la ficha
-   * publica de ese participante puntual (peleadores/[id].astro), nunca en
-   * /combates, /sorteo, el balanceador de equipos, ni en ningun otro
-   * listado -- son 100% de broma, no representan combates reales del
-   * evento. Un participante real (no-meme) nunca deberia tener estos
-   * campos poblados; no hay forma de escribirlos desde /inscripcion ni
-   * desde el panel de admin.
-   */
+  
   memeTitles: z.array(z.string()).optional(),
   memeIconUrl: z.string().optional(),
   memeFakeMatch: z
@@ -156,19 +90,6 @@ export const EventPhaseSchema = z.enum([
   "ENDED"
 ]);
 
-/**
- * Independent on/off switches the host flips from /admin in any order,
- * unlike the old currentPhase enum (mutually exclusive, fixed order). Each
- * flag only gates what's enabled/disabled on the public site:
- * - registrationsOpen: /inscripcion accepts new signups + profile edits
- * - rouletteUnlocked: /sorteo shows the wheel instead of the locked screen
- * - votingEnabled: predictions/pronosticos accept votes (still also needs
- *   the per-match predictionsOpen flag from admin's match editor)
- * - eventStarted: purely informational "la velada ya empezo" flag, shown in
- *   the UI; the countdown itself only marks the planned start time.
- * currentPhase and rouletteUnlocked (top-level) are kept for backwards
- * compatibility with existing rows/components that already read them.
- */
 export const EventStateSchema = z.object({
   id: z.string().default("main"),
   startTime: z.string().datetime(),
@@ -221,16 +142,6 @@ export const SpinStartPayloadSchema = z.object({
   timestamp: z.number()
 });
 
-/**
- * Un combate por equipos (5v5, 4v4 o 3v3 -- cualquier tamano parejo entre
- * ambos lados, no necesariamente 5v5 fijo) del evento mayor. A diferencia
- * de Match (1v1 de la ruleta), aca el resultado es un solo ganador para
- * TODO el equipo, como en una partida real de LoL -- no hay resultado por
- * jugador individual. teamAIds/teamBIds son listas de participant ids;
- * ambas listas deben tener el mismo tamano entre si (se valida en la
- * action, no aca, porque zod no expresa bien "len(a) === len(b)" con un
- * mensaje de error util).
- */
 export const TeamMatchSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().nullable().optional(),

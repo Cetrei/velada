@@ -14,9 +14,6 @@ type SortDirection = "asc" | "desc";
 const ROLES: Array<Participant["mainRole"]> = ["Top", "Jungle", "Mid", "ADC", "Support"];
 const copy = PAGES.fighters;
 
-/** Promedio de las 6 metricas de mmradar, usado para ordenar y para la
- *  barra compacta de performance por fila -- performanceRank es texto
- *  libre ("PLATINUM II (67LP)"), no sirve para ordenar numericamente. */
 function performanceScoreOf(p: Participant): number | null {
   if (!p.performanceScores) return null;
   const values = Object.values(p.performanceScores);
@@ -24,7 +21,6 @@ function performanceScoreOf(p: Participant): number | null {
   return values.reduce((sum, v) => sum + v, 0) / values.length;
 }
 
-/** Ranked tiers in League of Legends, used to bucket free-text lolRank values like "Diamond II" into a filterable tier. */
 const ELO_TIER_ORDER = [
   "Iron",
   "Bronze",

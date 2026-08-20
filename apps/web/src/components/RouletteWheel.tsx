@@ -6,18 +6,6 @@ import { getSupabaseClient, ROULETTE_CHANNEL, SPIN_START_EVENT } from "../lib/su
 interface RouletteWheelProps {
   participants: Participant[];
   rouletteUnlocked: boolean;
-  /**
-   * Combates ya generados por la ruleta (is_random: true en la fila de
-   * matches, ver AdminControl.triggerRandomMatch y lib/matches.ts),
-   * pasados desde sorteo.astro. Antes RouletteWheel solo escuchaba el
-   * broadcast en vivo (canal SPIN_START_EVENT): si alguien entraba a
-   * /sorteo despues de que el sorteo ya se hizo -- o el admin ya la giro
-   * antes de que este visitante se conectara -- la pagina se veia
-   * "vacia" (rueda quieta, sin ningun combate) salvo que estuviera
-   * conectado exactamente en el momento del broadcast. Con esto, si hay
-   * matches generados y no hay nada girando ahora mismo, se listan como
-   * resultados del sorteo en vez de mostrar la rueda sin nada.
-   */
   existingMatches: Match[];
 }
 
@@ -236,12 +224,6 @@ export default function RouletteWheel({ participants, rouletteUnlocked, existing
     const shuffled = [...participants].sort(() => Math.random() - 0.5);
     const player1 = shuffled[0];
     const player2 = shuffled[1];
-    // TS no puede inferir el largo de un array via destructuring, asi que
-    // shuffled[0]/[1] tipan como Participant | undefined pese al guard de
-    // participants.length < 2 de arriba (ver linea 194 en el reporte del
-    // IDE: setWinnerPair exige la tupla [Participant, Participant] sin
-    // undefined). Guard explicito para que el resto de la funcion trabaje
-    // con Participant ya angosto.
     if (!player1 || !player2) return;
 
     const payload: SpinStartPayload = {
@@ -277,14 +259,6 @@ export default function RouletteWheel({ participants, rouletteUnlocked, existing
     );
   }
 
-  // Si ya hay combates generados por el sorteo y no se esta girando nada
-  // ahora mismo (ni animacion local, ni un winnerPair recien resuelto en
-  // esta sesion), se listan como resultados en vez de mostrar la rueda
-  // "quieta" sin ningun dato -- cubre el caso de entrar a /sorteo despues
-  // de que el sorteo ya paso. Si el visitante ve un broadcast en vivo
-  // mientras esta parado en esta pantalla, winnerPair pasa a tener valor y
-  // esa rama toma prioridad (se sigue viendo la rueda + el resultado
-  // recien salido), y ese resultado ya quedo agregado a pastPairs arriba.
   if (!isSpinning && !winnerPair && pastPairs.length > 0) {
     return (
       <div className="w-full">
