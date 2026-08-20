@@ -1,46 +1,3 @@
-/**
- * Consulta el perfil publico de un jugador en mmradar.gg via scraping del
- * HTML servidor (sin navegador headless, solo fetch + parseo de texto).
- * Fuente unica del rango de un jugador en este proyecto — ver decision
- * del usuario 2026-08-18: se elimino LeagueOfGraphs/rankScraper.ts por
- * completo, mmradar es lo unico que se consulta.
- *
- * mmradar.gg expone en el mismo HTML (confirmado contra un HTML real de
- * ejemplo del perfil "OneShotOneKill#sigma", LAN):
- * - Un "Current Rank" (tier+division+LP): el rango oficial de Riot
- *   (Solo/Duo), igual al que mostraria el cliente del juego. Es lo que se
- *   guarda como `lolRank`/rango "oficial" de cada peleador.
- *   <div id="current-rank" class="rank-box">...<h4>Current Rank</h4>
- *   <p>PLATINUM II <span class="rank-lp">(67LP)</span></p></div>
- * - Un "Performance Rank" (tier+division) separado: un ranking propio de
- *   mmradar basado en desempeno real reciente, no en LP.
- *   <div id="performance-rank" class="rank-box">...
- *   <h4>Performance<img ... data-tooltip="..."></h4>
- *   <p>EMERALD IV</p></div>
- * - 6 scores individuales (Laning, Farming, Objectives, Combat, Teamfight,
- *   Vision), escala real de cientos/miles (ej. 1780, 2220 -- NO 0-100,
- *   pese a lo que sugeria un comentario viejo de este archivo), promedio
- *   de las ultimas partidas. Viven en <p id="player-average-{stat}-score">.
- *   OJO: tambien existe un <p id="player-average-score"> (SIN sufijo de
- *   stat) que es el score total/general del jugador, no uno de los 6
- *   stats -- el patron de parsePerformanceScores exige el sufijo para no
- *   confundirlo con ese.
- * - Titulos otorgados por el sitio (ej. "OTP Kindred", "Duelist", "MVP"),
- *   en <div id="player-titles"><p class="player-title ...">TEXTO</p>...
- * - Icono de invocador: <img id="summoner-icon" src="...">, con el nivel
- *   como numero suelto al lado en <p id="summoner-level">574</p> (no se
- *   usa aca, solo el icono).
- * - Nombre + tag: <a id="summoner-name">OneShotOneKill<span
- *   id="summoner-tag"> #sigma</span></a> -- no se usa para nada (ya lo
- *   tenemos de lolUsername), documentado por completitud.
- * - Servidor/region: <p id="region">LAN</p>, junto al nombre.
- *
- * URL del perfil: https://mmradar.gg/summoner/{Nombre}-{Tag}
- * (el nombre de invocador va tal cual, con guion antes del tag; no exige
- * minusculas ni un servidor/region en la URL — mmradar resuelve la region
- * del lado de ellos).
- */
-
 import type { TitleEngineMatch } from "./titleEngine";
 import { buildTitleEngineInput, evaluateTitles } from "./titleEngine";
 import { computePerformanceRank } from "./performanceRank";
@@ -393,7 +350,43 @@ async function fetchRawMatches(gameName: string, tagLine: string): Promise<RawMa
       for (const key of keys) totals[key] += player.scores[key];
       gamesCounted += 1;
 
-      const highestTotal = Math.max(...match.participants.map((p) => p.scores?.total ?? -Infinity));
+      // BUG REAL (2026-08-20): player.scores.total y p.scores.total vienen tal
+      // cual del payload de mmradar /load-matches, que resulto ser un
+      // promedio/composite de los 6 sub-scores (~1000-2500), NO la suma
+      // (~9000-13500) que TIER_THRESHOLDS en performanceRank.ts asume.
+      // Confirmado contra la captura real: Laning 1780 + Farming 1799 +
+      // Objectives 1550 + Combat 2220 + Teamfight 2037 + Vision 1773 =
+      // 11159 (la suma real), mientras mmradar muestra "Performance 1860"
+      // = 11159/6 (el promedio, no la suma). Usar el total de mmradar tal
+      // cual colapsaba a todo el mundo a Iron. Fix: recalcular total como
+      // la suma de los 6 sub-scores, tanto para el jugador (usado en
+      // computePerformanceRank) como para comparar contra el resto de la
+      // partida (wasTopScoreInMatch, insumo de la regla MVP del motor de
+      // titulos) -- si no se recalcula tambien ahi, la comparacion queda
+      // en escalas distintas (jugador ya arreglado vs rivales sin arreglar)
+      // y wasTopScoreInMatch deja de tener sentido.
+      const computedPlayerTotal =
+        player.scores.laning +
+        player.scores.farming +
+        player.scores.objectives +
+        player.scores.combat +
+        player.scores.teamfight +
+        player.scores.vision;
+
+      const highestTotal = Math.max(
+        ...match.participants.map((p) => {
+          if (!p.scores) return -Infinity;
+          return (
+            p.scores.laning +
+            p.scores.farming +
+            p.scores.objectives +
+            p.scores.combat +
+            p.scores.teamfight +
+            p.scores.vision
+          );
+        })
+      );
+
       engineMatches.push({
         championName: player.championName ?? "?",
         scores: {
@@ -403,10 +396,10 @@ async function fetchRawMatches(gameName: string, tagLine: string): Promise<RawMa
           combat: player.scores.combat,
           teamfight: player.scores.teamfight,
           vision: player.scores.vision,
-          total: player.scores.total
+          total: computedPlayerTotal
         },
         won: typeof match.winningTeam === "number" && player.teamId === match.winningTeam,
-        wasTopScoreInMatch: player.scores.total >= highestTotal
+        wasTopScoreInMatch: computedPlayerTotal >= highestTotal
       });
     }
 
