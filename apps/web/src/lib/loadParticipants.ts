@@ -1,4 +1,4 @@
-import { parseParticipants, ParticipantListSchema, ParticipantSchema, type Participant } from "@velada/core";
+import { parseParticipants, parseMemeParticipants, ParticipantListSchema, ParticipantSchema, type Participant } from "@velada/core";
 import type { APIContext } from "astro";
 import { getSupabaseClient } from "./supabase";
 import { createSupabaseAdminClient } from "./supabaseServer";
@@ -11,9 +11,29 @@ const yamlModules = import.meta.glob("../data/participants.yml", {
 
 const PARTICIPANTS_YAML = Object.values(yamlModules)[0] ?? "";
 
+const memeYamlModules = import.meta.glob("../data/meme-participants.yml", {
+  eager: true,
+  query: "?raw",
+  import: "default"
+}) as Record<string, string>;
+
+const MEME_PARTICIPANTS_YAML = Object.values(memeYamlModules)[0] ?? "";
+
 /** Bundled fallback used when Supabase isn't configured or the table is empty. */
 function loadYamlParticipants(): Participant[] {
   return parseParticipants(PARTICIPANTS_YAML);
+}
+
+/**
+ * Participantes "de meme" (excludeFromMatches: true) -- viven solo en este
+ * YAML, nunca en Supabase (ver comentario en el propio archivo y en
+ * ParticipantSchema.excludeFromMatches). Se agregan SIEMPRE al final del
+ * roster real, tanto si ese roster vino de Supabase como del YAML de
+ * fallback -- a diferencia de participants.yml, este archivo no es un
+ * fallback de demo, es contenido real que debe aparecer siempre.
+ */
+function loadMemeParticipants(): Participant[] {
+  return parseMemeParticipants(MEME_PARTICIPANTS_YAML);
 }
 
 interface ParticipantRow {
@@ -83,10 +103,15 @@ function toParticipant(row: ParticipantRow): Participant {
  * Falls back to the bundled participants.yml when Supabase isn't configured,
  * the query fails, or the table is empty — same fallback strategy as
  * eventState.ts, so the site never renders blank.
+ * Los participantes meme (loadMemeParticipants, ver comentario mas arriba)
+ * se agregan siempre al final, sin importar de donde vino el resto del
+ * roster -- no son un fallback, son contenido real que debe estar
+ * presente aunque Supabase este funcionando perfecto.
  */
 export async function loadParticipants(): Promise<Participant[]> {
+  const memeParticipants = loadMemeParticipants();
   const supabase = getSupabaseClient();
-  if (!supabase) return loadYamlParticipants();
+  if (!supabase) return [...loadYamlParticipants(), ...memeParticipants];
 
   const { data, error } = await supabase
     .from("participants")
@@ -97,17 +122,17 @@ export async function loadParticipants(): Promise<Participant[]> {
 
   if (error || !data || data.length === 0) {
     if (error) console.warn("No se pudieron cargar participantes de Supabase:", error.message);
-    return loadYamlParticipants();
+    return [...loadYamlParticipants(), ...memeParticipants];
   }
 
   const participants = data.map(toParticipant);
   const result = ParticipantListSchema.safeParse(participants);
   if (!result.success) {
     console.warn("Participantes de Supabase con formato invalido, usando YAML:", result.error.message);
-    return loadYamlParticipants();
+    return [...loadYamlParticipants(), ...memeParticipants];
   }
 
-  return result.data;
+  return [...result.data, ...memeParticipants];
 }
 
 /**

@@ -1,0 +1,46 @@
+# Participantes "de meme": aparecen en el roster/grid de seleccion como
+# cualquier otro peleador (foto, banner, stats, ficha publica), pero NUNCA
+# cuentan para nada competitivo -- no entran en la ruleta, no se los puede
+# elegir para un combate 1v1 ni para generar/balancear team matches, y no
+# aparecen en tallies de pronosticos. Viven SOLO aca, nunca en Supabase
+# (no hay forma de crear/editar uno desde /inscripcion ni desde el panel
+# de admin -- es intencional, evita que alguien marque su propia cuenta
+# real como "no cuenta").
+#
+# performanceScores es obligatorio ponerlo a mano aca (6 numeros, mismo
+# formato/escala que mmradar.gg: laning, farming, objectives, combat,
+# teamfight, vision) porque estos participantes no tienen lolUsername
+# real -- no hay ningun perfil de mmradar que consultar para ellos.
+#
+# El resto de los campos usa el mismo formato que participants.yml.
+
+- id: "meme-1"
+  name: "Fabitos Priv"
+  nickname: "Jaguarsh"
+  photo: "/images/participants/p1Photo.png"
+  banner: "/images/participants/p1Banner.jpg"
+  age: 24
+  weight: "78 kg"
+  height: "178 cm"
+  lolRank: "Diamond II"
+  mainRole: "Top"
+  favChampion: "Darius"
+  description: "Especialista en All-In nivel 2. Promete KO en la primera ronda."
+  stats:
+    - label: "Mental"
+      value: 0
+    - label: "inteligencia"
+      value: 0
+    - label: "Micro"
+      value: 70
+    - label: "Macro"
+      value: 90
+  performanceRank: "Diamond II"
+  performanceScores:
+    laning: 2100
+    farming: 1950
+    objectives: 1800
+    combat: 2400
+    teamfight: 2000
+    vision: 1200
+  excludeFromMatches: true

@@ -843,29 +843,42 @@ export const server = {
         return { status: "invalid" as const, reason: "format" as const };
       }
 
-      try {
-        const { rank } = await fetchOfficialRank(lolUsername);
-        const mmradar = await fetchMmradarData(lolUsername);
-        return {
-          status: "found" as const,
-          rank,
-          performanceRank: mmradar.performanceRank,
-          performanceScores: mmradar.performanceScores
-        };
-      } catch (err) {
-        if (err instanceof ActionError && err.code === "NOT_FOUND") {
-          return { status: "not_found" as const };
-        }
-        if (err instanceof ActionError && err.code === "BAD_REQUEST") {
-          return { status: "invalid" as const, reason: "format" as const };
-        }
-        if (err instanceof ActionError && err.code === "INTERNAL_SERVER_ERROR") {
-          console.error("[checkRiotProfile] fuente de rango no disponible:", err.message);
+      // Antes esto hacia DOS fetches HTTP separados al mismo perfil de
+      // mmradar (fetchOfficialRank para el rango + fetchMmradarData para
+      // performanceScores) -- ademas del gasto doble, si el segundo
+      // fallaba (rate-limit, timing) el rango se mostraba bien pero las
+      // barras de performance quedaban en null sin que se notara ningun
+      // error (fetchMmradarData nunca lanza, por diseno). Un solo fetch a
+      // fetchMmradarData ya trae todo lo que hace falta aca.
+      const mmradar = await fetchMmradarData(lolUsername);
+      let fallbackRank: string | null = null;
+
+      if (mmradar.rank === null && mmradar.performanceScores === null) {
+        // fetchMmradarData nunca lanza -- para distinguir "no encontrado"
+        // de "fuente caida"/"formato invalido" (los 3 casos que
+        // fetchOfficialRank SI distingue lanzando ActionError) se hace un
+        // segundo intento con fetchOfficialRank solo cuando el primero no
+        // trajo nada, no en el camino feliz.
+        try {
+          fallbackRank = (await fetchOfficialRank(lolUsername)).rank;
+        } catch (err) {
+          if (err instanceof ActionError && err.code === "NOT_FOUND") {
+            return { status: "not_found" as const };
+          }
+          if (err instanceof ActionError && err.code === "BAD_REQUEST") {
+            return { status: "invalid" as const, reason: "format" as const };
+          }
+          console.error("[checkRiotProfile] fuente de rango no disponible:", err instanceof Error ? err.message : err);
           return { status: "error" as const, reason: "riot_down" as const };
         }
-        console.error("[checkRiotProfile] unexpected error:", err);
-        return { status: "error" as const, reason: "unknown" as const };
       }
+
+      return {
+        status: "found" as const,
+        rank: mmradar.rank ?? fallbackRank ?? "Sin clasificar",
+        performanceRank: mmradar.performanceRank,
+        performanceScores: mmradar.performanceScores
+      };
     }
   }),
 

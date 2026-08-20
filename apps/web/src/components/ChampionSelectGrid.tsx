@@ -540,18 +540,23 @@ export default function ChampionSelectGrid({
         }
 
         /* Alto real del bloque de splash (retrato vertical de banner/foto)
-           cuando esta activo -- bastante mas que los 220-260px que usa la
-           grilla, para que el banner no se recorte tan agresivo con
-           object-cover. Vive en este elemento (position: absolute, fuera
-           del flujo) en vez de en el contenedor compartido de arriba, asi
-           que crecerlo no empuja el titulo/action-bar que vienen despues
-           en el layout -- ese era el bug del descuadre. */
+           cuando esta activo. Vive en este elemento (position: absolute,
+           fuera del flujo) en vez de en el contenedor compartido de mas
+           arriba, asi que crecerlo no empuja el titulo/action-bar que
+           vienen despues en el layout -- ese fue el bug del descuadre en
+           una vuelta anterior. Subido de min(480px, 46dvh) a
+           min(640px, 62dvh): el usuario pidio explicitamente que el
+           banner ocupe mas espacio real (referencia visual: recuadro
+           dibujado a mano marcando un area bastante mas grande que la
+           anterior). La seccion #roster en index.astro tiene
+           overflow-y-auto como red de seguridad para viewports bajos
+           donde este alto no entrara completo. */
         .splash-view-active {
-            min-height: min(480px, 46dvh);
+            min-height: min(640px, 62dvh);
         }
         @media (min-height: 820px) {
             .splash-view-active {
-                min-height: 560px;
+                min-height: 720px;
             }
         }
 
@@ -581,19 +586,24 @@ export default function ChampionSelectGrid({
            que la hacia ver "cortada"/desvanecida en el centro en vez de
            cubrir todo el contenedor como pedia el usuario ("deberia ser
            el fondo"). Ahora la imagen cubre el 100% sin mascara, y en su
-           lugar este overlay (aparte, encima de la imagen) hace un
-           degradado vertical suave arriba/abajo -- asi el borde del
-           contenedor se ve intencional en vez de un corte abrupto, sin
-           tapar la imagen en su centro. */
+           lugar este overlay hace un degradado vertical. El primer
+           intento (0.75 -> 0.15 -> 0.15 -> 0.85 con una meseta plana en
+           22%-70%) seguía viendose como un corte brusco: la transicion de
+           0.15 a 0.75/0.85 pasaba demasiado rapido cerca de los bordes.
+           Este degradado usa mas paradas intermedias para que la caída sea
+           gradual de punta a punta, sin ninguna meseta plana. */
         .splash-background-fade {
             position: absolute;
             inset: 0;
             background: linear-gradient(
                 to bottom,
-                rgba(1, 10, 19, 0.75) 0%,
-                rgba(1, 10, 19, 0.15) 22%,
-                rgba(1, 10, 19, 0.15) 70%,
-                rgba(1, 10, 19, 0.85) 100%
+                rgba(1, 10, 19, 0.85) 0%,
+                rgba(1, 10, 19, 0.45) 12%,
+                rgba(1, 10, 19, 0.08) 30%,
+                rgba(1, 10, 19, 0.08) 55%,
+                rgba(1, 10, 19, 0.35) 75%,
+                rgba(1, 10, 19, 0.7) 90%,
+                rgba(1, 10, 19, 0.92) 100%
             );
             pointer-events: none;
         }
@@ -603,14 +613,11 @@ export default function ChampionSelectGrid({
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            /* Antes eran 700x700 fijos -- en el contenedor mas bajo que
-               ahora usa min(480px, 46dvh) (ver splash-view-active) el
-               overflow:hidden del contenedor raiz cortaba el circulo
-               arriba y abajo de forma abrupta. min() lo limita al tamano
-               real disponible, dejando margen para que siempre se vea
-               completo. */
-            width: min(700px, 92%);
-            height: min(700px, 92%);
+            /* Escala con min()/% en vez de un tamano fijo para seguir
+               viendose completo sin recortes sin importar el alto real de
+               .splash-view-active (ver ese comentario para el porque). */
+            width: min(760px, 92%);
+            height: min(760px, 88%);
             z-index: 1;
             pointer-events: none;
             opacity: 0.4;

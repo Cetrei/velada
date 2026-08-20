@@ -90,3 +90,27 @@ export function parseParticipants(yamlContent: string): Participant[] {
 export function isMockParticipant(participant: Participant): boolean {
   return participant.id.startsWith("mock-");
 }
+
+/**
+ * Parsea meme-participants.yml (participantes "de meme": excludeFromMatches).
+ * A diferencia de parseParticipants, NUNCA cae a MOCK_PARTICIPANTS -- un
+ * archivo vacio simplemente significa "no hay participantes meme esta vez",
+ * no un estado invalido que necesite un fallback de demo.
+ */
+export function parseMemeParticipants(yamlContent: string): Participant[] {
+  const raw = parse(yamlContent);
+
+  if (!raw || !Array.isArray(raw) || raw.length === 0) {
+    return [];
+  }
+
+  const result = ParticipantListSchema.safeParse(raw);
+
+  if (!result.success) {
+    throw new Error(
+      `Invalid meme-participants.yml: ${result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`
+    );
+  }
+
+  return result.data;
+}

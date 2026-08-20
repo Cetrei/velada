@@ -4,25 +4,3 @@
 # `stats` es una lista libre de { label, value } (0-100). Cada participante
 # puede tener labels distintas y en cualquier cantidad; se renderiza tal
 # cual venga, no hay campos fijos.
-
-- id: "p1"
-  name: "Fabitos Priv"
-  nickname: "Jaguarsh"
-  photo: "/images/participants/p1Photo.png"
-  banner: "/images/participants/p1Banner.jpg"
-  age: 24
-  weight: "78 kg"
-  height: "178 cm"
-  lolRank: "Diamond II"
-  mainRole: "Top"
-  favChampion: "Darius"
-  description: "Especialista en All-In nivel 2. Promete KO en la primera ronda."
-  stats:
-    - label: "Mental"
-      value: 0
-    - label: "inteligencia"
-      value: 0
-    - label: "Micro"
-      value: 70
-    - label: "Macro"
-      value: 90

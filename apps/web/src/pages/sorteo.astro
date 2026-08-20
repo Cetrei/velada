@@ -5,7 +5,11 @@ import { loadParticipants } from "../lib/loadParticipants";
 import { fetchEventState } from "../lib/eventState";
 import { PAGES } from "@velada/core";
 
-const participants = await loadParticipants();
+const allParticipants = await loadParticipants();
+// La ruleta nunca debe poder emparejar a un participante de meme (ver
+// ParticipantSchema.excludeFromMatches) -- ni como candidato al girar ni
+// mostrado como gajo de la rueda.
+const participants = allParticipants.filter((p) => !p.excludeFromMatches);
 const eventState = await fetchEventState();
 const copy = PAGES.raffle;
 ---

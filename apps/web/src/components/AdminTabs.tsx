@@ -29,6 +29,15 @@ const copy = PAGES.rosterManager;
 export default function AdminTabs({ initialParticipants, eventState, initialMatches, initialTeamMatches }: AdminTabsProps) {
   const [tab, setTab] = useState<Tab>("participants");
 
+  // Los participantes "de meme" (excludeFromMatches, ver
+  // ParticipantSchema) viven solo en meme-participants.yml, nunca en la
+  // tabla de Supabase que este panel edita/borra -- por eso se excluyen
+  // de los 4 sub-paneles administrativos (edicion de fichas, ruleta,
+  // combates 1v1, equipos). El grid publico de seleccion SI los sigue
+  // mostrando (ChampionSelectGrid no filtra esto), solo la parte
+  // competitiva/administrativa los ignora.
+  const realParticipants = initialParticipants.filter((p) => !p.excludeFromMatches);
+
   return (
     <div>
       <div className="flex items-center justify-center gap-2 mb-8 border-b border-lol-border">
@@ -46,10 +55,10 @@ export default function AdminTabs({ initialParticipants, eventState, initialMatc
         </TabButton>
       </div>
 
-      {tab === "participants" && <ParticipantManager initialParticipants={initialParticipants} />}
+      {tab === "participants" && <ParticipantManager initialParticipants={realParticipants} />}
       {tab === "event" && (
         <AdminControl
-          participants={initialParticipants}
+          participants={realParticipants}
           initialRouletteUnlocked={eventState.rouletteUnlocked}
           initialStartTime={eventState.startTime}
           initialRegistrationsOpen={eventState.registrationsOpen}
@@ -58,10 +67,10 @@ export default function AdminTabs({ initialParticipants, eventState, initialMatc
         />
       )}
       {tab === "matches" && (
-        <MatchManager initialMatches={initialMatches} participants={initialParticipants} />
+        <MatchManager initialMatches={initialMatches} participants={realParticipants} />
       )}
       {tab === "teams" && (
-        <TeamMatchManager initialTeamMatches={initialTeamMatches} participants={initialParticipants} />
+        <TeamMatchManager initialTeamMatches={initialTeamMatches} participants={realParticipants} />
       )}
     </div>
   );

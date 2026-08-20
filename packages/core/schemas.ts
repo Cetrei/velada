@@ -53,7 +53,17 @@ export const ParticipantSchema = z.object({
   performanceScores: MmradarPerformanceScoresSchema.nullable().optional(),
   titles: z.array(z.string()).nullable().optional(),
   mmradarIconUrl: z.string().nullable().optional(),
-  mmradarServer: z.string().nullable().optional()
+  mmradarServer: z.string().nullable().optional(),
+  /**
+   * Participante "de meme": aparece en el roster/grid de seleccion como
+   * cualquier otro, pero se excluye de todo lo competitivo -- ruleta,
+   * combates 1v1, generacion/balanceo de team matches, y tallies de
+   * pronosticos. Solo lo pueden traer los participantes meme del YAML
+   * (ver apps/web/src/data/meme-participants.yml + loadParticipants.ts);
+   * nunca se escribe desde el panel de admin ni desde /inscripcion, asi
+   * que no hace falta persistirlo en Supabase.
+   */
+  excludeFromMatches: z.boolean().optional()
 });
 
 export const ParticipantListSchema = z.array(ParticipantSchema);
