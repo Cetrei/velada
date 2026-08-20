@@ -4,22 +4,28 @@ import { buildTitleEngineInput, evaluateTitles } from "./titleEngine";
 import { skillRatingFromLolRank } from "./skillRating";
 
 const STAT_WEIGHTS: Record<keyof MmradarPerformanceScores, number> = {
-  combat: 0.32,
-  teamfight: 0.22,
-  laning: 0.2,
+  combat: 0.4,
+  teamfight: 0.25,
+  laning: 0.3,
   objectives: 0.1,
-  farming: 0.1,
-  vision: 0.06
+  farming: 0.05,
+  vision: 0.02
 };
 
-/** Titulos de combate/dominancia que ya otorga titleEngine.ts -- cada uno presente suma un bono chico (ver DUEL_TITLE_BONUS). */
-const DUEL_RELEVANT_TITLE_IDS = new Set(["duelist", "godlike", "hat-trick", "avalanche", "mvp", "lane-bully"]);
+const DUEL_RELEVANT_KEYWORDS = [
+  "duelist", 
+  "godlike", 
+  "hat-trick", 
+  "avalanche", 
+  "mvp", 
+  "lane-bully", 
+  "otp"
+];
 const DUEL_TITLE_BONUS = 2.5;
 const MAX_TITLE_BONUS = 12;
 
 const CURVE_MIDPOINT = 1750;
 const CURVE_STEEPNESS = 0.0022;
-
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
@@ -37,11 +43,6 @@ function performanceBonus(input: Pick<TitleEngineInput, "mvpCount" | "gamesPlaye
   const mvpBonus = mvpRate * 150; // hasta 150 si es MVP siempre
   const winBonus = clamp((input.winRate - 0.5) * 300, -75, 150); // -75..+150
   return mvpBonus + winBonus;
-}
-
-function titleBonus(titleIds: string[]): number {
-  const relevant = titleIds.filter((id) => DUEL_RELEVANT_TITLE_IDS.has(id));
-  return Math.min(MAX_TITLE_BONUS, relevant.length * DUEL_TITLE_BONUS);
 }
 
 function logisticCurve(rawScore: number): number {
@@ -62,15 +63,8 @@ export interface DuelRatingResult {
   confidence: number;
   gamesConsidered: number;
 }
-
 const MIN_GAMES_FOR_FULL_CONFIDENCE = 12;
 
-/**
- * Calcula el duel rating a partir de las mismas partidas crudas que ya
- * arma fetchRawMatches (mmradarScraper.ts) para performanceRank/titulos --
- * un solo fetch a mmradar cubre las tres cosas. null si no hay ninguna
- * partida (mismo criterio que computePerformanceRank).
- */
 export function computeDuelRatingFromMatches(
   matches: TitleEngineMatch[],
   context: { performanceRank: string | null; currentRank: string | null }
@@ -79,11 +73,11 @@ export function computeDuelRatingFromMatches(
 
   const input = buildTitleEngineInput(matches, context);
   const earnedTitles = evaluateTitles(input);
-  // evaluateTitles devuelve {text, color, reason}, no el id -- se re-evalua
-  // aca por id contra TITLE_DEFINITIONS para el bono de titulos relevantes
-  // sin duplicar la logica de evaluate() de cada definicion. 
-  const relevantLabels = new Set(["Duelist", "Godlike", "Hat-trick", "Avalancha", "MVP", "Lane Bully"]);
-  const relevantCount = earnedTitles.filter((t) => relevantLabels.has(t.text)).length;
+
+  const relevantCount = earnedTitles.filter((title) => {
+    const normalizedTitle = title.text.toLowerCase();
+    return DUEL_RELEVANT_KEYWORDS.some((keyword) => normalizedTitle.includes(keyword));
+  }).length;
 
   const combatPower = weightedCombatPower(input.averages);
   const bonus = performanceBonus(input) + Math.min(MAX_TITLE_BONUS, relevantCount * DUEL_TITLE_BONUS);

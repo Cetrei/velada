@@ -21,36 +21,48 @@ function totalOf(scores: MmradarPerformanceScores): number {
 }
 
 /**
- * Umbrales de promedio TOTAL (suma de 6 stats) recalibrados.
- * Referencias de prueba:
- * - ~9300  (avg 1550) -> Gold IV
- * - ~10057 (avg 1676) -> Gold I / Gold II (ej. YourDaddyDrinks)
- * - ~10455 (avg 1743) -> Platinum III / II (ej. Nashi)
- * - ~10920 (avg 1820) -> Emerald IV
- * - ~11160 (avg 1860) -> Emerald I / Diamond IV
- * - ~11360 (avg 1893) -> Challenger
+ * Umbrales base centrados.
+ * Esto coloca las puntuaciones base en un punto neutral:
+ * - ~9822 (Sovietic) entra en Oro II.
+ * - ~10057 (YourDaddy) entra justo en Oro I.
+ * - ~10455 (Nashi) entra en Platino III.
+ * - ~10564 (LegenPaPa) entra en Platino II.
+ * Los saltos finales (Sovietic subiendo a Plat I y LegenPaPa cayendo a Oro III)
+ * dependerán 100% de los ajustes de abajo.
  */
 const TIER_THRESHOLDS: { tier: RankTier; minTotal: number }[] = [
   { tier: "Iron", minTotal: 0 },
-  { tier: "Bronze", minTotal: 7200 },      // avg 1200
-  { tier: "Silver", minTotal: 8400 },      // avg 1400
-  { tier: "Gold", minTotal: 9300 },        // avg 1550
-  { tier: "Platinum", minTotal: 10200 },    // avg 1700
-  { tier: "Emerald", minTotal: 10920 },    // avg 1820
-  { tier: "Diamond", minTotal: 11160 },    // avg 1860
-  { tier: "Master", minTotal: 11250 },     // avg 1875
-  { tier: "Grandmaster", minTotal: 11325 }, // avg 1887
-  { tier: "Challenger", minTotal: 11360 }   // avg 1893+
+  { tier: "Bronze", minTotal: 7000 },
+  { tier: "Silver", minTotal: 8200 },
+  { tier: "Gold", minTotal: 9200 },
+  { tier: "Platinum", minTotal: 10200 },
+  { tier: "Emerald", minTotal: 10800 },
+  { tier: "Diamond", minTotal: 11300 },
+  { tier: "Master", minTotal: 11600 },
+  { tier: "Grandmaster", minTotal: 11800 },
+  { tier: "Challenger", minTotal: 12000 }
 ];
 
-const MAX_ADJUSTMENT_STEPS = 2;
+/**
+ * Ampliado a 6 escalones. Necesitamos este margen para que un perfil como
+ * LegenPaPaNoel pueda caer desde Platino II (base) hasta Oro III (final).
+ */
+const MAX_ADJUSTMENT_STEPS = 6;
 
+/**
+ * Multiplicador aumentado. Un winrate extremo (ej. 70%) ahora aporta
+ * hasta +2.4 escalones, y uno malo (ej. 35%) resta -1.2 escalones.
+ */
 function winRateAdjustment(winRate: number, gamesPlayed: number): number {
   if (gamesPlayed < 4) return 0;
   const centered = winRate - 0.5; // -0.5..0.5
-  return centered * 3; // hasta +-1.5 escalones
+  return centered * 8; // Max +-4 escalones en casos 100% / 0%
 }
 
+/**
+ * Multiplicador de consistencia re-calibrado.
+ * Es el principal responsable de separar puntajes idénticos.
+ */
 function consistencyAdjustment(matches: TitleEngineMatch[]): number {
   if (matches.length < 4) return 0;
   const totals = matches.map((m) => m.scores.total);
@@ -60,8 +72,9 @@ function consistencyAdjustment(matches: TitleEngineMatch[]): number {
   const stdDev = Math.sqrt(variance);
   const coefficientOfVariation = stdDev / mean;
 
-  const centered = 0.2 - coefficientOfVariation;
-  return Math.max(-1.5, Math.min(1.5, centered * 10)); // hasta +-1.5 escalones
+  const centered = 0.2 - coefficientOfVariation; 
+  // Multiplicador agresivo: perfiles muy constantes suben rápido, erráticos caen fuerte.
+  return Math.max(-4, Math.min(4, centered * 20)); 
 }
 
 export interface PerformanceRankResult {
@@ -111,10 +124,10 @@ export function computePerformanceRank(matches: TitleEngineMatch[]): Performance
 export const PERFORMANCE_RANK_EXPLANATION = {
   title: "¿Cómo se calcula el Performance Rank?",
   summary:
-    "Se basa en el promedio de tus últimas partidas, con ligeros ajustes por winrate y consistencia.",
-  formula: "Rango base (por promedio) + ajuste por winrate y consistencia (máx ±2 divisiones)",
+    "Se basa en el promedio de tus últimas partidas, fuertemente condicionado por tu winrate y tu constancia.",
+  formula: "Rango base (por promedio) + fuerte ajuste por winrate y consistencia",
   points: [
-    "Promedio: suma de tus 6 métricas individuales comparada contra los umbrales de rango.",
-    "Ajustes: el winrate reciente y la estabilidad de rendimiento pueden subirte o bajarte hasta 2 divisiones como máximo."
+    "Promedio Base: Tu suma total te coloca en un rango inicial neutral.",
+    "Ajuste decisivo: Dos jugadores con el mismo puntaje base pueden terminar con ligas muy distintas. Jugar de forma consistente y mantener buen winrate te sube divisiones enteras, ser errático te las quita."
   ]
 };
