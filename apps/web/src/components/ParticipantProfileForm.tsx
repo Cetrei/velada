@@ -642,7 +642,6 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
             fileName={photoFile?.name ?? null}
             hasExisting={photoHasExisting}
             accept="image/*"
-            capture="environment"
             onChange={handlePhotoChange}
           />
           {compressingField === "photo" && <p className="text-xs text-slate-500 mt-1">Optimizando imagen...</p>}
