@@ -54,14 +54,11 @@ const rivalPct = totalVotes > 0 ? Math.round((100 - participantPct) * 10) / 10 :
 // memeFakeMatch/memeFakeTeamMatch y data/meme-participants.yml): solo
 // existe para participantes con excludeFromMatches, y solo se dibuja en
 // esta ficha puntual -- nunca en /combates, /sorteo, ni el balanceador de
-// equipos. hasMemeExtras controla si la seccion entera se muestra.
-const hasMemeExtras =
-  participant.excludeFromMatches &&
-  Boolean(
-    (participant.memeTitles && participant.memeTitles.length > 0) ||
-      participant.memeFakeMatch ||
-      participant.memeFakeTeamMatch
-  );
+// equipos. memeTitles/memeIconUrl van directo en el cuadro de MmradarPanel
+// (fallback visual cuando no hay datos reales de mmradar, ver ese
+// componente) -- este bloque aparte SOLO es para los combates falsos
+// (1v1 y por equipo), nunca para icono/titulos.
+const hasMemeMatches = participant.excludeFromMatches && Boolean(participant.memeFakeMatch || participant.memeFakeTeamMatch);
 
 const copy = PAGES.fighterDetail;
 ---
@@ -161,48 +158,16 @@ const copy = PAGES.fighterDetail;
                 titles: participant.titles,
                 mmradarIconUrl: participant.mmradarIconUrl,
                 mmradarServer: participant.mmradarServer,
-                mmradarLevel: participant.mmradarLevel
+                mmradarLevel: participant.mmradarLevel,
+                memeTitles: participant.memeTitles,
+                memeIconUrl: participant.memeIconUrl
               }}
               canUpdate={canUpdateMmradar}
             />
           </div>
 
-          {hasMemeExtras && (
-            <div class="bg-lol-cardBg border border-dashed border-lol-gold/50 p-6 mb-8">
-              <p class="text-lol-gold text-xs uppercase tracking-widest font-bold mb-4">
-                Contenido de broma -- no es un combate real del evento
-              </p>
-
-              {participant.memeIconUrl && (
-                <div class="flex items-center gap-3 mb-5">
-                  <img
-                    src={participant.memeIconUrl}
-                    alt=""
-                    class="w-12 h-12 rounded-full object-cover border-2 border-lol-gold"
-                    loading="lazy"
-                  />
-                  {participant.memeTitles && participant.memeTitles.length > 0 && (
-                    <div class="flex flex-wrap gap-2">
-                      {participant.memeTitles.map((title) => (
-                        <span class="text-[0.65rem] font-bold uppercase tracking-wide bg-lol-gold/10 border border-lol-gold/30 text-lol-gold px-2 py-1 rounded-sm">
-                          {title}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {!participant.memeIconUrl && participant.memeTitles && participant.memeTitles.length > 0 && (
-                <div class="flex flex-wrap gap-2 mb-5">
-                  {participant.memeTitles.map((title) => (
-                    <span class="text-[0.65rem] font-bold uppercase tracking-wide bg-lol-gold/10 border border-lol-gold/30 text-lol-gold px-2 py-1 rounded-sm">
-                      {title}
-                    </span>
-                  ))}
-                </div>
-              )}
-
+          {hasMemeMatches && (
+            <div class="bg-lol-cardBg border border-lol-border p-6 mb-8">
               {participant.memeFakeMatch && (
                 <div class="mb-6">
                   <p class="text-slate-500 text-xs uppercase tracking-wide mb-2">Combate 1v1 (meme)</p>

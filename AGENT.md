@@ -1215,6 +1215,98 @@ era el de arriba, no whitelist).
   entrada y se actualiza al apretar "Actualizar" en el panel de la
   derecha sin recargar.
 
+## Sesion 2026-08-19 (2): cerrados los 3 pendientes de la sesion (13)/chat previo (landing 1v1 vs equipos, scroll libre, verificacion final del bug de barras)
+- Retomando la sesion cortada a medias que trajo el usuario (transcripcion
+  pegada en el chat, no en este AGENT.md): los 4 problemas que el usuario
+  reporto en ese chat (barra de performance sin cargar, orden de
+  icono/riotId/titulos en el bloque de MmradarPanel vs el bloque de
+  combates meme, y el texto "Contenido de broma" en el bloque meme) YA
+  estaban resueltos en el filesystem real al revisar (otra sesion no
+  documentada aca los termino despues de que se corto ese chat):
+  `MmradarPanel.tsx` ya tiene el fallback memeTitles/memeIconUrl completo
+  y documentado en su comentario de cabecera, `peleadores/[id].astro` ya
+  pasa icono/titulos/riotId solo al `MmradarPanel` y el bloque meme
+  aparte solo contiene los combates falsos (1v1 y equipo) sin ningun
+  texto de warning, y `ParticipantProfileForm.tsx` +
+  `PerformancePreviewCard.tsx` (nuevo, ya existente) ya arman el mismo
+  cuadro combinado (icono, Riot ID, titulos, barras) para el preview de
+  `/mi-perfil` e `/inscripcion` -- exactamente el layout de la imagen 2
+  que penaba el chat original.
+- **Verificado en vivo el bug de las barras "SIN DATOS AUN" (imagen 1)**:
+  hice `web_fetch` real a un perfil de mmradar.gg
+  (`https://mmradar.gg/summoner/Marcinator-Grind`) para confirmar contra
+  el HTML actual, no solo contra el comentario del codigo. Confirmado al
+  100%: el bloque `#### Performance` no trae ningun tier en texto, y los
+  6 stats (Laning/Farming/Objectives/Combat/Teamfight/Vision) aparecen
+  SOLO como `<img>` + label, sin ningun numero visible en el HTML
+  servidor -- exactamente lo que ya documentaba el comentario de
+  `parsePerformanceScores` en `packages/core/mmradarScraper.ts` (mmradar
+  movio el render de esos 6 numeros a JS del lado del cliente). El fix ya
+  aplicado en esa sesion (cada stat cae a 0 en vez de tirar todo a null)
+  sigue siendo lo maximo que se puede recuperar con fetch+parseo de texto
+  sin un navegador headless -- no hay ningun atributo `data-*`/JSON
+  embebido alternativo visible en el HTML real que se pueda parsear en su
+  lugar. Si mmradar en algun momento expone esos numeros de otra forma en
+  el HTML servidor, hay que volver a inspeccionar con fetch real (no
+  asumir) antes de tocar el parser de nuevo.
+- Lo que si faltaba de verdad (los 3 puntos que la sesion (13) dejo
+  explicitamente para "si el tiempo/contexto alcanza", nunca se hicieron):
+  1. **`/combates` separado 1v1 vs equipos**: ya estaba hecho (tabs con
+     radio+label CSS-only, `MatchesSection`/`TeamMatchesSection`) -- no
+     hizo falta tocar `combates.astro`.
+  2. **Landing (`index.astro`) sin separacion 1v1/equipos**: la seccion
+     `#combates` del landing solo renderizaba `MatchesSection`. Agregado
+     el mismo patron de tabs CSS-only que ya usa `/combates` (radios
+     ocultos + labels, prefijo `home-` en las clases para no colisionar),
+     con `TeamMatchesSection` (import nuevo) mostrando los primeros 3
+     team matches (`fetchTeamMatches().slice(0, 3)`, mismo criterio de
+     `.slice(0, 3)` que ya se usaba para `officialMatches`). La condicion
+     para mostrar la seccion completa paso de `officialMatches.length > 0`
+     a `(officialMatches.length > 0 || teamMatches.length > 0)` para que
+     la seccion no desaparezca si hay combates por equipos pero ningun
+     1v1 con resultado oficial todavia.
+  3. **Scroll pesado en TODA la home por `snap-mandatory`**: el pedido
+     explicito del usuario en la sesion (13) era que el scroll sea LIBRE
+     en toda la home excepto el hero (que mantenga resistencia/transicion
+     al cruzar su borde en ambas direcciones) -- distinto del pedido de
+     la sesion (7), que solo pidio bajar la intensidad global de
+     `snap-mandatory` a `snap-proximity` en TODAS las secciones (fix
+     todavia vigente ahi, pero insuficiente para este pedido nuevo y mas
+     especifico). Se volvio a `snap-mandatory` en el contenedor (para que
+     la transicion hero -> roster tenga resistencia dura en ambas
+     direcciones, como se pidio) pero se saco `snap-start`/`snap-always`
+     de TODAS las secciones excepto `#roster` (el destino inmediato
+     despues del hero) -- `#pronosticos`, `#combates`, y la seccion final
+     de sorteo (sin id) ya no son puntos de snap, asi que el scroll entre
+     ellas es 100% libre; solo el borde hero<->roster sigue "enganchando".
+     El propio `HeroBanner.astro` ya traia `snap-start snap-always` en su
+     `<section>` desde antes (no se toco, sesion (7) tampoco lo habia
+     tocado). No probado en navegador real (sin bash sobre el proyecto en
+     esta sesion tampoco, solo filesystem MCP) -- pendiente que el
+     usuario confirme que el hero sigue "enganchando" al cruzar su borde
+     en ambas direcciones y que el resto del scroll ya no fuerza saltos
+     de pantalla completa.
+- Todos los archivos tocados esta sesion se escribieron/editaron con
+  `filesystem:edit_file` sobre la ruta real
+  (`/home/cetrei/Proyectos/Personal/velada_lol`, nunca `str_replace`/
+  `create_file` del sandbox de ejecucion -- ver leccion de la sesion (5)
+  de mas arriba) y se releyeron desde ahi despues de cada edit para
+  confirmar que aterrizaron: `apps/web/src/pages/index.astro` (unico
+  archivo modificado esta sesion).
+- Pendiente para el usuario (sin bash real sobre el proyecto en esta
+  sesion tampoco, todo via filesystem MCP): correr `bun install` +
+  `bun run dev`, entrar a `/` y confirmar (a) que la seccion de combates
+  del landing ahora tiene los dos tabs igual que `/combates`, (b) que
+  scrollear con la rueda del mouse desde `#pronosticos` en adelante ya no
+  fuerza saltos de pantalla completa (deberia sentirse igual que
+  cualquier pagina normal), y (c) que cruzar el borde del hero (bajando
+  desde arriba del todo, o subiendo de vuelta al hero) todavia "engancha"
+  con resistencia como antes. Tambien: cargar un Riot ID real en
+  `/inscripcion` y confirmar en las devtools (pestana Network, no solo
+  mirar la UI) si mmradar.gg sigue sin exponer los 6 scores en el HTML
+  servidor -- si en algun momento cambia, hay que actualizar
+  `parsePerformanceScores` con un fetch real nuevo, no asumiendo.
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.

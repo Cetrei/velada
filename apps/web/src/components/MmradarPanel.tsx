@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { actions } from "astro:actions";
-import type { Participant, MmradarPerformanceScores } from "@velada/core";
+import type { Participant, MmradarPerformanceScores, MmradarTitle } from "@velada/core";
 import { emitMmradarUpdate } from "../lib/mmradarUpdateBus";
 import { resolveTitleColor } from "../lib/mmradarTitleColor";
 
@@ -19,6 +19,16 @@ import { resolveTitleColor } from "../lib/mmradarTitleColor";
  * dejar un hueco vacio -- mismo criterio que el resto de componentes que
  * consumen datos opcionales de mmradar (icono/server/nivel tambien caen
  * sin romper el layout si faltan).
+ *
+ * Participantes de meme (excludeFromMatches, ver
+ * ParticipantSchema.memeTitles/memeIconUrl): no tienen lolUsername real,
+ * asi que nunca van a tener icono/titulos/rango de mmradar. Pedido
+ * explicito del usuario 2026-08-19: el icono, riot id y titulos van
+ * SIEMPRE en este mismo cuadro (arriba del nombre), nunca en un bloque
+ * aparte -- para un meme, memeIconUrl/memeTitles se usan como fallback
+ * visual de icono/titulos cuando no hay datos reales de mmradar (nunca
+ * los reemplazan si existen -- un meme no deberia tener lolUsername de
+ * todos modos, pero por las dudas los reales siempre ganan).
  */
 
 type ParticipantMmradarData = Pick<
@@ -32,6 +42,8 @@ type ParticipantMmradarData = Pick<
   | "mmradarIconUrl"
   | "mmradarServer"
   | "mmradarLevel"
+  | "memeTitles"
+  | "memeIconUrl"
 >;
 
 interface MmradarPanelProps {
@@ -80,8 +92,31 @@ export default function MmradarPanel({ participant, canUpdate, onUpdated }: Mmra
   const [updating, setUpdating] = useState(false);
   const [status, setStatus] = useState<StatusMessage>(null);
 
+  // Fallback de meme: si no hay titulos/icono reales de mmradar (nunca los
+  // pisa si existen), se usan memeTitles/memeIconUrl para que un
+  // participante de meme (sin lolUsername real) igual muestre algo arriba
+  // del nombre en este mismo cuadro -- ver comentario de cabecera del
+  // archivo. memeTitles es string[] (no trae color real de ninguna fuente,
+  // a diferencia de MmradarTitle), asi que se envuelve a {text, color:
+  // null} para reusar el mismo render/resolveTitleColor que los titulos
+  // reales (cae al hash determinista por texto, mismo criterio que
+  // cualquier titulo sin color).
+  const displayTitles: MmradarTitle[] | null =
+    titles && titles.length > 0
+      ? titles
+      : participant.memeTitles && participant.memeTitles.length > 0
+        ? participant.memeTitles.map((text) => ({ text, color: null }))
+        : null;
+  const displayIconUrl = iconUrl ?? participant.memeIconUrl ?? null;
+
   const hasAnyData = Boolean(
-    performanceRank || scores || (titles && titles.length > 0) || iconUrl || server || level || participant.lolUsername
+    performanceRank ||
+      scores ||
+      (displayTitles && displayTitles.length > 0) ||
+      displayIconUrl ||
+      server ||
+      level ||
+      participant.lolUsername
   );
   if (!hasAnyData && !canUpdate) return null;
 
@@ -126,9 +161,9 @@ export default function MmradarPanel({ participant, canUpdate, onUpdated }: Mmra
 
   return (
     <div className="mmradar-panel">
-      {titles && titles.length > 0 && (
+      {displayTitles && displayTitles.length > 0 && (
         <div className="mmradar-titles">
-          {titles.map((title) => {
+          {displayTitles.map((title) => {
             const color = resolveTitleColor(title);
             return (
               <span
@@ -145,10 +180,10 @@ export default function MmradarPanel({ participant, canUpdate, onUpdated }: Mmra
 
       <div className="mmradar-header">
         <div className="mmradar-identity">
-          {iconUrl && (
+          {displayIconUrl && (
             <span className="mmradar-icon-wrap">
               <img
-                src={iconUrl}
+                src={displayIconUrl}
                 alt=""
                 className="mmradar-icon"
                 loading="lazy"

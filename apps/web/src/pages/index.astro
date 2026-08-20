@@ -5,14 +5,17 @@ import Countdown from "../components/Countdown";
 import ChampionSelectGrid from "../components/ChampionSelectGrid";
 import PredictionsSection from "../components/PredictionsSection";
 import MatchesSection from "../components/MatchesSection.astro";
+import TeamMatchesSection from "../components/TeamMatchesSection.astro";
 import { loadParticipants } from "../lib/loadParticipants";
 import { fetchEventState } from "../lib/eventState";
 import { fetchMatches, withOfficialResult, openForPredictions, fetchPredictionTallies } from "../lib/matches";
+import { fetchTeamMatches } from "../lib/teamMatches";
 import { PAGES } from "@velada/core";
 
 const participants = await loadParticipants();
 const eventState = await fetchEventState();
 const allMatches = await fetchMatches();
+const teamMatches = (await fetchTeamMatches()).slice(0, 3);
 
 const participantsById = Object.fromEntries(participants.map((p) => [p.id, p]));
 const rivalByParticipantId = Object.fromEntries(
@@ -36,7 +39,7 @@ const { predictions, matches, home } = PAGES;
       <Countdown client:load targetIso={eventState.startTime} />
     </HeroBanner>
 
-    <section id="roster" class="h-screen snap-start snap-always flex flex-col items-center justify-center bg-lol-darkBg border-y border-lol-border py-4 overflow-y-auto">
+    <section id="roster" class="h-screen snap-start flex flex-col items-center justify-center bg-lol-darkBg border-y border-lol-border py-4 overflow-y-auto">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full min-h-full flex flex-col items-center justify-center gap-4">
         <div class="w-full flex items-center justify-center">
           <ChampionSelectGrid client:load participants={participants} rivalByParticipantId={rivalByParticipantId} />
@@ -55,7 +58,7 @@ const { predictions, matches, home } = PAGES;
 
     {
       predictionMatches.length > 0 && (
-        <section id="pronosticos" class="h-screen snap-start snap-always flex items-center justify-center bg-black overflow-hidden">
+        <section id="pronosticos" class="h-screen flex items-center justify-center bg-black overflow-hidden">
           <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 w-full max-h-full overflow-y-auto">
             <div class="text-center mb-10">
               <h2 class="font-display text-4xl md:text-5xl font-bold text-white uppercase tracking-wider">
@@ -86,8 +89,8 @@ const { predictions, matches, home } = PAGES;
     }
 
     {
-      officialMatches.length > 0 && (
-        <section id="combates" class="h-screen snap-start snap-always flex items-center justify-center bg-lol-darkBg border-y border-lol-border overflow-hidden">
+      (officialMatches.length > 0 || teamMatches.length > 0) && (
+        <section id="combates" class="h-screen flex items-center justify-center bg-lol-darkBg border-y border-lol-border overflow-hidden">
           <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full max-h-full overflow-y-auto">
             <div class="text-center mb-10">
               <h2 class="font-display text-4xl md:text-5xl font-bold text-white uppercase tracking-wider">
@@ -97,7 +100,22 @@ const { predictions, matches, home } = PAGES;
               <p class="text-slate-400 mt-6 max-w-xl mx-auto">{home.matches.subtitle}</p>
             </div>
 
-            <MatchesSection matches={officialMatches} participantsById={participantsById} />
+            <div class="home-matches-tabs">
+              <input type="radio" name="home-matches-tab" id="home-tab-1v1" class="home-matches-tab-input" checked />
+              <input type="radio" name="home-matches-tab" id="home-tab-teams" class="home-matches-tab-input" />
+
+              <div class="home-matches-tab-labels flex justify-center gap-2 mb-8">
+                <label for="home-tab-1v1" class="home-matches-tab-label">{matches.tab1v1}</label>
+                <label for="home-tab-teams" class="home-matches-tab-label">{matches.tabTeams}</label>
+              </div>
+
+              <div class="home-matches-tab-panel" id="home-panel-1v1">
+                <MatchesSection matches={officialMatches} participantsById={participantsById} />
+              </div>
+              <div class="home-matches-tab-panel" id="home-panel-teams">
+                <TeamMatchesSection teamMatches={teamMatches} participantsById={participantsById} />
+              </div>
+            </div>
 
             <div class="text-center mt-8">
               <a
@@ -112,7 +130,7 @@ const { predictions, matches, home } = PAGES;
       )
     }
 
-    <section class="h-screen snap-start snap-always flex items-center justify-center relative bg-gradient-to-b from-lol-darkBg to-black overflow-hidden">
+    <section class="h-screen flex items-center justify-center relative bg-gradient-to-b from-lol-darkBg to-black overflow-hidden">
       <div
         class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-lol-gold/5 rounded-full blur-[100px] pointer-events-none"
       />
@@ -134,3 +152,45 @@ const { predictions, matches, home } = PAGES;
     </section>
   </div>
 </Layout>
+
+<style>
+  .home-matches-tab-input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .home-matches-tab-label {
+    padding: 0.6rem 1.5rem;
+    border: 1px solid rgba(200, 170, 110, 0.3);
+    color: #94a3b8;
+    font-family: var(--font-display, inherit);
+    font-weight: 700;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: color 0.2s, background-color 0.2s, border-color 0.2s;
+    user-select: none;
+  }
+
+  .home-matches-tab-label:hover {
+    color: #c8aa6e;
+  }
+
+  .home-matches-tab-panel {
+    display: none;
+  }
+
+  #home-tab-1v1:checked ~ .home-matches-tab-labels label[for="home-tab-1v1"],
+  #home-tab-teams:checked ~ .home-matches-tab-labels label[for="home-tab-teams"] {
+    background-color: #c8aa6e;
+    border-color: #c8aa6e;
+    color: #0a1428;
+  }
+
+  #home-tab-1v1:checked ~ #home-panel-1v1,
+  #home-tab-teams:checked ~ #home-panel-teams {
+    display: block;
+  }
+</style>
