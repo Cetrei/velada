@@ -141,11 +141,27 @@ export default function PerformancePreviewCard({
         </div>
       )}
 
-      <div className="performance-preview-header">
-        <span className="performance-preview-title">Performance</span>
-        <span className={`performance-preview-total ${!hasScores ? "performance-preview-total-empty" : ""}`}>
-          {hasScores ? (performanceRank ? performanceRank : `${total}`) : statusText}
-        </span>
+      {/* Bloque de performance con apariencia de "carta": mismo criterio
+          visual que MmradarPanel (rectangulo propio, rango de performance
+          a la derecha del label, numero total a la derecha de la barra).
+          El rango que se muestra es performanceRank (el rango que
+          corresponde al desempeno segun mmradar), nunca el rango oficial
+          de Riot -- son conceptos distintos, ver mmradarScraper.ts. */}
+      <div className="performance-preview-block">
+        <div className="performance-preview-header">
+          <span className="performance-preview-title">Performance</span>
+          <span className={`performance-preview-total ${!hasScores ? "performance-preview-total-empty" : ""}`}>
+            {hasScores ? (performanceRank ?? null) : statusText}
+          </span>
+        </div>
+        {hasScores && (
+          <div className="performance-preview-average-row">
+            <div className="performance-preview-average-track">
+              <div className="performance-preview-average-fill" style={{ width: `${Math.min(100, Math.round((total / maxScore) * 100))}%` }} />
+            </div>
+            <span className="performance-preview-average-value">{total}</span>
+          </div>
+        )}
       </div>
 
       <div className={`performance-preview-scores ${status === "checking" ? "performance-preview-pulsing" : ""}`}>
@@ -239,11 +255,52 @@ export default function PerformancePreviewCard({
           text-overflow: ellipsis;
         }
 
+        /* Rectangulo propio que envuelve label + rango + barra, mismo
+           criterio visual que .mmradar-performance en MmradarPanel. */
+        .performance-preview-block {
+          margin-bottom: 10px;
+          padding: 8px 10px;
+          background: rgba(200, 170, 110, 0.08);
+          border: 1px solid rgba(200, 170, 110, 0.25);
+          border-radius: 3px;
+        }
+
         .performance-preview-header {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          margin-bottom: 10px;
+        }
+
+        .performance-preview-average-row {
+          margin-top: 6px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .performance-preview-average-track {
+          flex: 1;
+          height: 8px;
+          background: rgba(0, 0, 0, 0.5);
+          border: 1px solid #C8AA6E;
+          border-radius: 2px;
+          overflow: hidden;
+          box-shadow: 0 0 8px rgba(200, 170, 110, 0.25);
+        }
+
+        .performance-preview-average-fill {
+          height: 100%;
+          background: linear-gradient(to right, #C8AA6E, #f0e6d2, #4FC3E8);
+          transition: width 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        .performance-preview-average-value {
+          flex-shrink: 0;
+          min-width: 2ch;
+          text-align: right;
+          font-size: 0.72rem;
+          font-weight: 700;
+          color: #C8AA6E;
         }
 
         .performance-preview-title {

@@ -1,5 +1,5 @@
 import { rankIconPath } from "@velada/core";
-import type { ParticipantStat, MmradarPerformanceScores } from "@velada/core";
+import type { ParticipantStat } from "@velada/core";
 
 /**
  * Version "reducida" de los datos de un participante que alcanza para
@@ -17,19 +17,15 @@ export interface PlayerCardData {
   photo?: string | null;
   banner?: string | null;
   stats?: ParticipantStat[];
-  /** Performance rank de mmradar.gg (ver packages/core/mmradarScraper.ts), el mismo valor que usa el balanceador de equipos para el skill rating. Se muestra como resumen entre el header y las stats custom. */
-  performanceRank?: string | null;
   /**
-   * Las 6 scores crudas de mmradar (laning/farming/objectives/combat/
-   * teamfight/vision). Antes esta carta solo recibia performanceRank (el
-   * texto "Diamond II") y no tenia con que dibujar una barra -- a
-   * diferencia de las stats custom de abajo, que si tienen su propio
-   * valor 0-100 por barra. Con los scores disponibles, el bloque de
-   * performance dibuja una barra de progreso igual que el resto (ver
-   * player-card-performance-fill), normalizada contra el maximo de las
-   * 6 igual que hace MmradarPanel/PerformancePreviewCard.
+   * performanceRank/performanceScores de mmradar ya NO se dibujan en esta
+   * carta (se movieron por completo a MmradarPanel/PerformancePreviewCard,
+   * que ahora muestran su propio bloque de performance con el rango
+   * correspondiente al performance, no al rango oficial de Riot -- ver
+   * esos componentes). Se quitaron estos dos campos de PlayerCardData
+   * porque ya no los consume nada aca: mostrar performance en dos lugares
+   * de la misma pagina (esta carta Y el panel de al lado) era redundante.
    */
-  performanceScores?: MmradarPerformanceScores | null;
 }
 
 interface PlayerCardProps {
@@ -61,18 +57,6 @@ export default function PlayerCard({ data, className = "" }: PlayerCardProps) {
   const bgImage = data.banner || data.photo || fallbackImg(data.nickname);
   const avatarImage = data.photo || null;
   const visibleStats = (data.stats ?? []).filter((s) => s.label.trim().length > 0).slice(0, 4);
-
-  const scores = data.performanceScores ?? null;
-  const performanceMax = scores ? Math.max(...Object.values(scores), 1) : 1;
-  const performanceAvg = scores
-    ? Math.round(Object.values(scores).reduce((sum, v) => sum + v, 0) / Object.values(scores).length)
-    : null;
-  // La barra usa el promedio de las 6 scores relativo a la mayor de ellas
-  // (mismo criterio de normalizacion 0-100% que ya usan mmradar-score-fill
-  // y performance-preview-fill) -- asi las tres cartas que muestran
-  // performance en el sitio (esta, MmradarPanel, PerformancePreviewCard)
-  // se leen igual visualmente.
-  const performanceBarPct = scores ? Math.min(100, Math.round((performanceAvg! / performanceMax) * 100)) : 0;
 
   return (
     <div className={`player-card ${className}`}>
@@ -111,23 +95,6 @@ export default function PlayerCard({ data, className = "" }: PlayerCardProps) {
 
       <div className="player-card-footer">
         {data.favChampion && <p className="player-card-champion">{data.favChampion}</p>}
-
-        {data.performanceRank && (
-          <div className="player-card-performance">
-            <div className="player-card-performance-label-row">
-              <span className="player-card-performance-label">Performance</span>
-              <span className="player-card-performance-value">{data.performanceRank}</span>
-            </div>
-            {scores && (
-              <div className="player-card-performance-track-row">
-                <div className="player-card-performance-track">
-                  <div className="player-card-performance-fill" style={{ width: `${performanceBarPct}%` }} />
-                </div>
-                <span className="player-card-performance-score">{performanceAvg}</span>
-              </div>
-            )}
-          </div>
-        )}
 
         {visibleStats.length > 0 && (
           <div className="player-card-stats">
@@ -307,69 +274,6 @@ export default function PlayerCard({ data, className = "" }: PlayerCardProps) {
           font-size: clamp(0.6rem, 2cqw, 0.75rem);
           text-transform: uppercase;
           letter-spacing: 0.04em;
-        }
-
-        .player-card-performance {
-          margin: clamp(6px, 2%, 10px) 0 0;
-          padding: 6px 8px;
-          background: rgba(200, 170, 110, 0.08);
-          border: 1px solid rgba(200, 170, 110, 0.25);
-          border-radius: 3px;
-        }
-
-        .player-card-performance-label-row {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 8px;
-        }
-
-        .player-card-performance-label {
-          font-size: clamp(0.5rem, 1.6cqw, 0.62rem);
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          color: #a09b8c;
-        }
-
-        .player-card-performance-value {
-          font-size: clamp(0.62rem, 2cqw, 0.78rem);
-          font-weight: 700;
-          color: #4FC3E8;
-        }
-
-        /* Barra de performance: mismo track/fill visual que las stats
-           custom de abajo (player-card-stat-track/-fill), asi el bloque
-           de performance ya no se queda solo en texto ("Diamond II") sin
-           ningun indicador visual como el resto de la carta. Solo se
-           dibuja cuando hay scores reales (ver "scores &&" en el JSX) --
-           sin scores no hay con que normalizar un ancho con sentido. */
-        .player-card-performance-track-row {
-          margin-top: 5px;
-          display: flex;
-          align-items: center;
-          gap: 6px;
-        }
-
-        .player-card-performance-track {
-          flex: 1;
-          height: 7px;
-          background: rgba(0,0,0,0.5);
-          border: 1px solid #C8AA6E;
-          border-radius: 2px;
-          overflow: hidden;
-          box-shadow: 0 0 8px rgba(200, 170, 110, 0.25);
-        }
-
-        .player-card-performance-fill {
-          height: 100%;
-          background: linear-gradient(to right, #4FC3E8, #C8AA6E);
-        }
-
-        .player-card-performance-score {
-          flex-shrink: 0;
-          font-size: clamp(0.5rem, 1.6cqw, 0.62rem);
-          font-weight: 700;
-          color: #a09b8c;
         }
 
         .player-card-stats {

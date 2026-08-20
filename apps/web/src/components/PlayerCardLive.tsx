@@ -1,16 +1,17 @@
-import { useEffect, useState } from "react";
-import type { Participant, MmradarPerformanceScores } from "@velada/core";
+import type { Participant } from "@velada/core";
 import PlayerCard from "./PlayerCard";
-import { onMmradarUpdate } from "../lib/mmradarUpdateBus";
 
 /**
- * Wrapper client:load de PlayerCard para /peleadores/[id]: envuelve la
- * carta con un performanceRank que puede actualizarse en caliente cuando
- * el MmradarPanel de la columna derecha (isla de React SEPARADA, ver
- * lib/mmradarUpdateBus.ts) dispara "Actualizar". Sin esto, apretar
- * Actualizar en el panel de la derecha nunca movia la barra de
- * performance de esta carta sin recargar toda la pagina -- cada
- * client:load es su propia isla de React, no comparten estado entre si.
+ * Wrapper client:load de PlayerCard para /peleadores/[id]. Antes escuchaba
+ * mmradarUpdateBus para refrescar en caliente el bloque de performance de
+ * esta carta cuando MmradarPanel (columna derecha, isla de React separada)
+ * disparaba "Actualizar" -- ese bloque de performance se quito por completo
+ * de PlayerCard (ver ese archivo: mostrar performance en dos lugares de la
+ * misma pagina era redundante, ahora vive solo en MmradarPanel), asi que ya
+ * no hay nada que este wrapper necesite mantener sincronizado en vivo. Se
+ * mantiene como wrapper (en vez de usar PlayerCard directo desde el .astro)
+ * por si en el futuro vuelve a hacer falta un client:load con estado propio
+ * para esta carta puntual.
  */
 
 interface PlayerCardLiveProps {
@@ -25,36 +26,9 @@ interface PlayerCardLiveProps {
     banner?: string | null;
     stats?: Participant["stats"];
   };
-  initialPerformanceRank?: string | null;
-  /**
-   * Antes esta prop no existia: la barra de performance de PlayerCard
-   * (agregada junto con este campo) nunca tenia con que dibujarse en
-   * /peleadores/[id], porque ni el estado inicial (server-rendered) ni el
-   * update en vivo via mmradarUpdateBus pasaban los 6 scores crudos, solo
-   * el texto de performanceRank -- ver mmradarUpdateBus.ts y PlayerCard.tsx.
-   */
-  initialPerformanceScores?: MmradarPerformanceScores | null;
   className?: string;
 }
 
-export default function PlayerCardLive({
-  participantId,
-  data,
-  initialPerformanceRank,
-  initialPerformanceScores,
-  className
-}: PlayerCardLiveProps) {
-  const [performanceRank, setPerformanceRank] = useState(initialPerformanceRank ?? null);
-  const [performanceScores, setPerformanceScores] = useState(initialPerformanceScores ?? null);
-
-  useEffect(() => {
-    return onMmradarUpdate((payload) => {
-      if (payload.participantId === participantId) {
-        setPerformanceRank(payload.performanceRank);
-        setPerformanceScores(payload.performanceScores);
-      }
-    });
-  }, [participantId]);
-
-  return <PlayerCard data={{ ...data, performanceRank, performanceScores }} className={className} />;
+export default function PlayerCardLive({ data, className }: PlayerCardLiveProps) {
+  return <PlayerCard data={data} className={className} />;
 }

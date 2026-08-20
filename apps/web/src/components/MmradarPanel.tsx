@@ -187,10 +187,11 @@ export default function MmradarPanel({ participant, canUpdate, onUpdated }: Mmra
               </div>
             )}
             {participant.lolUsername && <p className="mmradar-riot-id">{participant.lolUsername}</p>}
-            <div className="mmradar-meta">
-              {server && <span className="mmradar-server">{server}</span>}
-              {performanceRank && <span className="mmradar-rank">{performanceRank}</span>}
-            </div>
+            {server && (
+              <div className="mmradar-meta">
+                <span className="mmradar-server">{server}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -203,12 +204,31 @@ export default function MmradarPanel({ participant, canUpdate, onUpdated }: Mmra
 
       {status && <p className={`mmradar-status mmradar-status-${status.type}`}>{status.text}</p>}
 
-      {scores && averageScore !== null && (
-        <div className="mmradar-average-row">
-          <div className="mmradar-average-track">
-            <div className="mmradar-average-fill" style={{ width: `${averagePct}%` }} />
+      {/* Bloque de performance con apariencia de "carta": rectangulo
+          propio (mismo criterio visual que el bloque de performance que
+          antes vivia en PlayerCard, ver ese componente -- se saco de ahi
+          porque quedaba duplicado con este panel) con el rango a la
+          derecha del label "Performance" y el numero total a la derecha
+          de la barra. El rango que se muestra aca es performanceRank (el
+          rango que corresponde al desempeno segun mmradar, ej. "EMERALD
+          IV"), nunca lolRank (el rango oficial de Riot/Solo-Duo) -- son
+          conceptos distintos y mmradar los separa igual en su propio
+          sitio (ver id="performance-rank" vs id="current-rank" en
+          mmradarScraper.ts). */}
+      {(scores || performanceRank) && (
+        <div className="mmradar-performance">
+          <div className="mmradar-performance-label-row">
+            <span className="mmradar-performance-label">Performance</span>
+            {performanceRank && <span className="mmradar-performance-rank">{performanceRank}</span>}
           </div>
-          <span className="mmradar-average-value">{averageScore}</span>
+          {scores && averageScore !== null && (
+            <div className="mmradar-average-row">
+              <div className="mmradar-average-track">
+                <div className="mmradar-average-fill" style={{ width: `${averagePct}%` }} />
+              </div>
+              <span className="mmradar-average-value">{averageScore}</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -337,12 +357,6 @@ export default function MmradarPanel({ participant, canUpdate, onUpdated }: Mmra
           padding: 1px 6px;
         }
 
-        .mmradar-rank {
-          font-size: 0.75rem;
-          font-weight: 700;
-          color: #C8AA6E;
-        }
-
         .mmradar-update-btn {
           flex-shrink: 0;
           background: rgba(200, 170, 110, 0.1);
@@ -380,12 +394,43 @@ export default function MmradarPanel({ participant, canUpdate, onUpdated }: Mmra
           color: #e35d5d;
         }
 
+        /* Rectangulo propio que envuelve el bloque de performance completo
+           (label + rango + barra), mismo criterio visual que tenia el
+           bloque de performance en PlayerCard antes de sacarse de ahi. */
+        .mmradar-performance {
+          margin-top: 16px;
+          padding: 10px 12px;
+          background: rgba(200, 170, 110, 0.08);
+          border: 1px solid rgba(200, 170, 110, 0.25);
+          border-radius: 3px;
+        }
+
+        .mmradar-performance-label-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+        }
+
+        .mmradar-performance-label {
+          font-size: 0.65rem;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          color: #a09b8c;
+        }
+
+        .mmradar-performance-rank {
+          font-size: 0.78rem;
+          font-weight: 700;
+          color: #C8AA6E;
+        }
+
         /* Barra de promedio: mas gruesa y con borde dorado propio para
            que se distinga de las 6 barras individuales de abajo sin
            necesidad de una etiqueta de texto tipo "Promedio" -- el pedido
            explicito fue que se note por su forma, no por texto nuevo. */
         .mmradar-average-row {
-          margin-top: 16px;
+          margin-top: 8px;
           display: flex;
           align-items: center;
           gap: 10px;
