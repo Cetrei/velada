@@ -181,6 +181,9 @@ const STRONG_STAT_THRESHOLD = 2000;
 const ELITE_STAT_THRESHOLD = 2300;
 const MIN_GAMES_FOR_OTP = 3;
 const OTP_SHARE_THRESHOLD = 0.5;
+/** Opuesto de OTP: pool amplio de campeones, ningun campeon domina tus partidas. */
+const MIN_GAMES_FOR_SCOUT = 5;
+const SCOUT_MAX_CHAMPION_SHARE = 0.3;
 
 export const TITLE_DEFINITIONS: TitleDefinition[] = [
   {
@@ -193,6 +196,19 @@ export const TITLE_DEFINITIONS: TitleDefinition[] = [
       i.mostPlayedChampion.share >= OTP_SHARE_THRESHOLD,
     reason: (i) =>
       `Jugaste ${i.mostPlayedChampion?.name ?? "tu campeon"} en ${i.mostPlayedChampion?.games ?? 0} de tus ultimas ${i.gamesPlayed} partidas (${pct(i.mostPlayedChampion?.share ?? 0)}).`
+  },
+  {
+    id: "scout",
+    rarity: "uncommon",
+    label: () => "Scout",
+    evaluate: (i) => {
+      if (i.gamesPlayed < MIN_GAMES_FOR_SCOUT || !i.mostPlayedChampion) return false;
+      return i.mostPlayedChampion.share <= SCOUT_MAX_CHAMPION_SHARE;
+    },
+    reason: (i) => {
+      const distinctChamps = new Set(i.matches.map((m) => m.championName)).size;
+      return `Jugaste ${distinctChamps} campeones distintos en tus ultimas ${i.gamesPlayed} partidas, ninguno paso el ${Math.round(SCOUT_MAX_CHAMPION_SHARE * 100)}% -- pool amplio, te adaptas al draft.`;
+    }
   },
   {
     id: "mvp",

@@ -36,7 +36,13 @@ export const MmradarPerformanceScoresSchema = z.object({
  */
 export const MmradarTitleSchema = z.object({
   text: z.string().min(1),
-  color: z.string().nullable()
+  color: z.string().nullable(),
+  /**
+   * Por que se otorgo el titulo, con los numeros reales del jugador (ver
+   * TitleDefinition.reason en titleEngine.ts). null solo para titulos de
+   * meme (participant.memeTitles) que no pasan por el motor propio.
+   */
+  reason: z.string().nullable().optional()
 });
 
 export const ParticipantSchema = z.object({
@@ -67,6 +73,14 @@ export const ParticipantSchema = z.object({
   mmradarIconUrl: z.string().nullable().optional(),
   mmradarServer: z.string().nullable().optional(),
   mmradarLevel: z.number().nullable().optional(),
+  /**
+   * Habilidad 1v1 propia (ver packages/core/duelRating.ts): 0-100, con
+   * confidence 0-1 segun cuantas partidas hubo detras del calculo.
+   * Cacheados igual que el resto de datos de mmradar -- se recalculan al
+   * guardar/actualizar el perfil, nunca en cada render.
+   */
+  duelRating: z.number().nullable().optional(),
+  duelConfidence: z.number().nullable().optional(),
   /**
    * Participante "de meme": aparece en el roster/grid de seleccion como
    * cualquier otro, pero se excluye de todo lo competitivo -- ruleta,

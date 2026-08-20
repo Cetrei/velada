@@ -112,16 +112,20 @@ const copy = PAGES.fighterDetail;
                 id: participant.id,
                 name: participant.name,
                 lolUsername: participant.lolUsername,
+                lolRank: participant.lolRank,
                 performanceRank: participant.performanceRank,
                 performanceScores: participant.performanceScores,
                 titles: participant.titles,
                 mmradarIconUrl: participant.mmradarIconUrl,
                 mmradarServer: participant.mmradarServer,
                 mmradarLevel: participant.mmradarLevel,
+                duelRating: participant.duelRating,
+                duelConfidence: participant.duelConfidence,
                 memeTitles: participant.memeTitles,
                 memeIconUrl: participant.memeIconUrl
               }}
               canUpdate={canUpdateMmradar}
+              rival={rival ? { name: rival.name, duelRating: rival.duelRating, lolRank: rival.lolRank } : null}
             />
           </div>
           <div class="flex items-center gap-4 mt-4">

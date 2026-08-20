@@ -1,5 +1,7 @@
 import type { MmradarPerformanceScores, MmradarTitle } from "@velada/core";
+import { MMRADAR_SCORES_EXPLAINED, PERFORMANCE_RANK_EXPLANATION } from "@velada/core";
 import { resolveTitleColor } from "../lib/mmradarTitleColor";
+import InfoModal from "./InfoModal";
 
 /**
  * Presentacion unica del bloque de mmradar (icono+nivel, Riot ID, titulos,
@@ -26,6 +28,24 @@ const EMPTY_SCORES: MmradarPerformanceScores = {
   teamfight: 0,
   vision: 0
 };
+
+/**
+ * Maximo de RENDER fijo para las barras (6 individuales + la de
+ * Performance) -- pedido explicito del usuario 2026-08-20: mmradar usa
+ * 2500 como techo visual de sus propias barras, aunque un valor real
+ * puntual pueda superarlo (se clampea al 100% en ese caso, no se
+ * reescala el resto de las barras). Reemplaza el Math.max(...values, 1)
+ * dinamico que habia antes, que hacia que la barra mas alta de cada
+ * jugador SIEMPRE se viera al 100% sin importar su valor real -- con eso
+ * dos perfiles con stats muy distintos (ej. 1200 vs 2400 de Combat)
+ * podian verse con barras igual de "llenas", perdiendo toda comparacion
+ * visual entre perfiles.
+ */
+const BAR_RENDER_MAX = 2500;
+
+function barPct(value: number): number {
+  return Math.min(100, Math.round((value / BAR_RENDER_MAX) * 100));
+}
 
 export type MmradarCardStatus = "idle" | "checking" | "found" | "not_found" | "invalid" | "error";
 
@@ -63,11 +83,10 @@ export default function MmradarPerformanceCard({
   const hasScores = Boolean(scores);
   const displayScores = scores ?? EMPTY_SCORES;
   const values = Object.values(displayScores);
-  const maxScore = Math.max(...values, 1);
   // Mismo total que calcula mmradar.gg (ver fetchMatchScores en
   // packages/core/mmradarScraper.ts), no un promedio aritmetico simple.
   const average = hasScores ? Math.round(values.reduce((sum, v) => sum + v, 0) / values.length) : null;
-  const averagePct = average !== null ? Math.min(100, Math.round((average / maxScore) * 100)) : 0;
+  const averagePct = average !== null ? barPct(average) : 0;
 
   const statusText =
     status === "checking"
@@ -98,6 +117,7 @@ export default function MmradarPerformanceCard({
                 key={title.text}
                 className="mmradar-title-chip"
                 style={{ color: color.text, background: color.bg, borderColor: color.border }}
+                title={title.reason ?? undefined}
               >
                 {title.text}
               </span>
@@ -144,7 +164,18 @@ export default function MmradarPerformanceCard({
       {(hasScores || performanceRank || statusText) && (
         <div className="mmradar-performance">
           <div className="mmradar-performance-label-row">
-            <span className="mmradar-performance-label">Performance</span>
+            <span className="mmradar-performance-label-with-info">
+              <span className="mmradar-performance-label">Performance</span>
+              <InfoModal label={PERFORMANCE_RANK_EXPLANATION.title} title={PERFORMANCE_RANK_EXPLANATION.title}>
+                <p>{PERFORMANCE_RANK_EXPLANATION.summary}</p>
+                <p className="info-modal-formula">{PERFORMANCE_RANK_EXPLANATION.formula}</p>
+                <ul>
+                  {PERFORMANCE_RANK_EXPLANATION.points.map((point) => (
+                    <li key={point}>{point}</li>
+                  ))}
+                </ul>
+              </InfoModal>
+            </span>
             <span className={`mmradar-performance-rank ${!hasScores && statusText ? "mmradar-performance-rank-empty" : ""}`}>
               {hasScores ? performanceRank ?? null : statusText}
             </span>
@@ -164,13 +195,22 @@ export default function MmradarPerformanceCard({
         {(Object.keys(STAT_LABELS) as (keyof MmradarPerformanceScores)[]).map((key) => (
           <div key={key} className="mmradar-score-row">
             <div className="mmradar-score-label">
-              <span>{STAT_LABELS[key]}</span>
+              <span className="mmradar-score-label-with-info">
+                {STAT_LABELS[key]}
+                <InfoModal
+                  label={`Que mide ${MMRADAR_SCORES_EXPLAINED.stats[key].label}`}
+                  title={MMRADAR_SCORES_EXPLAINED.stats[key].label}
+                  iconSize={12}
+                >
+                  <p>{MMRADAR_SCORES_EXPLAINED.stats[key].description}</p>
+                </InfoModal>
+              </span>
               <span>{hasScores ? displayScores[key] : "--"}</span>
             </div>
             <div className="mmradar-score-track">
               <div
                 className="mmradar-score-fill"
-                style={{ width: hasScores ? `${(displayScores[key] / maxScore) * 100}%` : "0%" }}
+                style={{ width: hasScores ? `${barPct(displayScores[key])}%` : "0%" }}
               />
             </div>
           </div>
@@ -210,6 +250,7 @@ export default function MmradarPerformanceCard({
           padding: 3px 8px;
           border-radius: 3px;
           white-space: nowrap;
+          cursor: help;
         }
 
         .mmradar-card-compact .mmradar-title-chip {
@@ -367,6 +408,12 @@ export default function MmradarPerformanceCard({
           gap: 8px;
         }
 
+        .mmradar-performance-label-with-info {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+        }
+
         .mmradar-performance-label {
           font-size: 0.65rem;
           text-transform: uppercase;
@@ -463,6 +510,12 @@ export default function MmradarPerformanceCard({
           letter-spacing: 0.03em;
           color: #a09b8c;
           margin-bottom: 3px;
+        }
+
+        .mmradar-score-label-with-info {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
         }
 
         .mmradar-card-compact .mmradar-score-label {

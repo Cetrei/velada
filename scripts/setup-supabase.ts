@@ -155,6 +155,14 @@ ALTER TABLE participants ADD COLUMN IF NOT EXISTS mmradar_server TEXT;
 -- columnas mmradar: se re-consulta junto con todo lo demas, nunca se
 -- escribe a mano.
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS mmradar_level INTEGER;
+-- Habilidad 1v1 propia (packages/core/duelRating.ts): puntaje 0-100 mas
+-- confidence 0-1 segun cuantas partidas hubo detras del calculo. Se
+-- recalcula junto con el resto de datos de mmradar (mismo
+-- fetchMmradarProfile), nunca se escribe a mano. Usado por el componente
+-- de habilidad 1v1 en la ficha del peleador para calcular probabilidad
+-- de victoria en un duelo contra otro participante.
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS duel_rating INTEGER;
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS duel_confidence REAL;
 
 -- Combates por equipos (5v5 o mezclas de 4v4/3v3) del evento mayor,
 -- separados de matches (que es siempre 1v1, de la ruleta). Un solo

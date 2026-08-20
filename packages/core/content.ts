@@ -218,6 +218,48 @@ export const PAGES = {
   }
 };
 
+/**
+ * Copy de las 6 categorias de mmradar (bloque "Scores Explained" del
+ * modal de ayuda, icono "!" junto a cada barra de MmradarPerformanceCard)
+ * -- version simplificada (no copy-paste) del texto real del popup
+ * "Scores Explained" de mmradar.gg que pego el usuario 2026-08-20,
+ * conservando la idea de cada categoria pero mas corto y en espanol,
+ * mismo criterio que PERFORMANCE_RANK_EXPLANATION
+ * (packages/core/performanceRank.ts) y DUEL_RATING_EXPLANATION
+ * (packages/core/duelRating.ts), que si son propios de este proyecto.
+ */
+export const MMRADAR_SCORES_EXPLAINED = {
+  title: "¿Qué mide cada stat?",
+  summary:
+    "Estos 6 números resumen tu rendimiento reciente en tus últimas partidas -- no son 0 a 100, son un puntaje propio de mmradar en una escala de miles.",
+  stats: {
+    laning: {
+      label: "Laning",
+      description: "Tu impacto en la línea comparado con tu rival directo: diferencia de CS, trades ganados, placas de torre, kills/asistencias tempranas y presión de línea. Suele medirse en los primeros 10-14 minutos, antes de que el equipo empiece a agruparse."
+    },
+    farming: {
+      label: "Farming",
+      description: "Qué tan bien generaste oro durante toda la partida: CS, jungla, impuesto de línea, recompensas por kills/objetivos y farmeo perdido según tu rango, comparado con el resto de la partida."
+    },
+    objectives: {
+      label: "Objectives",
+      description: "Tu aporte a torres, dragón, heraldo y barón: cuántos ayudaste a conseguir, daño a objetivos, y bonus extra por primera torre, primer dragón, alma de dragón o robos de objetivo."
+    },
+    combat: {
+      label: "Combat",
+      description: "Tu impacto en peleas y momentos destacados: kills/asistencias relativas a tu equipo, nivel de recompensa, rachas, kills solo, multikills y peleas ganadas en desventaja numerica."
+    },
+    teamfight: {
+      label: "Teamfight",
+      description: "Tu peso en las peleas de equipo: participación en kills, daño hecho y recibido comparado con los mejores de tu equipo -- premia mantenerte involucrado y marcar diferencia en las peleas clave."
+    },
+    vision: {
+      label: "Vision",
+      description: "Control de mapa según lo esperado para tu rol: visión por minuto, wards de control puestas, limpieza temprana de wards enemigas y protección de las propias -- a un support se le exige mas que a un solo laner."
+    }
+  }
+};
+
 export const FIGHTER_CARD = {
   rankLabel: "Rango Actual",
   favChampionLabel: "Campeón Favorito"

@@ -44,6 +44,8 @@
 import type { TitleEngineMatch } from "./titleEngine";
 import { buildTitleEngineInput, evaluateTitles } from "./titleEngine";
 import { computePerformanceRank } from "./performanceRank";
+import { computeDuelRatingFromMatches, type DuelRatingResult } from "./duelRating";
+import type { MmradarTitle } from "./schemas";
 
 export type MmradarLookupErrorReason =
   | "not_found"
@@ -76,31 +78,15 @@ export interface MmradarCurrentRank {
 
 /**
  * Un titulo otorgado por mmradar (ej. "OTP Kindred", "Duelist", "MVP")
- * junto con su color, si el HTML lo trae. mmradar le pone a cada chip de
- * titulo un color propio (visible en la referencia del usuario: azul,
- * magenta, verde, dorado) -- se intenta leer ese color real del HTML
- * (style inline en el propio <p class="player-title">, mismo patron que
- * ya usa parseCurrentRank/parsePerformanceRank para leer
- * style="color: rgb(...)"). Si el HTML no trae color para ese titulo
- * puntual, color queda null: quien consuma esto (MmradarPanel,
- * PerformancePreviewCard) decide como resolver la falta de color (nunca
- * aca, este modulo solo scrapea lo que hay).
+ * junto con su color, si el HTML lo trae, y el motivo (reason) por el que
+ * se otorgo. Tipo definido una sola vez en schemas.ts (MmradarTitleSchema)
+ * -- se reusa aca via import en vez de redeclarar la interface, para que
+ * no haya dos definiciones de "MmradarTitle" compitiendo en el export *
+ * de index.ts (bug real encontrado 2026-08-20: este archivo y schemas.ts
+ * declaraban cada uno su propia interface/tipo MmradarTitle, y el reason
+ * de la version de schemas.ts no existia -- se perdia al pasar por Zod y
+ * por Supabase pese a que este scraper si lo poblaba).
  */
-export interface MmradarTitle {
-  text: string;
-  color: string | null;
-  /**
-   * Por que se otorgo el titulo, con los numeros reales del jugador (ej.
-   * "Combat 2140 y Teamfight 2310 de promedio") -- pedido explicito del
-   * usuario 2026-08-20: el hover de un titulo tiene que explicar el
-   * motivo, no solo mostrar el nombre. Los titulos que vienen del motor
-   * propio (ver titleEngine.ts, TITLE_DEFINITIONS[].reason) siempre traen
-   * esto poblado; queda null solo para titulos de meme
-   * (participant.memeTitles, ver MmradarPanel.tsx) que no pasan por el
-   * motor y no tienen un motivo real que mostrar.
-   */
-  reason: string | null;
-}
 
 export interface MmradarProfileResult {
   currentRank: MmradarCurrentRank | null;
@@ -113,6 +99,8 @@ export interface MmradarProfileResult {
   server: string | null;
   /** Nivel de invocador (id="summoner-level", numero suelto al lado del icono). null si no se encontro. */
   level: number | null;
+  /** Habilidad 1v1 propia (ver duelRating.ts). null si no hubo partidas suficientes para calcularla. */
+  duelRating: DuelRatingResult | null;
 }
 
 /**
@@ -434,26 +422,6 @@ async function fetchRawMatches(gameName: string, tagLine: string): Promise<RawMa
 }
 
 /**
- * Los titulos viven en <div id="player-titles"><p class="player-title
- * ..." data-tooltip="...">TEXTO</p>...</div>. Se extrae el texto interior
- * de cada <p class="player-title ...">, ignorando el tooltip.
- *
- * Color real (pedido explicito del usuario 2026-08-19, para no inventar
- * colores que no vienen de mmradar): cada <p class="player-title"> puede
- * traer su propio style inline (mismo patron ya usado por
- * parseCurrentRank/parsePerformanceRank para leer "color: rgb(r, g, b)"
- * de un style inline). Se busca ese patron DENTRO del tag de apertura del
- * propio <p> (no en una ventana generica alrededor, para no capturar el
- * color de un titulo vecino) y se convierte a hex para que los
- * consumidores (MmradarPanel, PerformancePreviewCard) no tengan que lidiar
- * con el formato rgb(). Si un titulo puntual no trae style de color en el
- * HTML, color queda null -- no se rellena con un valor inventado aca, eso
- * queda a criterio del componente que lo consume (ver colorForTitle en
- * apps/web/src/lib/mmradarTitleColor.ts, que sirve como fallback visual
- * SOLO cuando este color es null, nunca lo reemplaza si vino de la
- * fuente).
- */
-/**
  * Los titulos viven en un contenedor con id="player-titles", cada uno como
  * un <p class="player-title ..." data-tooltip="...">TEXTO</p>. Se extrae
  * el texto interior de cada uno, ignorando el tooltip.
@@ -475,6 +443,14 @@ async function fetchRawMatches(gameName: string, tagLine: string): Promise<RawMa
  * es donde entra el fallback por hash de texto en
  * apps/web/src/lib/mmradarTitleColor.ts, que nunca reemplaza un color
  * real si vino de aca.
+ *
+ * reason queda siempre null aca: estos titulos vienen del propio
+ * mmradar.gg (texto scrapeado del HTML), no del motor propio
+ * (titleEngine.ts) que si sabe explicar el motivo con los numeros reales
+ * del jugador. En la practica fetchMmradarProfile ya no usa esta funcion
+ * para poblar `titles` (ver mas abajo: usa evaluateTitles del motor
+ * propio, que si trae reason) -- se deja por si hiciera falta mostrar
+ * los titulos originales de mmradar en algun lado.
  */
 const TITLE_CLASS_COLORS: Record<string, string> = {
   "title-blue": "#4fc3e8",
@@ -520,7 +496,7 @@ function parseTitles(html: string): MmradarTitle[] {
           .join("")}`
       : colorFromTitleClasses(classAttr);
 
-    titles.push({ text, color });
+    titles.push({ text, color, reason: null });
   }
 
   return titles;
@@ -733,6 +709,17 @@ export async function fetchMmradarProfile(lolUsername: string): Promise<MmradarP
         )
       : [];
 
+    // Habilidad 1v1 propia (ver duelRating.ts): mismo fetchRawMatches ya
+    // consultado arriba, un solo POST a /load-matches cubre performance
+    // rank + titulos + duel rating -- nunca lanza (mismo criterio que el
+    // resto de datos derivados de raw), null si no hubo partidas.
+    const duelRating = raw
+      ? computeDuelRatingFromMatches(raw.engineMatches, {
+          performanceRank,
+          currentRank: currentRank?.rank ?? null
+        })
+      : null;
+
     return {
       currentRank,
       performanceRank,
@@ -740,7 +727,8 @@ export async function fetchMmradarProfile(lolUsername: string): Promise<MmradarP
       titles,
       iconUrl: parseIconUrl(html),
       server: parseServer(html),
-      level: parseSummonerLevel(html)
+      level: parseSummonerLevel(html),
+      duelRating
     };
   } catch (err) {
     if (err instanceof MmradarLookupError) throw err;

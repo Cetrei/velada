@@ -128,6 +128,9 @@ interface MmradarLookupResult {
   iconUrl: string | null;
   server: string | null;
   level: number | null;
+  /** Habilidad 1v1 propia (ver packages/core/duelRating.ts). null si no hubo partidas suficientes. */
+  duelRating: number | null;
+  duelConfidence: number | null;
 }
 
 /**
@@ -152,7 +155,9 @@ async function fetchMmradarData(lolUsername: string): Promise<MmradarLookupResul
       titles: result.titles.length > 0 ? result.titles : null,
       iconUrl: result.iconUrl,
       server: result.server,
-      level: result.level
+      level: result.level,
+      duelRating: result.duelRating?.rating ?? null,
+      duelConfidence: result.duelRating?.confidence ?? null
     };
   } catch (err) {
     if (err instanceof MmradarLookupError) {
@@ -160,7 +165,18 @@ async function fetchMmradarData(lolUsername: string): Promise<MmradarLookupResul
     } else {
       console.warn(`[fetchMmradarData] ${lolUsername}: error inesperado`, err);
     }
-    return { rank: null, lp: 0, performanceRank: null, performanceScores: null, titles: null, iconUrl: null, server: null, level: null };
+    return {
+      rank: null,
+      lp: 0,
+      performanceRank: null,
+      performanceScores: null,
+      titles: null,
+      iconUrl: null,
+      server: null,
+      level: null,
+      duelRating: null,
+      duelConfidence: null
+    };
   }
 }
 
@@ -460,6 +476,8 @@ export const server = {
         mmradar_icon_url: mmradar.iconUrl,
         mmradar_server: mmradar.server,
         mmradar_level: mmradar.level,
+        duel_rating: mmradar.duelRating,
+        duel_confidence: mmradar.duelConfidence,
         updated_at: new Date().toISOString(),
         ...(photoUrl ? { photo: photoUrl } : {}),
         ...(bannerUrl ? { banner: bannerUrl } : {})
@@ -558,7 +576,16 @@ export const server = {
       // diferencia de saveOwnParticipant, aca no es obligatorio.
       const mmradar = input.lolUsername
         ? await fetchMmradarData(input.lolUsername)
-        : { performanceRank: null, performanceScores: null, titles: null, iconUrl: null, server: null, level: null };
+        : {
+            performanceRank: null,
+            performanceScores: null,
+            titles: null,
+            iconUrl: null,
+            server: null,
+            level: null,
+            duelRating: null,
+            duelConfidence: null
+          };
 
       const row = {
         id: input.id,
@@ -586,6 +613,8 @@ export const server = {
         mmradar_icon_url: mmradar.iconUrl,
         mmradar_server: mmradar.server,
         mmradar_level: mmradar.level,
+        duel_rating: mmradar.duelRating,
+        duel_confidence: mmradar.duelConfidence,
         updated_at: new Date().toISOString(),
         ...(photoUrl ? { photo: photoUrl } : {}),
         ...(bannerUrl ? { banner: bannerUrl } : {})
@@ -705,6 +734,8 @@ export const server = {
           mmradar_icon_url: mmradar.iconUrl,
           mmradar_server: mmradar.server,
           mmradar_level: mmradar.level,
+          duel_rating: mmradar.duelRating,
+          duel_confidence: mmradar.duelConfidence,
           updated_at: new Date().toISOString()
         })
         .eq("id", id);
@@ -721,7 +752,9 @@ export const server = {
         titles: mmradar.titles,
         mmradarIconUrl: mmradar.iconUrl,
         mmradarServer: mmradar.server,
-        mmradarLevel: mmradar.level
+        mmradarLevel: mmradar.level,
+        duelRating: mmradar.duelRating,
+        duelConfidence: mmradar.duelConfidence
       };
     }
   }),
@@ -888,7 +921,9 @@ export const server = {
         titles: mmradar.titles,
         iconUrl: mmradar.iconUrl,
         server: mmradar.server,
-        level: mmradar.level
+        level: mmradar.level,
+        duelRating: mmradar.duelRating,
+        duelConfidence: mmradar.duelConfidence
       };
     }
   }),

@@ -6,5 +6,6 @@ export * from "./passwordRules";
 export * from "./mmradarScraper";
 export * from "./performanceRank";
 export * from "./skillRating";
+export * from "./duelRating";
 export * from "./teamBalancer";
 export * from "./countries";
