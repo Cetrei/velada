@@ -1516,6 +1516,64 @@ era el de arriba, no whitelist).
   agrego auth) antes de tocar el parser del HTML -- inspeccionar la
   pestana Network de nuevo es la forma de confirmarlo, no asumir.
 
+## Sesion 2026-08-20 (3): columna `mmradar_level` faltante en la base real (nunca se corrio setup-supabase.ts) + candado "Proximamente" en combates del landing
+- El usuario reporto dos cosas con un HTML/captura reales de `bun run dev`
+  corriendo: (1) error visible al crear/editar un perfil: `Could not find
+  the 'mmradar_level' column of 'participants' in the schema cache`; (2)
+  la seccion de combates del landing directamente no aparecia entre
+  `#roster` y el sorteo (confirmado en el HTML que pegó: no hay ningun
+  `<section id="combates">` ahi).
+- **(1) No era un bug de codigo**: revisado `scripts/setup-supabase.ts`
+  linea por linea -- `mmradar_level INTEGER` YA esta declarada en
+  `SETUP_SQL` como `ALTER TABLE participants ADD COLUMN IF NOT EXISTS
+  mmradar_level INTEGER;` desde la sesion (14) de mas arriba. El codigo
+  (`actions/index.ts`) y el schema declarado son consistentes entre si;
+  el problema es que el usuario confirmo explicitamente que **nunca
+  corrio `bun run scripts/setup-supabase.ts` contra el proyecto real** --
+  la columna simplemente no existe en la base real todavia, aunque el
+  DDL para crearla ya este escrito y sea seguro (idempotente,
+  `IF NOT EXISTS`, no borra nada) desde hace varias sesiones. No se toco
+  ningun archivo para esto -- el fix es que el usuario corra ese comando.
+- **(2) Aclarado el pedido real** (distinto de lo que se entendio en la
+  sesion (1) de hoy): el usuario no queria bloquear los tabs 1v1/Equipos
+  que ya funcionan cuando SI hay combates -- queria que la seccion
+  `#combates` del landing SIEMPRE aparezca (nunca desaparecer del todo
+  como hacia antes con la condicion `officialMatches.length > 0 ||
+  teamMatches.length > 0`), pero si no hay ni 1v1 ni team matches
+  generados todavia, mostrar un bloque simple de "Proximamente" con un
+  icono de candado en vez de los tabs vacios.
+- `apps/web/src/pages/index.astro`: la seccion `#combates` ya no esta
+  envuelta en el chequeo condicional que la ocultaba entera -- el
+  `<section>` siempre se renderiza (titulo + subtitulo siempre visibles).
+  Adentro, un ternario nuevo decide el contenido: si
+  `officialMatches.length === 0 && teamMatches.length === 0`, se muestra
+  un bloque `.combates-locked` (icono SVG de candado inline, sin
+  dependencia de Font Awesome ni de ningun asset externo -- mismo criterio
+  que otros iconos SVG inline ya usados en el proyecto, para no repetir el
+  problema historico de iconos Font Awesome Pro/CDN de sesiones
+  anteriores, ver sesion 2026-08-18(2)) + `home.matches.lockedTitle`/
+  `lockedSubtitle`; si hay contenido, se renderiza exactamente el mismo
+  bloque de tabs + CTA que ya existia antes (sin cambios ahi), envuelto en
+  un fragment `<>...</>` porque ahora son dos elementos hermanos (el div
+  de tabs + el div del CTA) donde antes eran los unicos hijos directos del
+  `<section>`.
+- `packages/core/content.ts`: agregados `home.matches.lockedTitle`
+  ("Proximamente") y `lockedSubtitle` ("Los combates todavia no fueron
+  generados. Volve mas tarde.") -- no habia copy previo para este estado,
+  se agrego siguiendo el mismo tono/formato que el resto de `home.matches`.
+- Ambos archivos editados con `filesystem:edit_file` sobre la ruta real y
+  releidos completos despues para confirmar sintaxis (el fragment `<>` es
+  valido en templates de Astro) y que aterrizaron.
+- Pendiente para el usuario: correr `bun run scripts/setup-supabase.ts`
+  (sin `--reset-data`, no hace falta para esto) para que la columna
+  `mmradar_level` (y cualquier otra que tambien faltara) exista en la base
+  real -- despues de eso, guardar/editar un perfil deberia dejar de tirar
+  el error de schema cache. Correr `bun install` + `bun run dev` y
+  confirmar en `/` que la seccion de combates ahora siempre aparece: con
+  candado + "Proximamente" si la base todavia no tiene 1v1 con resultado
+  oficial ni team matches, o con los tabs normales apenas se cargue
+  cualquiera de los dos.
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.

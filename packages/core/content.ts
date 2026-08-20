@@ -49,7 +49,9 @@ export const PAGES = {
       subtitle: "Resultados oficiales y tarjetas de los jueces.",
       cta: "Ver todos los combates",
       teamsSubtitle: "Combates por equipos de La Follada del Año.",
-      teamsCta: "Ver todos los combates por equipos"
+      teamsCta: "Ver todos los combates por equipos",
+      lockedTitle: "Próximamente",
+      lockedSubtitle: "Los combates todavía no fueron generados. Volvé más tarde."
     },
     raffle: {
       title: "Sorteo Oficial",
