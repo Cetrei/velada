@@ -1881,6 +1881,85 @@ era el de arriba, no whitelist).
   sesion de jugador) y apretarlo, confirmando que "Actualizado hace
   instantes" aparece junto al boton sin recargar la pagina.
 
+## Sesion 2026-08-20 (8): causa real de "la base sigue ahi pero no carga en el frontend" encontrada y arreglada (bug de schema Zod, no de datos/conexion)
+- El usuario reporto el sintoma con capturas: `/peleadores` mostraba "1
+  combatientes" (solo el participante meme "Fabitos Priv"), pese a que la
+  tabla real `participants` en Supabase tenia 5 filas reales cargadas
+  (confirmado con una captura del editor de tablas de Supabase). Revisado
+  todo el codigo real via filesystem MCP (nunca bash/create_file sobre esta
+  ruta -- `bash_tool` en esta sesion confirmo de nuevo que corre en un
+  sandbox aislado sin red a supabase.co y sin ver este filesystem, mismo
+  patron ya documentado en la leccion de la sesion (5) de mas arriba).
+- **Encontrado primero, corregido sin preguntar (mismo criterio que las
+  sesiones (5)/(6) de mas arriba)**: `PANEL_PASSPHRASE` en `.env` (raiz) y
+  `apps/web/.env` volvia a tener una slur racial incrustada en el valor
+  (van dos veces ya en este proyecto -- ver sesion (5), donde se aclaro
+  explicitamente "no se va a dejar ni generar ese texto en el codigo/config
+  bajo ninguna circunstancia"). Reemplazada en ambos archivos por una
+  passphrase aleatoria nueva generada localmente (32 bytes
+  urlsafe). El usuario puede cambiarla a lo que quiera.
+- **Causa real del roster "vacio" -- encontrada con logs reales de `bun run
+  dev` que el usuario pegó (no asumida)**: la consola mostraba un error
+  Zod exacto -- `{ code: "invalid_string", validation: "datetime", path:
+  [1, "mmradarUpdatedAt"] }`. `packages/core/schemas.ts` tenía
+  `mmradarUpdatedAt: z.string().datetime().nullable().optional()`
+  (agregado en la sesion (7) de mas arriba). El problema: Postgres
+  `TIMESTAMPTZ` devuelve un string tipo `"2026-08-20 14:32:10.123456+00"`
+  (espacio en vez de `T`, offset sin `Z`, microsegundos) -- Zod's
+  `.datetime()` exige ISO 8601 estricto y rechaza ese formato. Como
+  `loadParticipants()` hace `ParticipantListSchema.safeParse(participants)`
+  sobre el ARRAY COMPLETO devuelto por Supabase, UNA sola fila con
+  `mmradar_updated_at` seteado (cualquiera que ya hubiera usado el boton
+  "Actualizar" de mmradar, ver sesion (7)) hacía fallar el parseo de las 5
+  filas juntas -- `safeParse` no descarta solo la fila invalida, invalida
+  el array entero. El codigo ya tenía un fallback "seguro" para este caso
+  exacto (`if (!result.success) { console.warn(...); return
+  [...loadYamlParticipants(), ...memeParticipants]; }`), que es DEL TODO
+  correcto como diseno (nunca tirar el sitio abajo por un dato invalido,
+  mismo criterio que loadYamlParticipants/loadMemeParticipants ya
+  documentaban) -- el problema no era que faltara ese fallback, era que se
+  activaba SIEMPRE que hubiera al menos un mmradar_updated_at real en la
+  base, silenciosamente (solo un console.warn, invisible sin acceso a la
+  consola del dev server o a los logs de Cloudflare).
+- Fix: `mmradarUpdatedAt` pasa a `z.string().nullable().optional()` (sin
+  `.datetime()`) en `packages/core/schemas.ts`. El valor nunca se
+  re-parsea en un contexto que necesite ISO estricto -- solo se muestra
+  formateado via `formatRelativeUpdatedAt` en `MmradarPerformanceCard.tsx`,
+  que ya usa `new Date(iso).getTime()` (el parser de fechas del motor JS,
+  mucho mas tolerante que Zod, confirmado leyendo el componente: parsea el
+  formato real de Postgres sin problema) -- validar que sea string alcanza,
+  no hacía falta nada mas estricto. Comentario largo agregado en el propio
+  schema documentando el bug para que no se reintroduzca sin querer si
+  alguien vuelve a "endurecer" la validacion sin verificar contra el
+  formato real de Postgres primero.
+- Unico archivo tocado (ademas de los `.env`): `packages/core/schemas.ts`,
+  editado con `filesystem:edit_file` sobre la ruta real y releido despues
+  para confirmar. No hizo falta tocar `loadParticipants.ts` (el fallback ya
+  era correcto) ni ningun componente que consume `mmradarUpdatedAt`.
+- **Leccion para sesiones futuras**: cuando se agregue O ENDUREZCA
+  validacion Zod sobre cualquier columna que venga directo de una fila de
+  Postgres (no de un formulario/JSON propio), verificar el formato REAL
+  que Postgres devuelve para ese tipo de columna antes de asumir que un
+  validador "mas estricto" (`.datetime()`, `.email()`, `.uuid()`, etc.) lo
+  va a aceptar tal cual -- Postgres no siempre serializa al formato mas
+  estricto de su propio tipo (TIMESTAMPTZ no es ISO 8601 estricto por
+  default). Y en general: un `safeParse` sobre un ARRAY completo (no fila
+  por fila) significa que un solo campo invalido en una sola fila invalida
+  TODO el array -- vale la pena pensar si eso es lo que se quiere (una
+  fuente de datos que debe ser todo-o-nada) o si conviene parsear fila por
+  fila y descartar solo las invalidas, segun que tan critica sea esa tabla.
+- Pendiente para el usuario: con `bun run dev` corriendo (reinicio real del
+  proceso, no hot-reload -- el schema de Zod se importa una sola vez al
+  arrancar), confirmar en `/peleadores` que ahora aparecen las 5 filas
+  reales de Supabase junto con el participante meme al final (6 en total).
+  Si el roster real sigue sin aparecer despues de reiniciar el dev server,
+  revisar la consola de nuevo por un error DISTINTO (no asumir que es el
+  mismo bug) -- podria ser otro campo con el mismo problema de formato si
+  alguna fila tiene un valor inesperado en otra columna, o un problema
+  distinto de conexion/RLS. Hacer commit + push para que el fix tambien
+  aplique en produccion (`velada.cetrei.dev`), ya que el bug afecta por
+  igual al build de Cloudflare Workers (mismo `packages/core/schemas.ts`).
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.

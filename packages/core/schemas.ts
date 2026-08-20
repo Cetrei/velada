@@ -88,7 +88,21 @@ export const ParticipantSchema = z.object({
    * la ficha publica junto al boton "Actualizar" -- null solo si nunca se
    * consulto mmradar para este perfil (alta sin Riot ID, por ejemplo).
    */
-  mmradarUpdatedAt: z.string().datetime().nullable().optional(),
+  /**
+   * z.string() sin .datetime(): Postgres TIMESTAMPTZ devuelve algo como
+   * "2026-08-20 14:32:10.123456+00" (espacio en vez de "T", offset sin
+   * "Z", microsegundos) -- Zod's .datetime() exige ISO 8601 estricto y
+   * rechaza ese formato. Bug real encontrado 2026-08-20: esto hacia fallar
+   * ParticipantListSchema.safeParse() para CUALQUIER fila con
+   * mmradar_updated_at seteado, descartando el roster real COMPLETO de
+   * Supabase (loadParticipants.ts cae al fallback de participants.yml
+   * vacio + el participante meme) sin ningun error visible para el
+   * usuario, solo un console.warn. El valor se muestra formateado
+   * (formatRelativeUpdatedAt en MmradarPerformanceCard.tsx), nunca se
+   * re-parsea como Date en un contexto que necesite ISO estricto, asi que
+   * validar solo que sea string es suficiente.
+   */
+  mmradarUpdatedAt: z.string().nullable().optional(),
   /**
    * Participante "de meme": aparece en el roster/grid de seleccion como
    * cualquier otro, pero se excluye de todo lo competitivo -- ruleta,
