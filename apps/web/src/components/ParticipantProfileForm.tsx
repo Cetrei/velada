@@ -110,6 +110,19 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
   // stops typing a Riot ID / server so the check/spinner/x icon updates
   // before they submit, instead of only finding out the profile doesn't
   // exist after clicking submit.
+  //
+  // Este mismo efecto es tambien el auto-fetch de performanceScores al
+  // cargar /mi-perfil: form.lolUsername arranca poblado con el Riot ID ya
+  // guardado (ver formFromParticipant mas arriba), asi que el primer
+  // disparo de este efecto en el mount ya corre la consulta sola -- no
+  // hace falta un segundo useEffect separado "solo para el mount". Antes,
+  // PerformancePreviewCard se montaba con riotCheck.performanceScores en
+  // null y existingParticipant?.performanceScores como unico fallback: si
+  // esa columna estaba vacia en la fila guardada (perfil creado antes de
+  // que existiera esta feature, o cuyo ultimo submit no encontro nada en
+  // mmradar), la carta se quedaba en null hasta que el jugador retocara
+  // el campo a mano. Con esto, en vez de depender de eso, ya alcanza con
+  // abrir la pagina.
   useEffect(() => {
     if (riotCheckTimer.current) clearTimeout(riotCheckTimer.current);
 
@@ -592,6 +605,7 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
         <PerformancePreviewCard
           scores={riotCheck.performanceScores ?? existingParticipant?.performanceScores ?? null}
           performanceRank={riotCheck.performanceRank ?? existingParticipant?.performanceRank ?? null}
+          status={riotCheck.status}
         />
       </aside>
     </div>
