@@ -72,8 +72,20 @@ const MOCK_PARTICIPANTS: Participant[] = [
 export function parseParticipants(yamlContent: string): Participant[] {
   const raw = parse(yamlContent);
 
+  // Comentado a pedido del usuario: ya no se quiere que aparezcan
+  // participantes mock ("El Toro de la Toplane", "Koreano del Sur", etc.)
+  // cuando participants.yml esta vacio/invalido -- antes este fallback
+  // hacia que el ChampionSelectGrid mostrara 4 peleadores falsos en vez
+  // de reflejar que no hay participantes reales cargados todavia. Con
+  // esto comentado, un YAML vacio simplemente devuelve un array vacio
+  // (mismo comportamiento que ya tenia parseMemeParticipants para su
+  // propio YAML). MOCK_PARTICIPANTS se deja definido mas arriba por si
+  // se quiere reactivar esto en el futuro.
+  // if (!raw || !Array.isArray(raw) || raw.length === 0) {
+  //   return MOCK_PARTICIPANTS;
+  // }
   if (!raw || !Array.isArray(raw) || raw.length === 0) {
-    return MOCK_PARTICIPANTS;
+    return [];
   }
 
   const result = ParticipantListSchema.safeParse(raw);
