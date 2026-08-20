@@ -265,6 +265,7 @@ export default function ChampionSelectGrid({
                          }}
                      />
                  )}
+                 <div className="splash-background-fade" />
             </div>
 
             <div className="hextech-arcs">
@@ -562,13 +563,10 @@ export default function ChampionSelectGrid({
             height: 100%;
             z-index: 0;
             overflow: hidden;
-            opacity: 0.35;
             pointer-events: none;
             display: flex;
             justify-content: center;
             align-items: center;
-            mask-image: radial-gradient(circle at center, black 45%, transparent 85%);
-            -webkit-mask-image: radial-gradient(circle at center, black 45%, transparent 85%);
         }
 
         .splash-background img {
@@ -576,7 +574,28 @@ export default function ChampionSelectGrid({
             height: 100%;
             object-fit: cover;
             object-position: center 15%;
-            filter: blur(2px) brightness(0.6);
+            filter: blur(2px) brightness(0.55);
+        }
+
+        /* Antes la imagen de fondo llevaba una mask-image radial propia,
+           que la hacia ver "cortada"/desvanecida en el centro en vez de
+           cubrir todo el contenedor como pedia el usuario ("deberia ser
+           el fondo"). Ahora la imagen cubre el 100% sin mascara, y en su
+           lugar este overlay (aparte, encima de la imagen) hace un
+           degradado vertical suave arriba/abajo -- asi el borde del
+           contenedor se ve intencional en vez de un corte abrupto, sin
+           tapar la imagen en su centro. */
+        .splash-background-fade {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(
+                to bottom,
+                rgba(1, 10, 19, 0.75) 0%,
+                rgba(1, 10, 19, 0.15) 22%,
+                rgba(1, 10, 19, 0.15) 70%,
+                rgba(1, 10, 19, 0.85) 100%
+            );
+            pointer-events: none;
         }
 
         .hextech-arcs {
@@ -584,8 +603,14 @@ export default function ChampionSelectGrid({
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 700px;
-            height: 700px;
+            /* Antes eran 700x700 fijos -- en el contenedor mas bajo que
+               ahora usa min(480px, 46dvh) (ver splash-view-active) el
+               overflow:hidden del contenedor raiz cortaba el circulo
+               arriba y abajo de forma abrupta. min() lo limita al tamano
+               real disponible, dejando margen para que siempre se vea
+               completo. */
+            width: min(700px, 92%);
+            height: min(700px, 92%);
             z-index: 1;
             pointer-events: none;
             opacity: 0.4;

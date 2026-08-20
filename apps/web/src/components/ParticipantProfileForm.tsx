@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { actions } from "astro:actions";
-import type { Participant, ParticipantStat } from "@velada/core";
+import type { Participant, ParticipantStat, MmradarPerformanceScores } from "@velada/core";
 import { PAGES, PARTICIPANT_MANAGER, COUNTRIES, flagForCountry, UNKNOWN_COUNTRY_FLAG, MAX_CUSTOM_STATS } from "@velada/core";
 import { compressImageFile, PHOTO_COMPRESSION, BANNER_COMPRESSION } from "@velada/core/imageCompression";
 import PlayerCard from "./PlayerCard";
+import PerformancePreviewCard from "./PerformancePreviewCard";
 
 type RiotCheckStatus = "idle" | "checking" | "found" | "not_found" | "invalid" | "error";
 
@@ -93,7 +94,13 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
   const [isBusy, setIsBusy] = useState(false);
   const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
   const [currentRank, setCurrentRank] = useState(existingParticipant?.lolRank ?? null);
-  const [riotCheck, setRiotCheck] = useState<{ status: RiotCheckStatus; rank?: string; reason?: string }>({
+  const [riotCheck, setRiotCheck] = useState<{
+    status: RiotCheckStatus;
+    rank?: string;
+    reason?: string;
+    performanceRank?: string | null;
+    performanceScores?: MmradarPerformanceScores | null;
+  }>({
     status: "idle"
   });
   const riotCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -126,7 +133,12 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
           return;
         }
         if (data.status === "found") {
-          setRiotCheck({ status: "found", rank: data.rank });
+          setRiotCheck({
+            status: "found",
+            rank: data.rank,
+            performanceRank: data.performanceRank,
+            performanceScores: data.performanceScores
+          });
         } else if (data.status === "error") {
           setRiotCheck({ status: "error", reason: data.reason });
         } else {
@@ -576,6 +588,10 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
             banner: bannerPreviewUrl ?? existingParticipant?.banner ?? null,
             stats: stats.map(({ label, value }) => ({ label, value }))
           }}
+        />
+        <PerformancePreviewCard
+          scores={riotCheck.performanceScores ?? existingParticipant?.performanceScores ?? null}
+          performanceRank={riotCheck.performanceRank ?? existingParticipant?.performanceRank ?? null}
         />
       </aside>
     </div>

@@ -817,13 +817,20 @@ export const server = {
   /**
    * Live-check for the Riot ID as the fighter types it in /inscripcion,
    * driving the green check / yellow spinner / red X indicator next to
-   * the field before they submit. Ya no recibe/valida lolServer — mmradar
-   * no lo necesita (resuelve la region del lado de ellos). Requires a
-   * logged-in session (not full panel auth) so it stays usable by
-   * fighters self-registering. Never throws for the expected "still
+   * the field before they submit. Tambien devuelve performanceScores (y
+   * el resto de lo que trae mmradar) para que el preview en vivo
+   * (ParticipantProfileForm) pueda dibujar las barras de performance
+   * antes de guardar -- antes solo devolvia el rango, asi que el preview
+   * nunca tenia con que mostrar esa carta mientras el jugador todavia
+   * estaba completando el formulario. Ya no recibe/valida lolServer —
+   * mmradar no lo necesita (resuelve la region del lado de ellos).
+   * Requires a logged-in session (not full panel auth) so it stays usable
+   * by fighters self-registering. Never throws for the expected "still
    * typing" or "typo" states (not_found / invalid) — only real infra
    * failures (fuente externa caida/formato inesperado) throw, matching
-   * fetchOfficialRank's own error semantics.
+   * fetchOfficialRank's own error semantics (sigue usando
+   * fetchOfficialRank solo para distinguir esos casos de error; el resto
+   * de datos vienen de fetchMmradarData, que nunca lanza).
    */
   checkRiotProfile: defineAction({
     accept: "form",
@@ -838,7 +845,13 @@ export const server = {
 
       try {
         const { rank } = await fetchOfficialRank(lolUsername);
-        return { status: "found" as const, rank };
+        const mmradar = await fetchMmradarData(lolUsername);
+        return {
+          status: "found" as const,
+          rank,
+          performanceRank: mmradar.performanceRank,
+          performanceScores: mmradar.performanceScores
+        };
       } catch (err) {
         if (err instanceof ActionError && err.code === "NOT_FOUND") {
           return { status: "not_found" as const };
