@@ -1713,6 +1713,114 @@ era el de arriba, no whitelist).
   captura, y si el problema persiste con un participante que ya tenga
   `performanceScores` guardados de antes (sin depender del check en vivo).
 
+## Sesion 2026-08-20 (6): confirmado build viejo (bug del burger resuelto), fix real del boton descuadrado en /mi-perfil + Performance Rank propio
+- El usuario confirmo explicitamente que la sesion (5) tenia razon: el
+  problema del hamburguesa era build/dev-server viejo, no codigo. A partir
+  de esta sesion el usuario reporta todo corriendo con `bun run dev` real.
+- **(1) Boton "GUARDAR CAMBIOS" descuadrado en `/mi-perfil` (captura del
+  usuario: columnas ICONO/BANNER con alturas y anchos de boton
+  inconsistentes)**: causa real confirmada -- `ParticipantManager.tsx`
+  (panel admin) usaba `<input type="file">` NATIVO con clases Tailwind
+  `file:*` (pseudo-elemento), mientras que `ParticipantProfileForm.tsx`
+  (self-service, `/mi-perfil`) ya tenia desde antes un componente propio
+  `FileInput` (boton "Elegir archivo" + texto de estado en cajas
+  separadas, layout fijo) -- exactamente el bug que el AGENT.md ya habia
+  diagnosticado como sospecha en sesiones viejas sin confirmar. El
+  render nativo `file:*` varia de alto/ancho entre navegadores y no se
+  alineaba bien dentro del grid de 2 columnas.
+  Fix: extraido `FileInput` a un archivo compartido nuevo
+  `apps/web/src/components/FileInput.tsx` (mismo componente, contenido
+  identico al que ya tenia `ParticipantProfileForm.tsx`). Actualizado
+  `ParticipantProfileForm.tsx` para importarlo desde ahi en vez de tener
+  su propia copia local (se borro la definicion duplicada). Actualizado
+  `ParticipantManager.tsx` para usar el mismo componente en vez de los
+  dos `<input type="file">` raw -- agregado tracking de
+  `photoHasExisting`/`bannerHasExisting` (booleans nuevos en el estado,
+  seteados en `loadIntoForm`/`resetForm` segun `Boolean(p.photo)`/
+  `Boolean(p.banner)`) porque `FileInput` necesita saber si ya hay una
+  imagen guardada para mostrar "Imagen ya cargada" en vez de "Ningun
+  archivo seleccionado" al editar un participante existente -- dato que
+  el panel admin no trackeaba antes porque el input nativo no lo
+  necesitaba.
+- **(2) Performance Rank: mmradar NO es reproducible, se diseño uno
+  PROPIO (decision explicita del usuario)**: el usuario aporto datos
+  reales de su propia cuenta de mmradar.gg que refutan la hipotesis
+  simple de sesiones anteriores (que `performanceRank` fuera una funcion
+  directa del promedio total) -- un perfil con promedio 1860 aparecia
+  como "Emerald IV" en mmradar y otro con promedio ~1894 (34 puntos mas,
+  casi identico) aparecia como "Challenger" (el tier mas alto posible).
+  El usuario tambien confirmo explicitamente algo ya documentado en el
+  codigo pero sin confirmacion directa hasta ahora: el tier de
+  Performance Rank de mmradar se calcula 100% con JS del lado del
+  cliente y NUNCA aparece en el HTML crudo que `fetch()` puede leer --
+  no hay forma de consultarlo de verdad desde este proyecto (Cloudflare
+  Workers, sin navegador headless), asi que perseguir la formula exacta
+  de mmradar no es viable. Decision del usuario: diseñar un Performance
+  Rank PROPIO usando los mismos datos crudos que ya se consultan
+  (`/load-matches`), calibrado a ojo con los ejemplos reales que dio, en
+  vez de depender de un dato inaccesible. El usuario eligio
+  explicitamente que el calculo use promedio + winrate + consistencia
+  (los 3 factores, no solo promedio) porque "si mismos valores no dan el
+  mismo performance rank, significa que el calculo de mmoradar usa mas
+  variantes" -- y que el output tenga el mismo formato que mmradar
+  (tier + division, ej. "Emerald IV").
+  Nuevo `packages/core/performanceRank.ts` (`computePerformanceRank`):
+  - Tier BASE segun el promedio TOTAL (suma de los 6 stats) de las
+    ultimas partidas, contra 10 umbrales (`TIER_THRESHOLDS`) elegidos a
+    ojo sobre el rango real observado (partidas individuales entre
+    ~1300 y ~2400 en los ejemplos del usuario).
+  - Ajuste de hasta +-3 escalones por winrate (>=70% empuja fuerte hacia
+    arriba, <=35% empuja fuerte hacia abajo, requiere >=4 partidas para
+    aplicar) y hasta +-1.5 escalones por consistencia (coeficiente de
+    variacion de los totals de cada partida -- mismo calculo de
+    dispersion relativa que ya usaba el titulo "Consistente" en
+    `titleEngine.ts`, reusado aca con su propio umbral). Un "escalon" es
+    una division dentro de tier (IV->I); el ajuste puede mover el
+    resultado varios tiers completos en los extremos, que es justo lo
+    que explicaria el salto grande del ejemplo del usuario (1860 ->
+    Emerald IV vs 1894 -> Challenger: si esa otra cuenta tiene mejor
+    winrate/consistencia, el ajuste la empuja mucho mas arriba del tier
+    base que le tocaria solo por promedio).
+  - Output: mismo formato que `RANK_TIERS` de `rankIcon.ts` ("Emerald
+    IV", sin division para Master/Grandmaster/Challenger).
+  No pretende replicar el numero exacto de mmradar (confirmado que es
+  imposible sin acceso a su formula/poblacion real) -- es una seña
+  propia, razonable y explicable con los mismos datos que ya se tienen.
+  Agregado al barrel `packages/core/index.ts`.
+- **`packages/core/mmradarScraper.ts`**: `fetchMmradarProfile` ahora usa
+  `computePerformanceRank(raw.engineMatches)` como fuente PRINCIPAL de
+  `performanceRank` (antes era `parsePerformanceRank(html)`, que en la
+  practica actual casi siempre devuelve `null` porque mmradar tampoco
+  expone el tier en texto plano server-side, ver sesion (18)/(19)).
+  `parsePerformanceRank(html)` se deja como intento previo/fallback (por
+  si mmradar alguna vez vuelve a exponerlo en texto), pero ya no es lo
+  que se guarda ni se muestra salvo que el calculo propio no tenga
+  partidas suficientes (`raw` null). No se toco el resto del pipeline
+  (`saveOwnParticipant`/`saveParticipant`/`refreshMmradarData`/
+  `MmradarPanel.tsx`/`MmradarPerformanceCard.tsx`) -- todos ya consumian
+  `performanceRank: string | null` del resultado de `fetchMmradarProfile`
+  sin asumir de donde viene, asi que el cambio de fuente es transparente
+  para el resto del codigo.
+- Archivos tocados y confirmados con `read_text_file` posterior:
+  `apps/web/src/components/FileInput.tsx` (nuevo),
+  `apps/web/src/components/ParticipantProfileForm.tsx` (import +
+  borrado de la copia local de `FileInput`),
+  `apps/web/src/components/ParticipantManager.tsx` (uso de `FileInput` +
+  tracking de `photoHasExisting`/`bannerHasExisting`),
+  `packages/core/performanceRank.ts` (nuevo),
+  `packages/core/index.ts` (barrel), `packages/core/mmradarScraper.ts`
+  (wiring del calculo propio).
+- Pendiente para el usuario: con `bun run dev` corriendo de verdad,
+  confirmar en `/mi-perfil` (self-service) y en el panel
+  (`/gestion-roster-x9f2`, editar un participante) que las cajas de
+  ICONO/BANNER ahora se ven identicas en alto/ancho de boton en ambos
+  lugares. Confirmar tambien el Performance Rank nuevo contra el mismo
+  Riot ID de referencia (`OneShotOneKill#sigma`, promedio ~1860) y
+  ajustar `TIER_THRESHOLDS`/los pesos de winrate-consistencia en
+  `performanceRank.ts` si el resultado no se siente calibrado -- son
+  constantes sueltas pensadas para tocarse libremente sin afectar el
+  resto del motor, no hace falta reescribir la logica para recalibrar.
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.

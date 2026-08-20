@@ -3,6 +3,7 @@ import { actions } from "astro:actions";
 import type { Participant, ParticipantStat } from "@velada/core";
 import { PARTICIPANT_MANAGER, rankIconPath, MAX_CUSTOM_STATS } from "@velada/core";
 import { compressImageFile, PHOTO_COMPRESSION, BANNER_COMPRESSION } from "@velada/core/imageCompression";
+import { FileInput } from "./FileInput";
 
 interface ParticipantManagerProps {
   initialParticipants: Participant[];
@@ -43,6 +44,8 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
   const [stats, setStats] = useState<StatWithKey[]>([]);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [photoHasExisting, setPhotoHasExisting] = useState(false);
+  const [bannerHasExisting, setBannerHasExisting] = useState(false);
   const [compressingField, setCompressingField] = useState<"photo" | "banner" | null>(null);
   const [status, setStatus] = useState<StatusMessage>(null);
   const [isBusy, setIsBusy] = useState(false);
@@ -64,6 +67,8 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
     setStats([]);
     setPhotoFile(null);
     setBannerFile(null);
+    setPhotoHasExisting(false);
+    setBannerHasExisting(false);
     setEditingId(null);
     setInvalidFields(new Set());
   }
@@ -131,6 +136,8 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
     setStats((p.stats ?? []).map((s) => ({ ...s, _key: makeStatKey() })));
     setPhotoFile(null);
     setBannerFile(null);
+    setPhotoHasExisting(Boolean(p.photo));
+    setBannerHasExisting(Boolean(p.banner));
     setEditingId(p.id);
     setIsFormOpen(true);
   }
@@ -506,21 +513,21 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label={PARTICIPANT_MANAGER.fields.photo}>
-            <input
-              type="file"
+            <FileInput
+              fileName={photoFile?.name ?? null}
+              hasExisting={photoHasExisting}
               accept="image/*"
               capture="environment"
-              onChange={(e) => handlePhotoChange(e.target.files)}
-              className="input file:mr-4 file:py-2 file:px-4 file:border-0 file:bg-lol-gold file:text-black file:font-bold file:uppercase file:text-xs"
+              onChange={handlePhotoChange}
             />
             {compressingField === "photo" && <p className="text-xs text-slate-500 mt-1">Optimizando imagen...</p>}
           </Field>
           <Field label={PARTICIPANT_MANAGER.fields.banner}>
-            <input
-              type="file"
+            <FileInput
+              fileName={bannerFile?.name ?? null}
+              hasExisting={bannerHasExisting}
               accept="image/*"
-              onChange={(e) => handleBannerChange(e.target.files)}
-              className="input file:mr-4 file:py-2 file:px-4 file:border-0 file:bg-lol-gold file:text-black file:font-bold file:uppercase file:text-xs"
+              onChange={handleBannerChange}
             />
             {compressingField === "banner" && <p className="text-xs text-slate-500 mt-1">Optimizando imagen...</p>}
           </Field>

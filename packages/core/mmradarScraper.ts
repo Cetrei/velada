@@ -43,6 +43,7 @@
 
 import type { TitleEngineMatch } from "./titleEngine";
 import { buildTitleEngineInput, evaluateTitles } from "./titleEngine";
+import { computePerformanceRank } from "./performanceRank";
 
 export type MmradarLookupErrorReason =
   | "not_found"
@@ -692,11 +693,22 @@ export async function fetchMmradarProfile(lolUsername: string): Promise<MmradarP
   }
 
   try {
-    // performanceRank es opcional: mmradar cambio su HTML y en muchos
-    // perfiles ya no expone el tier como texto (ver comentario de
-    // parsePerformanceRank). Antes esto abortaba TODA la consulta con
-    // unexpected_format, tirando tambien el currentRank oficial que si
-    // funciona perfecto -- ahora simplemente se guarda null y se sigue.
+    // performanceRank: mmradar calcula el suyo 100% con JS del lado del
+    // cliente (confirmado por el usuario con el HTML crudo real -- el tier
+    // nunca aparece en lo que fetch() puede leer, ver parsePerformanceRank
+    // mas arriba) y ademas no es una funcion simple/observable del
+    // promedio (dos perfiles con promedios casi identicos -- 1860 vs
+    // ~1894 -- dieron tiers muy distintos: Emerald IV vs Challenger). Por
+    // decision del usuario 2026-08-20, la fuente principal ahora es el
+    // Performance Rank PROPIO de este proyecto (computePerformanceRank en
+    // performanceRank.ts: promedio + winrate + consistencia sobre las
+    // mismas partidas de /load-matches), calculado mas abajo despues de
+    // fetchRawMatches. parsePerformanceRank(html) se deja como intento
+    // sobre el HTML servidor primero, por si mmradar alguna vez vuelve a
+    // exponerlo ahi (en la practica actual casi siempre null) -- pero ya
+    // no es la fuente que se guarda ni se muestra; solo se pasa como dato
+    // informativo extra a titleEngine.ts (regla "underdog", que compara
+    // performance vs rango oficial) si llegara a aparecer.
     // performanceScores/titulos: el HTML nunca trae los 6 scores (ver
     // parsePerformanceScores) y mmradar calcula sus propios titulos 100%
     // en el cliente sin exponer un campo explicito en el JSON (ver
@@ -706,8 +718,11 @@ export async function fetchMmradarProfile(lolUsername: string): Promise<MmradarP
     // resto de este resultado (currentRank/icono/nivel siguen andando).
     const [gameName, tagLine] = lolUsername.split("#");
     const currentRank = parseCurrentRank(html);
-    const performanceRank = parsePerformanceRank(html);
+    const htmlPerformanceRank = parsePerformanceRank(html);
     const raw = await fetchRawMatches(gameName, tagLine);
+
+    const ownPerformanceRank = raw ? computePerformanceRank(raw.engineMatches) : null;
+    const performanceRank = ownPerformanceRank?.rank ?? htmlPerformanceRank;
 
     const titles = raw
       ? evaluateTitles(
