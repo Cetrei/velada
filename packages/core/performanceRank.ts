@@ -22,7 +22,6 @@ function totalOf(scores: MmradarPerformanceScores): number {
 
 /**
  * Umbrales de promedio TOTAL (suma de 6 stats) recalibrados.
- *
  * Referencias de prueba:
  * - ~9300  (avg 1550) -> Gold IV
  * - ~10057 (avg 1676) -> Gold I / Gold II (ej. YourDaddyDrinks)
