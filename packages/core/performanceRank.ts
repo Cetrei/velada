@@ -21,14 +21,18 @@ function totalOf(scores: MmradarPerformanceScores): number {
 }
 
 /**
- * Umbrales base centrados.
- * Esto coloca las puntuaciones base en un punto neutral:
- * - ~9822 (Sovietic) entra en Oro II.
- * - ~10057 (YourDaddy) entra justo en Oro I.
- * - ~10455 (Nashi) entra en Platino III.
- * - ~10564 (LegenPaPa) entra en Platino II.
- * Los saltos finales (Sovietic subiendo a Plat I y LegenPaPa cayendo a Oro III)
- * dependerán 100% de los ajustes de abajo.
+ * Umbrales base (sin cambios respecto a la calibracion anterior).
+ * IMPORTANTE (calibracion 2026-08-20, ver sesion en AGENT.md): con los 5
+ * jugadores reales de scripts/rank-calibration-fixtures.json, el promedio
+ * total NO predice bien el rango esperado por si solo -- confirmado con un
+ * ajuste por minimos cuadrados sobre (avgTotal, winRate, coeficiente de
+ * variacion) contra los escalones esperados: el peso que mejor explica los
+ * datos para avgTotal es practicamente cero comparado a su escala, mientras
+ * que winrate y consistencia si tienen peso real. Por eso el tier base que
+ * sale de estos umbrales ahora se COMPRIME hacia un centro comun en
+ * baseStepsFromAvgTotal() en vez de usarse tal cual -- el promedio sigue
+ * siendo el punto de partida, pero winrate/consistencia son quienes deciden
+ * la mayor parte del resultado final.
  */
 const TIER_THRESHOLDS: { tier: RankTier; minTotal: number }[] = [
   { tier: "Iron", minTotal: 0 },
@@ -43,11 +47,47 @@ const TIER_THRESHOLDS: { tier: RankTier; minTotal: number }[] = [
   { tier: "Challenger", minTotal: 12000 }
 ];
 
-const MAX_ADJUSTMENT_STEPS = 6;
+/**
+ * Cuanto pesa el tier base (por avgTotal) en el resultado final, contra un
+ * centro comun (BASE_STEPS_CENTER). 1 = el tier base pesa entero (como
+ * antes). 0 = el promedio no importa nada, todo lo decide winrate +
+ * consistencia. 0.2 fue el valor que mejor explico el dataset real de
+ * calibracion -- el promedio total resulto ser una senal debil para separar
+ * jugadores, comparado a lo que aportan winrate/consistencia.
+ */
+const BASE_STEPS_COMPRESSION = 0.2;
+/** Centro (en escalones) hacia el que se comprime el tier base. ~17 escalones = Platino III/II, el centro del dataset real (Oro-Platino). */
+const BASE_STEPS_CENTER = 17;
+
+const MAX_ADJUSTMENT_STEPS = 8;
 
 /**
- * Multiplicador aumentado. Un winrate extremo (ej. 70%) ahora aporta
- * hasta +2.4 escalones, y uno malo (ej. 35%) resta -1.2 escalones.
+ * Tier base por avgTotal, ya comprimido hacia BASE_STEPS_CENTER segun
+ * BASE_STEPS_COMPRESSION (ver comentario de TIER_THRESHOLDS). Devuelve un
+ * numero fraccionario a proposito -- solo se redondea en el resultado
+ * final, para no perder precision al sumar los ajustes de winrate/
+ * consistencia encima.
+ */
+function baseStepsFromAvgTotal(avgTotal: number): number {
+  let baseTierIndex = 0;
+  for (let i = TIER_THRESHOLDS.length - 1; i >= 0; i--) {
+    if (avgTotal >= TIER_THRESHOLDS[i].minTotal) {
+      baseTierIndex = i;
+      break;
+    }
+  }
+  const currentMin = TIER_THRESHOLDS[baseTierIndex].minTotal;
+  const nextMin = TIER_THRESHOLDS[baseTierIndex + 1]?.minTotal ?? currentMin + 600;
+  const fractionalInTier = Math.max(0, Math.min(1, (avgTotal - currentMin) / (nextMin - currentMin)));
+  const rawSteps = baseTierIndex * 4 + fractionalInTier * 3;
+  return rawSteps * BASE_STEPS_COMPRESSION + BASE_STEPS_CENTER * (1 - BASE_STEPS_COMPRESSION);
+}
+
+/**
+ * Multiplicador re-calibrado (ver comentario de TIER_THRESHOLDS): con el
+ * tier base comprimido, winrate necesita mantenerse como factor real. Un
+ * winrate extremo (ej. 70%) ahora aporta hasta +1.6 escalones, y uno malo
+ * (ej. 20%) resta -2.4 escalones.
  */
 function winRateAdjustment(winRate: number, gamesPlayed: number): number {
   if (gamesPlayed < 4) return 0;
@@ -56,8 +96,10 @@ function winRateAdjustment(winRate: number, gamesPlayed: number): number {
 }
 
 /**
- * Multiplicador de consistencia re-calibrado.
- * Es el principal responsable de separar puntajes idénticos.
+ * Multiplicador de consistencia re-calibrado (ver comentario de
+ * TIER_THRESHOLDS). Con el tier base comprimido, este es ahora el factor
+ * individual mas fuerte -- perfiles muy constantes (cv bajo) suben rapido,
+ * erraticos (cv alto) caen fuerte.
  */
 function consistencyAdjustment(matches: TitleEngineMatch[]): number {
   if (matches.length < 4) return 0;
@@ -68,9 +110,10 @@ function consistencyAdjustment(matches: TitleEngineMatch[]): number {
   const stdDev = Math.sqrt(variance);
   const coefficientOfVariation = stdDev / mean;
 
-  const centered = 0.2 - coefficientOfVariation; 
-  // Multiplicador agresivo: perfiles muy constantes suben rápido, erráticos caen fuerte.
-  return Math.max(-4, Math.min(4, centered * 20)); 
+  const centered = 0.2 - coefficientOfVariation;
+  // Multiplicador mas agresivo que antes (20 -> 40): perfiles muy
+  // constantes suben rapido, erraticos caen fuerte.
+  return Math.max(-MAX_ADJUSTMENT_STEPS, Math.min(MAX_ADJUSTMENT_STEPS, centered * 40));
 }
 
 export interface PerformanceRankResult {
@@ -109,24 +152,12 @@ export function computePerformanceRank(matches: TitleEngineMatch[]): Performance
   const wins = matches.filter((m) => m.won).length;
   const winRate = matches.length > 0 ? wins / matches.length : 0;
 
-  let baseTierIndex = 0;
-  for (let i = TIER_THRESHOLDS.length - 1; i >= 0; i--) {
-    if (avgTotal >= TIER_THRESHOLDS[i].minTotal) {
-      baseTierIndex = i;
-      break;
-    }
-  }
-
-  const currentMin = TIER_THRESHOLDS[baseTierIndex].minTotal;
-  const nextMin = TIER_THRESHOLDS[baseTierIndex + 1]?.minTotal ?? currentMin + 600;
-  const fractionalInTier = Math.max(0, Math.min(1, (avgTotal - currentMin) / (nextMin - currentMin)));
-
-  const totalSteps = baseTierIndex * 4 + Math.round(fractionalInTier * 3);
+  const totalSteps = baseStepsFromAvgTotal(avgTotal);
 
   const adjustment = winRateAdjustment(winRate, matches.length) + consistencyAdjustment(matches);
   const clampedAdjustment = Math.max(-MAX_ADJUSTMENT_STEPS, Math.min(MAX_ADJUSTMENT_STEPS, adjustment));
 
-  const finalSteps = Math.max(0, Math.min(RANK_TIERS.length * 4 - 1, totalSteps + Math.round(clampedAdjustment)));
+  const finalSteps = Math.max(0, Math.min(RANK_TIERS.length * 4 - 1, Math.round(totalSteps + clampedAdjustment)));
 
   const finalTierIndex = Math.min(RANK_TIERS.length - 1, Math.floor(finalSteps / 4));
   const finalDivisionIndex = Math.min(3, finalSteps % 4);
@@ -155,6 +186,10 @@ export function computePerformanceRankDebug(matches: TitleEngineMatch[]): Perfor
   const wins = matches.filter((m) => m.won).length;
   const winRate = matches.length > 0 ? wins / matches.length : 0;
 
+  // baseTierIndex/fractionalInTier de aca abajo son SOLO informativos (para
+  // el log de calibracion) -- muestran donde caeria el tier segun el
+  // promedio SIN comprimir, para poder comparar contra totalSteps (que si
+  // usa la version comprimida via baseStepsFromAvgTotal).
   let baseTierIndex = 0;
   for (let i = TIER_THRESHOLDS.length - 1; i >= 0; i--) {
     if (avgTotal >= TIER_THRESHOLDS[i].minTotal) {
@@ -162,19 +197,18 @@ export function computePerformanceRankDebug(matches: TitleEngineMatch[]): Perfor
       break;
     }
   }
-
   const currentMin = TIER_THRESHOLDS[baseTierIndex].minTotal;
   const nextMin = TIER_THRESHOLDS[baseTierIndex + 1]?.minTotal ?? currentMin + 600;
   const fractionalInTier = Math.max(0, Math.min(1, (avgTotal - currentMin) / (nextMin - currentMin)));
 
-  const totalSteps = baseTierIndex * 4 + Math.round(fractionalInTier * 3);
+  const totalSteps = baseStepsFromAvgTotal(avgTotal);
 
   const wrAdj = winRateAdjustment(winRate, matches.length);
   const consAdj = consistencyAdjustment(matches);
   const rawAdjustment = wrAdj + consAdj;
   const clampedAdjustment = Math.max(-MAX_ADJUSTMENT_STEPS, Math.min(MAX_ADJUSTMENT_STEPS, rawAdjustment));
 
-  const finalSteps = Math.max(0, Math.min(RANK_TIERS.length * 4 - 1, totalSteps + Math.round(clampedAdjustment)));
+  const finalSteps = Math.max(0, Math.min(RANK_TIERS.length * 4 - 1, Math.round(totalSteps + clampedAdjustment)));
 
   return {
     gamesPlayed: matches.length,

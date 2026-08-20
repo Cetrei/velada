@@ -75,7 +75,7 @@ const FIXTURES: RankFixture[] = JSON.parse(
 );
 
 const REQUEST_DELAY_MS = 4000;
-const MAX_RETRIES = 3;
+const MAX_RETRIES = 1;
 const RETRY_BACKOFF_MS = 6000;
 
 function sleep(ms: number): Promise<void> {
