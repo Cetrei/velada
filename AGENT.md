@@ -1574,6 +1574,82 @@ era el de arriba, no whitelist).
   oficial ni team matches, o con los tabs normales apenas se cargue
   cualquiera de los dos.
 
+## Sesion 2026-08-20 (4): 5 fixes de UX pedidos por el usuario (mi-perfil, ficha del peleador, nav mobile)
+- Revisado todo el codigo real via filesystem MCP antes de tocar nada,
+  todas las ediciones con `filesystem:edit_file` sobre la ruta real y
+  releidas despues (nunca `str_replace`/`create_file` del sandbox -- ver
+  leccion de la sesion (5) de mas arriba).
+1. **Recarga real tras crear el perfil (`ParticipantProfileForm.tsx`)**:
+   `mi-perfil.astro` calcula `existingParticipant` server-side una sola
+   vez al renderizar, asi que sin un reload real el form se quedaba
+   mostrando "Crear mi perfil" indefinidamente tras un alta exitosa
+   (aunque la fila ya existiera en Supabase) hasta que el usuario
+   refrescara a mano. `handleSubmit` ahora hace
+   `window.location.href` con `?created=1` agregado SOLO cuando
+   `existingParticipant` era null (una edicion sobre un perfil ya
+   existente no lo necesita). Un nuevo `useEffect` al montar lee ese
+   query param, muestra el mensaje de exito, y lo limpia con
+   `history.replaceState` para que un F5 posterior no lo repita.
+2. **Barra de promedio resaltada en la ficha del peleador**: el promedio
+   ya se calculaba (no es un promedio aritmetico simple de las 6 scores,
+   sino el mismo total que expone mmradar.gg del lado del cliente, ver
+   `fetchMatchScores` en `packages/core/mmradarScraper.ts`) pero solo se
+   veia como numero chico en `PlayerCard.tsx` y no aparecia en absoluto en
+   `MmradarPanel.tsx` (el panel de la derecha, imagen 2 del pedido).
+   Agregada una barra propia mas gruesa (12px vs 5px) con borde dorado y
+   glow en `MmradarPanel.tsx` (`.mmradar-average-row/-track/-fill`,
+   arriba de las 6 barras individuales, SIN etiqueta de texto por pedido
+   explicito), y engrosada/resaltada la barra que ya existia en
+   `PlayerCard.tsx` (`.player-card-performance-track`, de 4px a 7px + borde
+   dorado + glow) para que las tres cartas que muestran performance se
+   lean consistentes.
+3. **Nickname -> Riot ID + titulos donde antes iba el nombre
+   (`MmradarPanel.tsx`)**: el bloque de identidad mostraba
+   `participant.name` (el usuario lo referia como "nickname", aunque
+   tecnicamente era el nombre real -- ya visible arriba del todo en la
+   pagina como `<h1>`, asi que era redundante ahi). Movidos los chips de
+   titulos (antes en un bloque aparte arriba de TODO el panel) al lugar
+   exacto donde iba ese nombre, y sacado el nombre por completo de este
+   cuadro -- ahora solo queda el Riot ID como identificador de texto en
+   esa fila. Reescrita `.mmradar-riot-id` para que se vea como
+   identificador principal (0.85rem, bold) ya que perdio al nombre como
+   acompañante visual de mayor jerarquia.
+4. **Bloque "Sin definir" + candado cuando no hay combates
+   (`peleadores/[id].astro`)**: antes solo se mostraba un bloque de rival
+   si `match` (1v1) existia, y el combate por equipos del participante
+   nunca se mostraba en esta pagina en absoluto (aunque `TeamMatch` ya
+   existe desde la sesion (12)). Agregado `fetchTeamMatches()` +
+   busqueda del team match del participante (mismo criterio que
+   `rival`/`match`), un bloque nuevo que renderiza ese team match con
+   `TeamRoster.astro` (reusado de `TeamMatchResultCard.astro`) cuando
+   existe, y un bloque de candado (mismo SVG/patron visual que el
+   "Proximamente" de `index.astro`, sesion (3) de hoy) con copy nuevo
+   `fighterDetail.noCombatTitle`/`noCombatSubtitle` ("Sin definir") en
+   `content.ts`, mostrado solo cuando NI `match` NI `teamMatch` existen
+   (y nunca si el participante ya tiene el bloque de combates meme, para
+   no duplicar mensajes).
+5. **Menu mobile (Layout.astro nunca tuvo uno)**: `nav` tenia
+   `hidden md:flex` en el unico bloque con los links + CTA, sin ninguna
+   alternativa en mobile -- confirmado que no habia ningun toggle, ni
+   siquiera roto. Implementado un menu hamburguesa CSS-only (checkbox
+   oculto + `:checked ~ selector`, mismo patron que los tabs 1v1/Equipos
+   de `index.astro`/`combates.astro` de sesiones anteriores -- se evito
+   una isla de React solo para esto): boton hamburguesa que se anima a X
+   (`.mobile-nav-burger-line:nth-child`), panel deslizante debajo del nav
+   fijo con los mismos links + CTA en columna, y un overlay semitransparente
+   (otro `<label>` apuntando al mismo checkbox) que cierra el menu al tocar
+   afuera. Como cada link es una navegacion SSR real (no SPA), el checkbox
+   se resetea solo al cambiar de pagina -- no hizo falta JS para cerrar el
+   menu al navegar.
+- Pendiente para el usuario (sin bash real sobre el proyecto en esta
+  sesion tampoco, todo via filesystem MCP): correr `bun install` +
+  `bun run dev` y probar los 5 puntos en caliente -- en particular (1) en
+  mobile/DevTools con viewport angosto para el menu hamburguesa, ya que
+  el CSS no se probo en un navegador real; (4) con un participante que
+  tenga un team match generado Y uno sin ningun combate, para confirmar
+  ambos estados; y (2)/(3) recargando `/peleadores/[id]` de un jugador
+  con `performanceScores` reales cargados.
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.

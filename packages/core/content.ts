@@ -94,6 +94,8 @@ export const PAGES = {
     viewMatchCta: "Ver el combate",
     noRivalYet: "Rival por definir",
     predictionTitle: "Pronóstico de la comunidad",
+    noCombatTitle: "Sin definir",
+    noCombatSubtitle: "Todavía no se generó ningún combate para este peleador. Volvé más tarde.",
     notFoundTitle: "Peleador no encontrado",
     notFoundSubtitle: "Puede que el link esté roto o el participante ya no exista.",
     notFoundCta: "Volver al roster"

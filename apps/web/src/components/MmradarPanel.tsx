@@ -94,6 +94,18 @@ export default function MmradarPanel({ participant, canUpdate, onUpdated }: Mmra
   if (!hasAnyData && !canUpdate) return null;
 
   const maxScore = scores ? Math.max(...Object.values(scores), 1) : 1;
+  // El promedio NO es un promedio aritmetico simple de las 6 scores: es el
+  // mismo total que ya calcula mmradar.gg del lado del cliente (ver
+  // fetchMatchScores en packages/core/mmradarScraper.ts), pensado para no
+  // dejar que un solo partido malo tire abajo la lectura general de
+  // habilidad -- por eso se resalta aparte de las 6 barras individuales en
+  // vez de mezclarse como una mas. Se muestra como una barra propia, mas
+  // gruesa, sin la etiqueta de texto (pedido explicito) -- el tamano y el
+  // borde dorado son lo que la distingue de las 6 de abajo.
+  const averageScore = scores
+    ? Math.round(Object.values(scores).reduce((sum, v) => sum + v, 0) / Object.values(scores).length)
+    : null;
+  const averagePct = averageScore !== null ? Math.min(100, Math.round((averageScore / maxScore) * 100)) : 0;
 
   async function handleUpdate() {
     setUpdating(true);
@@ -134,23 +146,6 @@ export default function MmradarPanel({ participant, canUpdate, onUpdated }: Mmra
 
   return (
     <div className="mmradar-panel">
-      {displayTitles && displayTitles.length > 0 && (
-        <div className="mmradar-titles">
-          {displayTitles.map((title) => {
-            const color = resolveTitleColor(title);
-            return (
-              <span
-                key={title.text}
-                className="mmradar-title-chip"
-                style={{ color: color.text, background: color.bg, borderColor: color.border }}
-              >
-                {title.text}
-              </span>
-            );
-          })}
-        </div>
-      )}
-
       <div className="mmradar-header">
         <div className="mmradar-identity">
           {displayIconUrl && (
@@ -169,7 +164,28 @@ export default function MmradarPanel({ participant, canUpdate, onUpdated }: Mmra
             </span>
           )}
           <div className="mmradar-identity-text">
-            <p className="mmradar-name">{participant.name}</p>
+            {/* Antes aca iba participant.name (nombre real del peleador, ya
+                visible arriba del todo en peleadores/[id].astro como <h1>) --
+                pedido explicito: en este cuadro puntual, donde antes salia el
+                nombre, tienen que ir los titulos de mmradar (antes vivian en
+                un bloque aparte arriba de todo el panel). Solo el Riot ID se
+                queda como identificador de texto en esta fila. */}
+            {displayTitles && displayTitles.length > 0 && (
+              <div className="mmradar-titles">
+                {displayTitles.map((title) => {
+                  const color = resolveTitleColor(title);
+                  return (
+                    <span
+                      key={title.text}
+                      className="mmradar-title-chip"
+                      style={{ color: color.text, background: color.bg, borderColor: color.border }}
+                    >
+                      {title.text}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
             {participant.lolUsername && <p className="mmradar-riot-id">{participant.lolUsername}</p>}
             <div className="mmradar-meta">
               {server && <span className="mmradar-server">{server}</span>}
@@ -186,6 +202,15 @@ export default function MmradarPanel({ participant, canUpdate, onUpdated }: Mmra
       </div>
 
       {status && <p className={`mmradar-status mmradar-status-${status.type}`}>{status.text}</p>}
+
+      {scores && averageScore !== null && (
+        <div className="mmradar-average-row">
+          <div className="mmradar-average-track">
+            <div className="mmradar-average-fill" style={{ width: `${averagePct}%` }} />
+          </div>
+          <span className="mmradar-average-value">{averageScore}</span>
+        </div>
+      )}
 
       {scores && (
         <div className="mmradar-scores">
@@ -213,8 +238,8 @@ export default function MmradarPanel({ participant, canUpdate, onUpdated }: Mmra
         .mmradar-titles {
           display: flex;
           flex-wrap: wrap;
-          gap: 6px;
-          margin-bottom: 14px;
+          gap: 5px;
+          margin-bottom: 4px;
         }
 
         .mmradar-title-chip {
@@ -226,6 +251,7 @@ export default function MmradarPanel({ participant, canUpdate, onUpdated }: Mmra
           border: 1px solid rgba(79, 195, 232, 0.3);
           padding: 3px 8px;
           border-radius: 3px;
+          white-space: nowrap;
         }
 
         .mmradar-header {
@@ -282,22 +308,10 @@ export default function MmradarPanel({ participant, canUpdate, onUpdated }: Mmra
           min-width: 0;
         }
 
-        .mmradar-name {
-          margin: 0;
-          font-family: 'Oswald', 'Beaufort for LOL', sans-serif;
-          font-weight: 700;
-          font-size: 1.05rem;
-          color: white;
-          text-transform: uppercase;
-          letter-spacing: 0.02em;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
         .mmradar-riot-id {
-          margin: 1px 0 0;
-          font-size: 0.7rem;
+          margin: 0;
+          font-size: 0.85rem;
+          font-weight: 700;
           color: #4FC3E8;
           font-style: italic;
           white-space: nowrap;
@@ -366,8 +380,43 @@ export default function MmradarPanel({ participant, canUpdate, onUpdated }: Mmra
           color: #e35d5d;
         }
 
-        .mmradar-scores {
+        /* Barra de promedio: mas gruesa y con borde dorado propio para
+           que se distinga de las 6 barras individuales de abajo sin
+           necesidad de una etiqueta de texto tipo "Promedio" -- el pedido
+           explicito fue que se note por su forma, no por texto nuevo. */
+        .mmradar-average-row {
           margin-top: 16px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .mmradar-average-track {
+          flex: 1;
+          height: 12px;
+          background: rgba(0, 0, 0, 0.5);
+          border: 1px solid #C8AA6E;
+          border-radius: 3px;
+          overflow: hidden;
+          box-shadow: 0 0 10px rgba(200, 170, 110, 0.25);
+        }
+
+        .mmradar-average-fill {
+          height: 100%;
+          background: linear-gradient(to right, #C8AA6E, #f0e6d2, #4FC3E8);
+        }
+
+        .mmradar-average-value {
+          flex-shrink: 0;
+          min-width: 2ch;
+          text-align: right;
+          font-size: 0.95rem;
+          font-weight: 700;
+          color: #C8AA6E;
+        }
+
+        .mmradar-scores {
+          margin-top: 10px;
           display: flex;
           flex-direction: column;
           gap: 8px;

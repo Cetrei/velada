@@ -352,11 +352,12 @@ export default function PlayerCard({ data, className = "" }: PlayerCardProps) {
 
         .player-card-performance-track {
           flex: 1;
-          height: 4px;
+          height: 7px;
           background: rgba(0,0,0,0.5);
-          border: 1px solid rgba(79, 195, 232, 0.25);
+          border: 1px solid #C8AA6E;
           border-radius: 2px;
           overflow: hidden;
+          box-shadow: 0 0 8px rgba(200, 170, 110, 0.25);
         }
 
         .player-card-performance-fill {

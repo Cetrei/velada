@@ -94,6 +94,23 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
   const [draftRestored, setDraftRestored] = useState(false);
   const draftHydrated = useRef(false);
 
+  // Lee el flag que dejo el reload de handleSubmit tras una creacion
+  // exitosa (ver mas abajo, "?created=1") para mostrar el mensaje de
+  // exito DESPUES del refresh -- el estado de React normal no sobrevive
+  // un window.location.reload(), asi que el unico lugar donde queda
+  // constancia de que se acaba de crear el perfil es la URL. Se limpia
+  // con history.replaceState apenas se lee, para que un refresh posterior
+  // (F5) no vuelva a mostrar el mensaje de "creado" sobre un perfil que ya
+  // existia.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("created") !== "1") return;
+    url.searchParams.delete("created");
+    window.history.replaceState({}, "", url);
+    setStatus({ type: "success", text: copy.successCreated });
+  }, []);
+
   // Restaura el borrador guardado en localStorage, si hay uno, DESPUES
   // del primer render (nunca en el useState inicial de arriba): igual que
   // el comentario de _key de justo encima, el valor inicial de
@@ -355,15 +372,35 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
     }
 
     setCurrentRank(result.lolRank);
-    setStatus({
-      type: "success",
-      text: existingParticipant ? copy.successUpdated : copy.successCreated
-    });
     // El guardado exitoso ya vive en Supabase -- el borrador local queda
     // obsoleto y restaurarlo despues de esto solo pisaria datos ya
     // guardados con una version potencialmente vieja.
     clearDraft(draftScopeId);
     setDraftRestored(false);
+
+    // Alta nueva (existingParticipant era null): mi-perfil.astro calcula
+    // existingParticipant server-side una sola vez al renderizar la pagina,
+    // asi que sin un reload real el formulario se queda mostrando "Crear mi
+    // perfil"/el titulo de ficha incompleta indefinidamente, aunque la fila
+    // ya exista en Supabase -- recien se corrige si el usuario recarga a
+    // mano. Recargar por protocolo ademas re-renderiza el form ya en modo
+    // edicion. Una edicion sobre un perfil ya existente no lo necesita
+    // (existingParticipant ya era correcto desde antes), asi que solo se
+    // recarga en la creacion; para ese caso alcanza con el mensaje de
+    // exito in-place. El "?created=1" sobrevive al reload y lo lee el
+    // useEffect de mas arriba para mostrar el mensaje de exito ya en el
+    // render post-recarga.
+    if (!existingParticipant) {
+      const url = new URL(window.location.href);
+      url.searchParams.set("created", "1");
+      window.location.href = url.toString();
+      return;
+    }
+
+    setStatus({
+      type: "success",
+      text: copy.successUpdated
+    });
   }
 
   const previewRank = riotCheck.status === "found" ? riotCheck.rank ?? currentRank : currentRank;

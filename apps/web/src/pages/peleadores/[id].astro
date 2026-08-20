@@ -5,6 +5,8 @@ import MmradarPanel from "../../components/MmradarPanel";
 import { getSession, getAdminSession } from "../../lib/session";
 import { loadParticipants, findParticipantByOwner } from "../../lib/loadParticipants";
 import { fetchMatches, fetchPredictionTallies } from "../../lib/matches";
+import { fetchTeamMatches } from "../../lib/teamMatches";
+import TeamRoster from "../../components/TeamRoster.astro";
 import { PAGES, flagForCountry } from "@velada/core";
 
 const { id } = Astro.params;
@@ -40,6 +42,18 @@ const match = allMatches.find((m) => m.player1Id === participant.id || m.player2
 const rival = match
   ? participantsById[match.player1Id === participant.id ? match.player2Id : match.player1Id]
   : undefined;
+
+// Combate por equipos donde este peleador participa (si hay varios, el mas
+// reciente -- fetchTeamMatches ya devuelve ordenado por created_at desc).
+// Se usa junto con "match" (1v1) de arriba para decidir si mostrar el
+// bloque de "Sin definir" con candado: solo cuando NINGUNO de los dos tipos
+// de combate existe todavia para este participante.
+const allTeamMatches = await fetchTeamMatches();
+const teamMatch =
+  allTeamMatches.find((tm) => tm.teamAIds.includes(participant.id) || tm.teamBIds.includes(participant.id)) ?? null;
+const teamA = teamMatch ? teamMatch.teamAIds.map((tid) => participantsById[tid]).filter((p): p is (typeof participants)[number] => Boolean(p)) : [];
+const teamB = teamMatch ? teamMatch.teamBIds.map((tid) => participantsById[tid]).filter((p): p is (typeof participants)[number] => Boolean(p)) : [];
+const hasNoCombatYet = !match && !teamMatch;
 
 const tallies = match ? await fetchPredictionTallies([match]) : new Map();
 const tally = match?.id ? tallies.get(match.id) : undefined;
@@ -226,6 +240,17 @@ const copy = PAGES.fighterDetail;
             </div>
           )}
 
+          {!hasMemeMatches && hasNoCombatYet && (
+            <div class="flex flex-col items-center justify-center text-center py-12 px-6 bg-lol-cardBg border border-lol-border mb-8">
+              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="text-lol-gold/70 mb-3">
+                <rect x="4" y="11" width="16" height="9" rx="1.5" />
+                <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+              </svg>
+              <h3 class="font-display text-lg font-bold text-white uppercase tracking-widest mb-1">{copy.noCombatTitle}</h3>
+              <p class="text-slate-400 text-sm max-w-sm">{copy.noCombatSubtitle}</p>
+            </div>
+          )}
+
           {rival && (
             <div class="flex items-center justify-between bg-lol-cardBg border border-lol-border p-5 mb-8">
               <div>
@@ -242,6 +267,19 @@ const copy = PAGES.fighterDetail;
                   {copy.viewMatchCta}
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
                 </a>
+              )}
+            </div>
+          )}
+
+          {teamMatch && (
+            <div class="bg-lol-cardBg border border-lol-border p-6 mb-8">
+              <p class="text-slate-500 text-xs uppercase tracking-wide mb-3">{PAGES.matches.tabTeams}</p>
+              <div class="grid grid-cols-2 gap-3">
+                <TeamRoster team={teamA} label={PAGES.matches.teamALabel} isWinner={teamMatch.winnerTeam === "A"} />
+                <TeamRoster team={teamB} label={PAGES.matches.teamBLabel} isWinner={teamMatch.winnerTeam === "B"} />
+              </div>
+              {!teamMatch.winnerTeam && (
+                <p class="text-slate-500 text-xs text-center mt-3 uppercase tracking-wide">{PAGES.matches.pendingResult}</p>
               )}
             </div>
           )}
