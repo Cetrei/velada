@@ -4,7 +4,7 @@ import type { Participant, ParticipantStat, MmradarPerformanceScores, MmradarTit
 import { PAGES, PARTICIPANT_MANAGER, COUNTRIES, flagForCountry, UNKNOWN_COUNTRY_FLAG, MAX_CUSTOM_STATS } from "@velada/core";
 import { compressImageFile, PHOTO_COMPRESSION, BANNER_COMPRESSION } from "@velada/core/imageCompression";
 import PlayerCard from "./PlayerCard";
-import PerformancePreviewCard from "./PerformancePreviewCard";
+import MmradarPerformanceCard from "./MmradarPerformanceCard";
 import { saveDraft, loadDraft, clearDraft } from "../lib/formDraft";
 
 type RiotCheckStatus = "idle" | "checking" | "found" | "not_found" | "invalid" | "error";
@@ -713,7 +713,8 @@ export default function ParticipantProfileForm({ existingParticipant }: Particip
             stats: stats.map(({ label, value }) => ({ label, value }))
           }}
         />
-        <PerformancePreviewCard
+        <MmradarPerformanceCard
+          size="compact"
           scores={riotCheck.performanceScores ?? existingParticipant?.performanceScores ?? null}
           performanceRank={riotCheck.performanceRank ?? existingParticipant?.performanceRank ?? null}
           status={riotCheck.status}
