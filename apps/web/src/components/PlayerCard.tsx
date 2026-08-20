@@ -1,5 +1,5 @@
 import { rankIconPath } from "@velada/core";
-import type { ParticipantStat } from "@velada/core";
+import type { ParticipantStat, MmradarPerformanceScores } from "@velada/core";
 
 /**
  * Version "reducida" de los datos de un participante que alcanza para
@@ -19,6 +19,17 @@ export interface PlayerCardData {
   stats?: ParticipantStat[];
   /** Performance rank de mmradar.gg (ver packages/core/mmradarScraper.ts), el mismo valor que usa el balanceador de equipos para el skill rating. Se muestra como resumen entre el header y las stats custom. */
   performanceRank?: string | null;
+  /**
+   * Las 6 scores crudas de mmradar (laning/farming/objectives/combat/
+   * teamfight/vision). Antes esta carta solo recibia performanceRank (el
+   * texto "Diamond II") y no tenia con que dibujar una barra -- a
+   * diferencia de las stats custom de abajo, que si tienen su propio
+   * valor 0-100 por barra. Con los scores disponibles, el bloque de
+   * performance dibuja una barra de progreso igual que el resto (ver
+   * player-card-performance-fill), normalizada contra el maximo de las
+   * 6 igual que hace MmradarPanel/PerformancePreviewCard.
+   */
+  performanceScores?: MmradarPerformanceScores | null;
 }
 
 interface PlayerCardProps {
@@ -32,12 +43,14 @@ function fallbackImg(nickname: string): string {
 
 /**
  * Tarjeta compacta tipo "carta de jugador": banner/foto de fondo a toda
- * altura, nombre + rango en la misma linea arriba a la izquierda/derecha,
- * y las stats en una franja inferior semi-transparente que no tapa el
- * banner (a diferencia del bloque opaco que tenia /peleadores/[id] antes).
- * Pensada para caber en el rectangulo izquierdo de la ficha de peleador Y
- * en el preview en vivo de /inscripcion, por eso el tamano de fuente y el
- * padding son relativos al contenedor (no px fijos grandes) via clamp().
+ * altura. El bloque de identidad (rol, avatar, nombre, apodo, rango) vive
+ * ARRIBA de la carta, sobre la franja superior del banner -- antes vivia
+ * anclado abajo (justify-content: flex-end en .player-card, todo un solo
+ * bloque .player-card-content), lo cual dejaba el nombre pegado al borde
+ * inferior tapando la mitad de la imagen. Ahora .player-card-header (rol +
+ * identidad) es un bloque propio arriba y .player-card-footer (performance
+ * + stats custom) es otro bloque propio abajo, cada uno con su propio
+ * scrim para legibilidad sobre la imagen de fondo.
  */
 export default function PlayerCard({ data, className = "" }: PlayerCardProps) {
   // El banner es el fondo a toda la carta; la foto es un icono circular
@@ -49,16 +62,27 @@ export default function PlayerCard({ data, className = "" }: PlayerCardProps) {
   const avatarImage = data.photo || null;
   const visibleStats = (data.stats ?? []).filter((s) => s.label.trim().length > 0).slice(0, 4);
 
+  const scores = data.performanceScores ?? null;
+  const performanceMax = scores ? Math.max(...Object.values(scores), 1) : 1;
+  const performanceAvg = scores
+    ? Math.round(Object.values(scores).reduce((sum, v) => sum + v, 0) / Object.values(scores).length)
+    : null;
+  // La barra usa el promedio de las 6 scores relativo a la mayor de ellas
+  // (mismo criterio de normalizacion 0-100% que ya usan mmradar-score-fill
+  // y performance-preview-fill) -- asi las tres cartas que muestran
+  // performance en el sitio (esta, MmradarPanel, PerformancePreviewCard)
+  // se leen igual visualmente.
+  const performanceBarPct = scores ? Math.min(100, Math.round((performanceAvg! / performanceMax) * 100)) : 0;
+
   return (
     <div className={`player-card ${className}`}>
       <img src={bgImage} alt={data.name || "Preview"} className="player-card-bg" decoding="async" />
-      <div className="player-card-scrim" />
+      <div className="player-card-scrim-top" />
+      <div className="player-card-scrim-bottom" />
 
-      <div className="player-card-top">
+      <div className="player-card-header">
         <span className="player-card-role">{data.mainRole || "—"}</span>
-      </div>
 
-      <div className="player-card-content">
         <div className="player-card-name-row">
           <div className="player-card-identity">
             {avatarImage && (
@@ -83,13 +107,23 @@ export default function PlayerCard({ data, className = "" }: PlayerCardProps) {
             </span>
           )}
         </div>
+      </div>
+
+      <div className="player-card-footer">
         {data.favChampion && <p className="player-card-champion">{data.favChampion}</p>}
 
         {data.performanceRank && (
-          <p className="player-card-performance">
-            <span className="player-card-performance-label">Performance</span>
-            <span className="player-card-performance-value">{data.performanceRank}</span>
-          </p>
+          <div className="player-card-performance">
+            <div className="player-card-performance-label-row">
+              <span className="player-card-performance-label">Performance</span>
+              <span className="player-card-performance-value">{data.performanceRank}</span>
+            </div>
+            {scores && (
+              <div className="player-card-performance-track">
+                <div className="player-card-performance-fill" style={{ width: `${performanceBarPct}%` }} />
+              </div>
+            )}
+          </div>
         )}
 
         {visibleStats.length > 0 && (
@@ -119,7 +153,7 @@ export default function PlayerCard({ data, className = "" }: PlayerCardProps) {
           border: 1px solid rgba(200, 170, 110, 0.3);
           display: flex;
           flex-direction: column;
-          justify-content: flex-end;
+          justify-content: space-between;
           font-family: 'Spiegel', 'Inter', sans-serif;
         }
 
@@ -132,7 +166,27 @@ export default function PlayerCard({ data, className = "" }: PlayerCardProps) {
           object-position: center top;
         }
 
-        .player-card-scrim {
+        /* Scrim superior: oscurece la franja de arriba de la imagen lo
+           suficiente para que el rol/nombre/apodo/rango de
+           .player-card-header se lean bien, sin taparla del todo -- solo
+           se degrada hacia abajo (no cubre el resto de la foto). */
+        .player-card-scrim-top {
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(
+            to bottom,
+            rgba(10, 20, 40, 0.9) 0%,
+            rgba(10, 20, 40, 0.55) 45%,
+            rgba(10, 20, 40, 0.05) 75%,
+            transparent 100%
+          );
+        }
+
+        /* Scrim inferior: mismo criterio pero para el bloque de
+           performance + stats custom que ahora vive abajo -- reemplaza al
+           unico .player-card-scrim que cubria toda la carta de punta a
+           punta cuando todo el contenido vivia anclado al fondo. */
+        .player-card-scrim-bottom {
           position: absolute;
           inset: 0;
           background: linear-gradient(
@@ -144,14 +198,26 @@ export default function PlayerCard({ data, className = "" }: PlayerCardProps) {
           );
         }
 
-        .player-card-top {
+        .player-card-header {
           position: relative;
           z-index: 2;
-          padding: clamp(8px, 3%, 16px);
+          padding: clamp(10px, 4%, 20px);
+          padding-bottom: 0;
+          display: flex;
+          flex-direction: column;
+          gap: clamp(6px, 2%, 10px);
+        }
+
+        .player-card-footer {
+          position: relative;
+          z-index: 2;
+          padding: clamp(10px, 4%, 20px);
+          padding-top: 0;
         }
 
         .player-card-role {
           display: inline-block;
+          width: fit-content;
           padding: 3px 10px;
           background: rgba(10, 20, 40, 0.75);
           border: 1px solid #C8AA6E;
@@ -160,13 +226,6 @@ export default function PlayerCard({ data, className = "" }: PlayerCardProps) {
           font-weight: 700;
           text-transform: uppercase;
           letter-spacing: 0.05em;
-        }
-
-        .player-card-content {
-          position: relative;
-          z-index: 2;
-          padding: clamp(10px, 4%, 20px);
-          padding-top: 0;
         }
 
         .player-card-name-row {
@@ -240,7 +299,7 @@ export default function PlayerCard({ data, className = "" }: PlayerCardProps) {
         }
 
         .player-card-champion {
-          margin: 4px 0 0;
+          margin: 0;
           color: #a09b8c;
           font-size: clamp(0.6rem, 2cqw, 0.75rem);
           text-transform: uppercase;
@@ -249,14 +308,17 @@ export default function PlayerCard({ data, className = "" }: PlayerCardProps) {
 
         .player-card-performance {
           margin: clamp(6px, 2%, 10px) 0 0;
+          padding: 6px 8px;
+          background: rgba(200, 170, 110, 0.08);
+          border: 1px solid rgba(200, 170, 110, 0.25);
+          border-radius: 3px;
+        }
+
+        .player-card-performance-label-row {
           display: flex;
           align-items: center;
           justify-content: space-between;
           gap: 8px;
-          padding: 4px 8px;
-          background: rgba(200, 170, 110, 0.08);
-          border: 1px solid rgba(200, 170, 110, 0.25);
-          border-radius: 3px;
         }
 
         .player-card-performance-label {
@@ -270,6 +332,26 @@ export default function PlayerCard({ data, className = "" }: PlayerCardProps) {
           font-size: clamp(0.62rem, 2cqw, 0.78rem);
           font-weight: 700;
           color: #4FC3E8;
+        }
+
+        /* Barra de performance: mismo track/fill visual que las stats
+           custom de abajo (player-card-stat-track/-fill), asi el bloque
+           de performance ya no se queda solo en texto ("Diamond II") sin
+           ningun indicador visual como el resto de la carta. Solo se
+           dibuja cuando hay scores reales (ver "scores &&" en el JSX) --
+           sin scores no hay con que normalizar un ancho con sentido. */
+        .player-card-performance-track {
+          margin-top: 5px;
+          height: 4px;
+          background: rgba(0,0,0,0.5);
+          border: 1px solid rgba(79, 195, 232, 0.25);
+          border-radius: 2px;
+          overflow: hidden;
+        }
+
+        .player-card-performance-fill {
+          height: 100%;
+          background: linear-gradient(to right, #4FC3E8, #C8AA6E);
         }
 
         .player-card-stats {

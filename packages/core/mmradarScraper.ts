@@ -216,6 +216,28 @@ function parsePerformanceRank(html: string): string | null {
  * por posicion/orden visual. El patron exige el sufijo -{stat}- para no
  * matchear el <p id="player-average-score"> general (score total del
  * jugador, sin sufijo, que no es ninguno de los 6 stats individuales).
+ *
+ * Bug real reportado 2026-08-19 (captura del usuario: /inscripcion
+ * detectaba el rango bien -- "Perfil encontrado -- Platinum II" -- pero
+ * las 6 barras de performance y el total se quedaban en "Sin datos aun").
+ * Causa: mmradar.gg parece haber movido el render de estos 6 numeros a
+ * JS del lado del cliente (confirmado con un fetch real a un perfil
+ * live: los iconos/labels de Laning/Farming/etc siguen apareciendo en el
+ * HTML, pero sin ningun numero de puntaje al lado -- a diferencia de
+ * Current Rank y Performance Rank, que parsean bien porque viven en
+ * bloques de texto server-side distintos que no cambiaron). El
+ * comportamiento anterior era todo-o-nada: si UN SOLO id de los 6 no
+ * matcheaba (aunque sea porque mmradar le cambio el nombre a ese stat
+ * puntual, no porque el bloque entero haya desaparecido), la funcion
+ * devolvia null para los 6 -- perdiendo datos reales que si estaban
+ * disponibles. Ahora cada stat se parsea de forma independiente: si un id
+ * puntual no aparece, ese stat cae a 0 en vez de tirar todo el objeto (0
+ * es el minimo valido en la escala, se ve como "barra vacia" en vez de
+ * "sin datos", degradacion razonable para un stat individual faltante).
+ * Solo se devuelve null (bloque completo ausente, ej. mmradar removio
+ * esta seccion del todo para cierto tipo de perfil) cuando NINGUNO de los
+ * 6 ids aparece -- esa es la unica situacion en la que "sin datos" sigue
+ * siendo mas honesto que "todo en 0".
  */
 function parsePerformanceScores(html: string): MmradarPerformanceScores | null {
   const keys: (keyof MmradarPerformanceScores)[] = [
@@ -228,14 +250,19 @@ function parsePerformanceScores(html: string): MmradarPerformanceScores | null {
   ];
 
   const scores: Partial<MmradarPerformanceScores> = {};
+  let foundAny = false;
   for (const key of keys) {
     const pattern = new RegExp(`id="player-average-${key}-score"[^>]*>(\\d+)<`, "i");
     const match = html.match(pattern);
-    if (!match) return null;
-    scores[key] = Number(match[1]);
+    if (match) {
+      scores[key] = Number(match[1]);
+      foundAny = true;
+    } else {
+      scores[key] = 0;
+    }
   }
 
-  return scores as MmradarPerformanceScores;
+  return foundAny ? (scores as MmradarPerformanceScores) : null;
 }
 
 /**

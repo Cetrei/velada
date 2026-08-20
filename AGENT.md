@@ -1142,6 +1142,79 @@ era el de arriba, no whitelist).
   en vez del anterior — opcional, no requerido por los cambios de esta
   sesion.
 
+## Sesion 2026-08-19: cerrado el gap de performanceScores en PlayerCardLive + fix real del bug de barras vacias en mmradar + borrador de formulario en localStorage
+- Retomando la sesion cortada a medias que dejo el chat que trajo el
+  usuario: `PlayerCard.tsx` (barra de performance) y `mmradarUpdateBus.ts`
+  (payload con `performanceScores`) ya estaban completos y correctos en
+  el filesystem real, pero la cadena se cortaba en `PlayerCardLive.tsx`
+  -- no aceptaba `performanceScores` como prop ni lo escuchaba del bus
+  (solo `performanceRank`), y `MmradarPanel.tsx` tampoco lo emitia en
+  `emitMmradarUpdate`. Resultado: la barra de performance de la carta
+  izquierda en `/peleadores/[id]` nunca se dibujaba ni en el render
+  inicial ni al apretar "Actualizar". Arreglada la cadena completa:
+  `PlayerCardLive` ahora acepta `initialPerformanceScores` y lo actualiza
+  desde el bus; `MmradarPanel.handleUpdate` ahora manda `performanceScores`
+  en `emitMmradarUpdate`; `peleadores/[id].astro` ahora pasa
+  `initialPerformanceScores={participant.performanceScores}` a
+  `PlayerCardLive` (antes solo pasaba el rank).
+  El reordenamiento de layout (header arriba de la imagen) que pedia el
+  mensaje del agente anterior tambien ya estaba hecho en el
+  `PlayerCard.tsx` real (`.player-card-header`/`.player-card-footer`
+  separados) -- no hizo falta tocar nada de esa parte.
+- **Bug real encontrado y arreglado (pedido nuevo del usuario: "detecta mi
+  rango pero no cargo las barras")**: `parsePerformanceScores` en
+  `packages/core/mmradarScraper.ts` era todo-o-nada -- si UN SOLO id
+  `player-average-{stat}-score` no matcheaba, devolvia `null` para los 6.
+  Confirmado con un fetch real a un perfil live de mmradar.gg
+  (`Marcinator-Grind`): el bloque de Current Rank/Performance Rank sigue
+  siendo texto plano server-side (por eso el rango se detectaba bien),
+  pero los iconos/labels de Laning/Farming/Objectives/Combat/Teamfight/
+  Vision ya no traen ningun numero visible al lado en el HTML -- mmradar
+  parece haber movido el render de esos 6 numeros a JS del lado del
+  cliente. Fix: cada stat se parsea de forma independiente ahora: si un
+  id puntual no aparece cae a `0` en vez de tirar todo el objeto a
+  `null`; solo se devuelve `null` (bloque completo ausente) si NINGUNO de
+  los 6 aparece. No se pudo confirmar contra el HTML crudo real de
+  mmradar desde esta sesion (sin acceso a fetch arbitrario fuera de
+  dominios ya vistos en busqueda/fetch previos), asi que si mmradar
+  todavia expone los 6 numeros en otro formato (ej. atributos data-*
+  distintos), este fix no los recupera -- solo evita que un fallo parcial
+  tire todo a `null`. Si el usuario confirma que las barras siguen en 0
+  despues de este fix, hace falta inspeccionar el HTML real actual (con
+  `curl`/devtools) para actualizar los patrones de `parsePerformanceScores`
+  a como sea que mmradar exponga esos numeros ahora.
+- **Persistencia de formulario pedida por el usuario ("que el formulario
+  y sus valores se guarden por si se queda sin internet o recarga la
+  pagina")**: nuevo `apps/web/src/lib/formDraft.ts`
+  (`saveDraft`/`loadDraft`/`clearDraft`, localStorage con key por scope
+  -- id del participante si esta editando, `"new"` si es alta nueva).
+  Deliberadamente NO incluye `photo`/`banner` (File no serializa bien a
+  JSON, y un dataURL de una foto de celular facil pasa el limite de
+  localStorage) -- el resto de campos de texto + stats custom si
+  persisten. Integrado en `ParticipantProfileForm.tsx`: restaura el
+  borrador en un `useEffect` DESPUES del primer render (nunca en el
+  `useState` inicial, mismo motivo que ya documentaba el comentario
+  existente sobre los `_key` de stats -- si el valor inicial difiere
+  entre servidor y cliente, React tira toda la hidratacion), autoguarda
+  con debounce de 300ms en cada cambio de `form`/`stats`, muestra un
+  aviso descartable ("Recuperamos un borrador que tenias sin guardar")
+  cuando restaura algo, y limpia el borrador al guardar con exito (el
+  dato real ya vive en Supabase en ese punto, restaurar despues de eso
+  solo pisaria con una version vieja).
+- Pendiente para el usuario (sin bash real sobre el proyecto en esta
+  sesion tampoco, todo via filesystem MCP): correr `bun install` +
+  `bun run dev`, entrar a `/inscripcion` o `/mi-perfil`, cargar un Riot
+  ID real y confirmar que las barras de performance ya no se quedan en
+  "Sin datos aun" (si siguen en 0 para todos los stats, es la senal de
+  que hace falta inspeccionar el HTML real de mmradar de nuevo). Probar
+  tambien: escribir en el formulario, recargar la pagina a mitad de
+  completarlo, y confirmar que aparece el aviso de borrador recuperado
+  con los datos intactos (salvo foto/banner, que hay que volver a
+  elegir). Confirmar en `/peleadores/[id]` de un jugador con datos de
+  mmradar que la barra de performance de la carta izquierda se dibuja de
+  entrada y se actualiza al apretar "Actualizar" en el panel de la
+  derecha sin recargar.
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.

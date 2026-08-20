@@ -90,7 +90,15 @@ export default function MmradarPanel({ participant, canUpdate, onUpdated }: Mmra
         setServer(data.mmradarServer ?? null);
         setStatus({ type: "success", text: "Datos actualizados." });
         onUpdated?.({ performanceRank: data.performanceRank ?? null, performanceScores: data.performanceScores ?? null });
-        emitMmradarUpdate({ participantId: participant.id, performanceRank: data.performanceRank ?? null });
+        // Antes no se mandaba performanceScores aca -- PlayerCardLive
+        // escuchaba el evento pero nunca recibia los 6 scores crudos, asi
+        // que apretar "Actualizar" movia el texto de performance de la
+        // carta de al lado pero nunca su barra (ver PlayerCardLive.tsx).
+        emitMmradarUpdate({
+          participantId: participant.id,
+          performanceRank: data.performanceRank ?? null,
+          performanceScores: data.performanceScores ?? null
+        });
       }
     } catch (err) {
       setStatus({ type: "error", text: errorMessage(err) });

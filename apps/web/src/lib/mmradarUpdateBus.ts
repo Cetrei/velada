@@ -20,9 +20,20 @@
  * "Actualizar" de un jugador no le pise el estado a otro.
  */
 
+import type { MmradarPerformanceScores } from "@velada/core";
+
 export interface MmradarUpdatePayload {
   participantId: string;
   performanceRank: string | null;
+  /**
+   * Ampliado junto con performanceRank: antes solo se propagaba el texto
+   * del rango, asi que apretar "Actualizar" en MmradarPanel actualizaba
+   * el texto de performance en PlayerCard pero nunca su barra (que recien
+   * empezo a existir en esta misma vuelta -- ver PlayerCard.tsx). Ahora
+   * viajan los 6 scores crudos tambien, para que PlayerCardLive pueda
+   * recalcular el ancho de la barra sin recargar la pagina.
+   */
+  performanceScores: MmradarPerformanceScores | null;
 }
 
 const bus = new EventTarget();
