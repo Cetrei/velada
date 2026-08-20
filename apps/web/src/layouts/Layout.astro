@@ -9,16 +9,11 @@ interface Props {
 }
 
 const { title, description = SITE.defaultDescription } = Astro.props;
-
 const navLinks = NAV.links;
-
-// Toda la app corre en output: "server" (ver astro.config.mjs), asi que
-// resolver la sesion aca adentro del layout compartido es seguro en
-// cualquier pagina que lo use, sin tener que hacer que cada .astro pase
-// session como prop. Decide entre "Inscribirme" (-> /inscripcion, login/
-// registro) y "Mi Perfil" (-> /mi-perfil, completar/editar ficha) en el
-// nav superior segun haya sesion o no.
 const session = await getSession(Astro.cookies, Astro);
+
+// Detectar si estamos en el landing para cortar el scroll del body
+const isHome = Astro.url.pathname === "/";
 ---
 
 <!doctype html>
@@ -28,15 +23,15 @@ const session = await getSession(Astro.cookies, Astro);
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{title}</title>
     <meta name="description" content={description} />
-
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Oswald:wght@500;700&display=swap"
-      rel="stylesheet"
-    />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Oswald:wght@500;700&display=swap" rel="stylesheet" />
   </head>
-  <body class="antialiased min-h-screen flex flex-col font-sans">
+
+  <body class:list={[
+    "antialiased flex flex-col font-sans",
+    isHome ? "h-screen overflow-hidden" : "min-h-screen"
+  ]}>
     <nav class="fixed top-0 w-full z-50 bg-lol-darkBg/80 backdrop-blur-md border-b border-lol-border">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
         <a href="/" class="flex items-center gap-3">
@@ -45,37 +40,27 @@ const session = await getSession(Astro.cookies, Astro);
               <span class="text-lol-gold font-display font-bold -rotate-45 block">{SITE.logoText}</span>
             </div>
           </div>
-          <span class="font-display font-bold text-xl text-white tracking-widest uppercase">
-            {SITE.name}
-          </span>
+          <span class="font-display font-bold text-xl text-white tracking-widest uppercase">{SITE.name}</span>
         </a>
         <div class="hidden md:flex items-center space-x-8">
-          {
-            navLinks.map((link) => (
-              <a
-                href={link.href}
-                class="text-sm font-medium text-slate-300 hover:text-lol-gold transition-colors"
-              >
-                {link.label}
-              </a>
-            ))
-          }
-          <a
-            href={session ? "/mi-perfil" : "/inscripcion"}
-            class="px-5 py-2 bg-lol-gold/10 border border-lol-gold text-lol-gold hover:bg-lol-gold hover:text-lol-darkBg transition-all font-bold text-sm tracking-wide uppercase clip-edges"
-          >
+          {navLinks.map((link) => (
+            <a href={link.href} class="text-sm font-medium text-slate-300 hover:text-lol-gold transition-colors">{link.label}</a>
+          ))}
+          <a href={session ? "/mi-perfil" : "/inscripcion"} class="px-5 py-2 bg-lol-gold/10 border border-lol-gold text-lol-gold hover:bg-lol-gold hover:text-lol-darkBg transition-all font-bold text-sm tracking-wide uppercase clip-edges">
             {session ? NAV.profileCta : NAV.registerCta}
           </a>
         </div>
       </div>
     </nav>
 
-    <main class="flex-1">
+    <main class:list={["flex-1", isHome ? "overflow-hidden" : ""]}>
       <slot />
     </main>
 
-    <footer class="bg-[#02040a] border-t border-lol-border py-8 text-center text-slate-500 text-sm">
-      <p>{SITE.footer(new Date().getFullYear())}</p>
-    </footer>
+    {!isHome && (
+      <footer class="bg-[#02040a] border-t border-lol-border py-8 text-center text-slate-500 text-sm">
+        <p>{SITE.footer(new Date().getFullYear())}</p>
+      </footer>
+    )}
   </body>
 </html>
