@@ -26,43 +26,59 @@ function sum(values: number[]): number {
   return values.reduce((a, b) => a + b, 0);
 }
 
+// Formatos validos de LoL en custom: 3v3, 4v4 y 5v5 (equipo reducido de 3 o
+// 4 sigue siendo una partida jugable con roles recortados; menos de 3 por
+// equipo ya no lo es). MIN_BLOCK=6 (3v3), MAX_BLOCK=10 (5v5).
 const MIN_BLOCK = 6;
 const MAX_BLOCK = 10;
 
 /**
- * Puntaje de una particion candidata para elegir la mejor: primero MENOS
- * sobrante (prioridad principal -- pedido del usuario: con 12 participantes
- * quiere que no quede nadie afuera), despues MENOS bloques (preferir dos
- * 3v3 en vez de tres 2v2... aunque 2v2 ni siquiera es valido, MIN_BLOCK=6
- * ya lo evita) y por ultimo bloques mas parejos entre si (mas cerca de 8,
- * que es el punto medio entre 6 y 10) para no mezclar un 3v3 gigante con
- * un 5v5 cuando hay una opcion mas pareja con el mismo sobrante.
+ * Puntaje de una particion candidata para elegir la mejor -- pedido del
+ * usuario 2026-08-21 (segunda vuelta, tras corregir mal la primera): (1)
+ * MENOS sobrante ante todo -- nunca tomar un 5v5 si eso deja un resto que
+ * no puede formar otro grupo valido (ej. con 13: tomar el 5v5 de entrada
+ * deja 3 sueltos que no arman nada; en cambio 6+6 dejan solo 1 afuera).
+ * Con empate en sobrante, (2) PRIORIZAR GRUPOS MAS GRANDES: menos bloques
+ * primero (menos partidos, cada uno mas grande) y entre particiones con
+ * igual cantidad de bloques, la que tenga el bloque mas grande primero
+ * (se compara bloque a bloque, de mayor a menor, y gana la que tenga el
+ * numero mas alto en la primera posicion donde difieren) -- asi con 16
+ * elige [10, 6] (un 5v5 + un 3v3) en vez de [8, 8] (dos 4v4): ambas dejan
+ * 0 sobrante y 2 bloques, pero [10, 6] tiene el grupo mas grande posible
+ * primero.
  */
-function scoreOf(partition: number[], total: number): [number, number, number] {
-  const leftover = total - sum(partition);
-  const blockCount = partition.length;
-  const spread = sum(partition.map((b) => Math.abs(b - 8)));
-  return [leftover, blockCount, spread];
+function scoreOf(partition: number[], total: number): { leftover: number; blockCount: number; sortedDesc: number[] } {
+  return {
+    leftover: total - sum(partition),
+    blockCount: partition.length,
+    sortedDesc: [...partition].sort((a, b) => b - a)
+  };
 }
 
 function isBetter(candidate: number[], best: number[], total: number): boolean {
   const a = scoreOf(candidate, total);
   const b = scoreOf(best, total);
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return a[i] < b[i];
+
+  if (a.leftover !== b.leftover) return a.leftover < b.leftover;
+  if (a.blockCount !== b.blockCount) return a.blockCount < b.blockCount;
+
+  for (let i = 0; i < a.sortedDesc.length; i++) {
+    if (a.sortedDesc[i] !== b.sortedDesc[i]) return a.sortedDesc[i] > b.sortedDesc[i];
   }
   return false;
 }
 
 /**
  * Particiona `total` en bloques pares entre MIN_BLOCK (6, un 3v3) y
- * MAX_BLOCK (10, un 5v5), minimizando el sobrante -- por ejemplo con 12
- * devuelve [6, 6] (dos 3v3, 0 sobrante) en vez del viejo comportamiento
- * greedy que siempre tomaba el bloque de 10 primero si alcanzaba, dejando
- * un 5v5 + 2 personas sobrantes sin combate. Con empate en sobrante
- * prefiere menos bloques, y despues bloques mas parejos entre si (ver
- * scoreOf). DP acotado por MIN_BLOCK/MAX_BLOCK, trivial en tamaño para
- * cualquier cantidad realista de participantes.
+ * MAX_BLOCK (10, un 5v5), minimizando el sobrante ante todo y despues
+ * priorizando grupos mas grandes (ver scoreOf/isBetter). DP acotada por
+ * MIN_BLOCK/MAX_BLOCK, trivial en tamaño para cualquier cantidad realista
+ * de participantes.
+ *
+ * Ejemplos: 12 -> [6, 6] (dos 3v3, 0 sobrante -- tomar un 5v5 dejaria 2
+ * sueltos). 13 -> [6, 6] (0 sobrante en bloques + 1 suelto, mejor que
+ * [10] con 3 sueltos). 16 -> [10, 6] (0 sobrante, grupo mas grande
+ * posible primero). 20 -> [10, 10] (dos 5v5 completos).
  */
 function bestPartition(total: number): number[] {
   if (total < MIN_BLOCK) return [];
