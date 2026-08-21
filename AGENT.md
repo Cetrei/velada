@@ -2296,6 +2296,87 @@ era el de arriba, no whitelist).
   el campo nuevo no rompe nada tipado en otro lugar no revisado esta
   sesion.
 
+## Sesion 2026-08-21: Cron Trigger para refresh automatico de mmradar (lol_rank quedaba stale indefinidamente)
+- Origen: el usuario reporto con capturas reales que el Current Rank
+  guardado en Supabase de algunos jugadores (LegenPaPaNoel, YourDaddyDrinks)
+  estaba 3 divisiones desactualizado respecto a mmradar.gg en vivo.
+  Confirmado leyendo actions/index.ts: lol_rank/mmradar_engine_matches SOLO
+  se re-escriben con refresh manual (guardar el perfil o apretar
+  "Actualizar" -> refreshMmradarData) -- sin ningun proceso automatico, un
+  jugador que no toca su perfil queda stale para siempre. El usuario pidio
+  explicitamente resolverlo con un cron/edge function en vez de solo
+  mostrar "ultima actualizacion" en la UI.
+- **`apps/web/src/worker.ts` (nuevo)**: wrapper de Worker que reexporta el
+  `fetch` que genera Astro (`dist/_worker.js/index.js`, importado tal cual
+  -- confirmado contra `node_modules/@astrojs/cloudflare@11.2.0/dist/
+  index.d.ts` real que esta version del adapter NO expone `workerEntryPoint`
+  ni `handle()` reusable, esas llegaron en versiones mucho mas nuevas) y le
+  agrega un handler `scheduled()` propio -- mismo patron que documenta
+  Cloudflare/OpenNext para frameworks que solo exportan `fetch`. Adentro:
+  cliente de Supabase standalone (mismo patron `createStandaloneSupabaseClient`
+  que ya usaba `scripts/test-rank-calibration.test.ts`, porque un evento
+  scheduled no tiene `locals`/request), trae hasta `MAX_REFRESHED_PER_RUN
+  = 15` participantes con `lol_username` ordenados por `mmradar_updated_at`
+  ascendente (nulls primero), y para cada uno reimplementa exactamente el
+  mismo guardado que `refreshMmradarData` (mismos campos, mismo fallback de
+  rank si mmradar no responde). Consultas SECUENCIALES a mmradar.gg (no
+  `Promise.all`), mismo motivo que ya documentaba
+  `test-rank-calibration.test.ts`: rafagas se tratan como bot. Tipos
+  minimos propios para `ScheduledController`/`ExecutionContext`/
+  `ExportedHandler` (confirmado que `@cloudflare/workers-types` NO esta
+  instalado ni en `apps/web/node_modules` ni hoisteado en la raiz del
+  monorepo Bun, y `tsconfig.json` no declara `types` explicito -- no se
+  quiso asumir que iba a resolver como ambient global).
+- **`apps/web/wrangler.toml`**: `main` cambiado de
+  `"./dist/_worker.js/index.js"` a `"./src/worker.ts"` (el wrapper nuevo).
+  Agregado `[triggers]` con `crons = ["0 */6 * * *"]` (cada 6 horas, UTC --
+  Cloudflare no soporta timezone por trigger). Agregada
+  `PUBLIC_SUPABASE_URL = ""` a `[vars]` (texto plano, no sensible): el cron
+  corre fuera del bundle de Astro, no tiene `import.meta.env`, necesita esa
+  URL como binding real de `env` -- antes esta var SOLO se inyectaba en
+  build time (inlineada por Astro), nunca llegaba como binding runtime del
+  Worker.
+- **`scripts/setup-cloudflare-secrets.ts`**: nueva
+  `patchWranglerTomlPublicSupabaseUrl(url, webDir)` que reemplaza la linea
+  `PUBLIC_SUPABASE_URL = "..."` de `wrangler.toml` por el valor real leido
+  del `.env` de la raiz -- se llama automaticamente en `main()` despues de
+  setear los Worker secrets existentes. No via `wrangler secret put`
+  (pensado para valores sensibles que no se pueden releer despues; esta URL
+  no es sensible y conviene que quede visible/versionable en el archivo).
+  Mensajes finales del script actualizados para mencionar este paso nuevo y
+  recordar comitear `wrangler.toml`/`worker.ts`.
+- **Riesgo real no verificable desde esta sesion (sin bash sobre el
+  proyecto)**: el import relativo `"../dist/_worker.js/index.js"` dentro de
+  `worker.ts` (marcado `@ts-expect-error` porque ese archivo generado no
+  existe hasta despues de `astro build`) deberia resolver bien cuando
+  Wrangler bundlea `main` con esbuild en el paso de deploy (confirmado que
+  `deploy.yml` corre `astro build` ANTES de `wrangler deploy`, asi que el
+  archivo va a existir en ese momento) -- pero nunca se corrio un build/
+  deploy real para confirmarlo. Si `wrangler deploy` falla al resolver ese
+  import, revisar primero si esbuild necesita el import con extension
+  `.js` explicita (ya la tiene) o si hace falta ajustar
+  `compatibility_flags`/algun flag de bundling adicional.
+- Pendiente para el usuario (sin bash real sobre el proyecto en esta
+  sesion tampoco, todo via filesystem MCP): correr
+  `bun run scripts/setup-cloudflare-secrets.ts` de nuevo para que
+  `PUBLIC_SUPABASE_URL` quede escrita en `apps/web/wrangler.toml`, comitear
+  ese archivo + `apps/web/src/worker.ts` + `scripts/setup-cloudflare-secrets.ts`,
+  y hacer un deploy real (push a `main`) para confirmar que
+  `wrangler deploy` resuelve el import a `dist/_worker.js/index.js` sin
+  error y que el sitio sigue respondiendo requests normalmente (el cron no
+  deberia romper el `fetch` en absoluto, pero es la primera vez que `main`
+  apunta a un archivo custom en vez del generado por Astro). Confirmar en
+  el dashboard de Cloudflare (Workers > velada-lol > Triggers) que el Cron
+  Trigger `0 */6 * * *` aparece registrado tras el deploy. Para probarlo
+  sin esperar 6 horas: `wrangler dev --test-scheduled` localmente y
+  `curl "http://localhost:8787/cdn-cgi/handler/scheduled"` (o el flag
+  equivalente que soporte la version de wrangler instalada, `^3.78.0` --
+  confirmar la sintaxis exacta contra esa version si el comando de la doc
+  actual no coincide). Revisar los logs de Cloudflare (Workers Logs, ya
+  habilitados en `[observability.logs]`) despues de la primera ejecucion
+  real del cron para confirmar cuantos participantes se refrescaron y si
+  hubo algun error puntual.
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.

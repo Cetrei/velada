@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -96,6 +96,39 @@ function setWorkerSecret(name: string, value: string, cwd: string): void {
   console.log(`✓ ${name} configurado como secret del Worker (velada-lol)`);
 }
 
+/**
+ * PUBLIC_SUPABASE_URL como var de Worker (texto plano en wrangler.toml, no
+ * secret -- ver el comentario largo en [vars] de apps/web/wrangler.toml):
+ * src/worker.ts (handler `scheduled` del cron de refresh de mmradar) corre
+ * fuera del bundle de Astro y necesita leerla de env.PUBLIC_SUPABASE_URL en
+ * runtime, no de import.meta.env (que solo existe inlineado en el codigo
+ * compilado de Astro). `wrangler secret put` no sirve para esto (esta
+ * pensado para valores sensibles, no aparece en `[vars]` ni es legible al
+ * editar el archivo despues) -- la forma correcta para una var no sensible
+ * es escribirla directo en wrangler.toml, asi queda versionable/visible
+ * como cualquier otra config. Reemplaza la linea
+ * `PUBLIC_SUPABASE_URL = "..."` existente (dejada vacia por defecto en el
+ * archivo) por el valor real leido del .env de la raiz.
+ */
+function patchWranglerTomlPublicSupabaseUrl(url: string, webDir: string): void {
+  const wranglerTomlPath = resolve(webDir, "wrangler.toml");
+  const raw = readFileSync(wranglerTomlPath, "utf-8");
+  const pattern = /^PUBLIC_SUPABASE_URL = ".*"$/m;
+
+  if (!pattern.test(raw)) {
+    console.warn(
+      `No se encontro una linea 'PUBLIC_SUPABASE_URL = "..."' en ${wranglerTomlPath} bajo [vars] -- ` +
+        "se salta este paso. Si el cron de refresh (src/worker.ts) falla con " +
+        "'PUBLIC_SUPABASE_URL no configurado', agregala a mano ahi."
+    );
+    return;
+  }
+
+  const patched = raw.replace(pattern, `PUBLIC_SUPABASE_URL = "${url}"`);
+  writeFileSync(wranglerTomlPath, patched, "utf-8");
+  console.log(`✓ PUBLIC_SUPABASE_URL escrita en ${wranglerTomlPath} ([vars], texto plano)`);
+}
+
 function main(): void {
   const rootEnvPath = resolve(import.meta.dir, "..", ".env");
   if (!existsSync(rootEnvPath)) {
@@ -127,19 +160,33 @@ function main(): void {
     setWorkerSecret(key, env[key]!, webDir);
   }
 
+  console.log("\nConfigurando PUBLIC_SUPABASE_URL como var de Worker (wrangler.toml)...\n");
+  patchWranglerTomlPublicSupabaseUrl(env.PUBLIC_SUPABASE_URL!, webDir);
+
   console.log(
     "\nListo. El workflow .github/workflows/deploy.yml ya puede leer estos" +
-      " secrets en el proximo push a main o release, y el Worker ya tiene" +
+      " secrets en el proximo push a main o release, el Worker ya tiene" +
       " SUPABASE_SERVICE_ROLE_KEY / PANEL_PASSPHRASE / ADMIN_EMAILS" +
-      " disponibles en runtime."
+      " disponibles en runtime, y apps/web/wrangler.toml ya tiene" +
+      " PUBLIC_SUPABASE_URL escrita para que el cron de refresh de mmradar" +
+      " (src/worker.ts) pueda usarla."
   );
   console.log(
-    "Nota: PUBLIC_SUPABASE_URL y PUBLIC_SUPABASE_ANON_KEY se inyectan en" +
-      " build time (Astro las incrusta al compilar), por eso van como" +
-      " GitHub secret. El resto (SUPABASE_SERVICE_ROLE_KEY, PANEL_PASSPHRASE," +
-      " ADMIN_EMAILS) se lee en runtime dentro de las Astro Actions via" +
-      " locals.runtime.env, por eso van directo al Worker con" +
-      " `wrangler secret put` en vez de a GitHub Actions."
+    "Nota: PUBLIC_SUPABASE_URL y PUBLIC_SUPABASE_ANON_KEY para el codigo de" +
+      " Astro/las Actions se inyectan en build time (Astro las incrusta al" +
+      " compilar), por eso van como GitHub secret. PUBLIC_SUPABASE_URL" +
+      " ADEMAS se escribe en texto plano en apps/web/wrangler.toml ([vars])" +
+      " porque src/worker.ts (el handler scheduled del cron) corre fuera" +
+      " del bundle de Astro y no tiene import.meta.env -- no es sensible," +
+      " por eso no usa wrangler secret put. El resto (SUPABASE_SERVICE_ROLE_KEY," +
+      " PANEL_PASSPHRASE, ADMIN_EMAILS) se lee en runtime via" +
+      " locals.runtime.env / env directo, por eso van a `wrangler secret put`" +
+      " en vez de a GitHub Actions o a wrangler.toml en texto plano."
+  );
+  console.log(
+    "\nRecorda hacer commit + push de apps/web/wrangler.toml (PUBLIC_SUPABASE_URL" +
+      " quedo escrita ahi, no es un secret pero si config real del deploy) y de" +
+      " apps/web/src/worker.ts si todavia no estan en el repo."
   );
 }
 

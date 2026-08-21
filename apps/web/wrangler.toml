@@ -1,7 +1,22 @@
 name = "velada-lol"
-main = "./dist/_worker.js/index.js"
+# Antes apuntaba directo a "./dist/_worker.js/index.js" (el output que
+# genera @astrojs/cloudflare). Ahora apunta a src/worker.ts, un wrapper que
+# reexporta ese mismo handler (fetch) y le agrega scheduled() -- ver el
+# comentario de cabecera de ese archivo para el porque completo (Cron
+# Trigger que refresca lol_rank/mmradar_engine_matches de todo el roster
+# automaticamente, sin depender del boton "Actualizar" manual). Wrangler
+# resuelve este path recien en `wrangler deploy`, que .github/workflows/
+# deploy.yml corre siempre DESPUES de `astro build` -- dist/_worker.js/
+# index.js (el import interno de worker.ts) ya existe en ese momento.
+main = "./src/worker.ts"
 compatibility_date = "2026-04-15"
 compatibility_flags = ["nodejs_compat"]
+
+[triggers]
+# Cada 6 horas (UTC, Cloudflare no soporta timezone por trigger). Ver
+# MAX_REFRESHED_PER_RUN en src/worker.ts para el tamano de roster que esto
+# alcanza a rotar por dia con este intervalo.
+crons = ["0 */6 * * *"]
 
 # Custom domain: velada.cetrei.dev debe existir como zona (cetrei.dev) en la
 # misma cuenta de Cloudflare. Wrangler crea el registro DNS y el binding
@@ -21,8 +36,24 @@ binding = "ASSETS"
 # an asset". Ver apps/web/public/.assetsignore.
 
 [vars]
-# PUBLIC_SUPABASE_URL and PUBLIC_SUPABASE_ANON_KEY are injected at build time
-# via GitHub Actions secrets, not here. Local dev uses apps/web/.env instead.
+# PUBLIC_SUPABASE_URL and PUBLIC_SUPABASE_ANON_KEY (usadas por el codigo de
+# Astro/las Actions) siguen inyectandose en build time via GitHub Actions
+# secrets, no aca -- eso no cambio.
+#
+# PUBLIC_SUPABASE_URL SI se declara aca ademas, como var de Worker en texto
+# plano (no sensible, es una URL publica): src/worker.ts (el handler
+# `scheduled` del cron de refresh de mmradar, ver ese archivo) corre fuera
+# del codigo compilado de Astro y necesita leerla de env.PUBLIC_SUPABASE_URL
+# en runtime -- import.meta.env (inlineado en build) no le sirve a un
+# handler que no es parte del bundle de Astro en si. La contraparte
+# sensible, SUPABASE_SERVICE_ROLE_KEY, sigue yendo por
+# `wrangler secret put` (scripts/setup-cloudflare-secrets.ts), nunca aca en
+# texto plano.
+PUBLIC_SUPABASE_URL = ""
+# Valor real seteado por scripts/setup-cloudflare-secrets.ts (agregado a
+# WORKER_RUNTIME_VARS ahi) o a mano con `wrangler deploy --var
+# PUBLIC_SUPABASE_URL:<valor>` / editando este archivo directamente antes
+# de deployar. Local dev sigue usando apps/web/.env.
 
 [observability]
 enabled = false

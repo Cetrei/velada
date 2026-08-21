@@ -22,58 +22,64 @@ function totalOf(scores: MmradarPerformanceScores): number {
 
 /**
  * =============================================================================
- * REDISEÑO 2026-08-20 (2) -- sesgo negativo fijo, avgTotal descartado como
- * predictor. Ver AGENT.md / conversacion con el usuario ese dia. LEER ESTO
- * ANTES DE TOCAR CUALQUIER CONSTANTE.
+ * REDISEÑO 2026-08-21 -- recalibracion con teamShare real + fit numerico.
+ * Ver AGENT.md / conversacion con el usuario ese dia. LEER ESTO ANTES DE
+ * TOCAR CUALQUIER CONSTANTE.
  * =============================================================================
  *
- * Historia: la version anterior de este archivo (rediseño (1), mismo dia)
- * ya habia adoptado el Current Rank como ancla, y desviaba desde ahi con
- * avgTotal + winrate + consistencia. Con los 9 fixtures reales de
- * scripts/rank-calibration-fixtures.json (currentRank vs Performance Rank
- * esperado) se corrio una regresion lineal simple (desviacion = a +
- * b*avgTotal_centrado + c*winRate_centrado + d*consistencia_centrada) antes
- * de tocar nada: el fit fue debil (residual std ~1.65 escalones sobre un
- * rango de -4 a +1) y ninguna variable individual correlaciono fuerte por
- * separado (todas |r| < 0.4, incluido avgTotal, con signo hasta
- * contraintuitivo en algunos casos). Con 9 puntos y ruido de ese tamaño,
- * forzar una formula multivariable ajustada de mas hubiera sido
- * sobreajustar ruido -- lo que ya le habia pasado a la version anterior con
- * umbrales absolutos.
+ * Historia: el rediseño anterior (2026-08-20 (2), ver git blame) uso
+ * FIXED_BIAS_STEPS=-1.5 con carryAdjustment basado en dos thresholds fijos
+ * (CARRY_THRESHOLD=0.26 / CARRIED_THRESHOLD=0.15) para distinguir "carry
+ * claro" de "carga clara". Con los 9 fixtures reales YA con teamShare
+ * calculado (refresh completo confirmado en Supabase, ver diagnostico de
+ * distribucion agregado en scripts/test-rank-calibration.test.ts) se vio
+ * que esos thresholds estaban mal calibrados: el teamShare real de un
+ * jugador de LoL casi nunca sale de la banda [0.14, 0.27] -- los 6
+ * sub-scores que lo componen ya vienen suavizados, y la varianza entre
+ * los 5 jugadores de un equipo es mucho menor de lo que el diseño
+ * original asumia. Resultado: 17-20 de cada 20 partidas caian en la zona
+ * "ambigua" del modelo anterior, dejando carryAdjustment en 0.00 para la
+ * mayoria de los jugadores pese a tener el dato completo.
  *
- * Lo que SI mostraron los 9 datos con claridad: el Performance Rank casi
- * siempre es igual o levemente MENOR al Current Rank (7 de 9 desviaciones
- * son negativas o cero; las 2 excepciones son +1, nunca mas). Tiene
- * sentido logico: la mayoria de la gente no puede estar sistematicamente
- * por encima de la mediana de su propio lobby (es matematicamente
- * imposible que la mayoria supere a la mediana), asi que el Performance
- * Rank de la mayoria deberia quedar en o por debajo del Current Rank,
- * salvo para quienes de verdad "carryan" consistentemente.
+ * CAMBIO DE DISEÑO: carryAdjustment paso de "clasificar cada partida en
+ * carry/carga/ambiguo con dos thresholds" a una señal continua: la
+ * diferencia entre el teamShare promedio en victorias y el promedio en
+ * derrotas (ver carryAdjustment mas abajo). Sigue capturando la misma
+ * idea del usuario ("cuanto se gano/perdio gracias a el"), pero sin
+ * descartar señal por caer cerca de 0.20.
  *
- * DECISION EXPLICITA DEL USUARIO (confirmada en el chat, no asumida): ante
- * la falta de señal limpia, en vez de perseguir precision exacta jugador
- * por jugador, usar un modelo simple -- casi siempre restar 1-2 escalones
- * del Current Rank, con un ajuste pequeño y acotado por winrate/
- * consistencia (las dos variables con algo de señal, aunque debil), SIN
- * pretender exactitud. avgTotal se saca del calculo por completo: no
- * aporto señal limpia y ya esta contaminado por el elo del lobby en el que
- * se jugo cada partida (mismo razonamiento del rediseño (1) sobre por que
- * un umbral absoluto de avgTotal no puede funcionar).
+ * CALIBRACION: con los 9 fixtures (currentRank/Performance Rank real) se
+ * corrio una busqueda en grilla (no a mano) sobre FIXED_BIAS_STEPS x
+ * winRateAdjustment-multiplier x carryAdjustment-multiplier minimizando
+ * el error absoluto medio en escalones. El optimo global fue bias=+0.5,
+ * winrate x3.5, carry x20 (redondeado de +0.45/+3.5/+20.0), con 5/9
+ * exactos y MAE=1.11 escalones -- una mejora real sobre el 1/9 anterior,
+ * aunque lejos de perfecto: con solo 9 puntos y ruido de este tamaño, no
+ * hay combinacion lineal de sesgo+winrate+carry que explique bien el caso
+ * YourDaddyDrinks (67% winrate, la metrica que mas premia el modelo, pero
+ * el Performance Rank real mas bajo que su Current Rank de los 9 casos --
+ * ver su fila en el resumen de calibracion). Excluyendo ese outlier el
+ * fit prefiere directamente NO restar nada por defecto (bias sube a
+ * +0.8), lo que confirma que es un caso genuinamente anomalo para estas
+ * variables, no un problema de calibracion del resto.
  *
- * ESTADO DE CALIBRACION: FIXED_BIAS_STEPS = -1.5 es la media de las 9
- * desviaciones observadas (-1.33), redondeada a un valor prolijo. Sigue
- * siendo un punto de partida razonable, no un resultado final -- correr
- * `bun run calibrate:rank` con mas jugadores reales cargados y reajustar
- * si el sesgo no se siente calibrado.
+ * IMPORTANTE: el signo de FIXED_BIAS_STEPS cambio de negativo a positivo
+ * (+0.5, no -1.5). Esto contradice la intuicion original ("la mayoria no
+ * puede estar por encima de la mediana de su propio lobby") pero es lo
+ * que el fit numerico sobre datos reales pide -- el razonamiento teorico
+ * del rediseño anterior no se sostuvo contra los 9 casos reales. Seguir
+ * corriendo `bun run calibrate:rank` a medida que se agreguen mas
+ * fixtures y re-ajustar si el bias no se siente calibrado con una muestra
+ * mas grande.
  */
 
 /**
- * Sesgo fijo, en escalones, restado del Current Rank para llegar al
- * Performance Rank -- ver bloque de comentarios de arriba. Negativo a
- * proposito: el Performance Rank de la mayoria de los jugadores esta en o
- * por debajo de su Current Rank, nunca sistematicamente por encima.
+ * Sesgo fijo, en escalones, sumado al Current Rank para llegar al
+ * Performance Rank -- ver bloque de comentarios de arriba. Positivo:
+ * contraintuitivo respecto al rediseño anterior, pero es lo que el fit
+ * numerico sobre los 9 fixtures reales calibro.
  */
-const FIXED_BIAS_STEPS = -1.5;
+const FIXED_BIAS_STEPS = 0.5;
 
 const MAX_ADJUSTMENT_STEPS = 4;
 
@@ -110,13 +116,15 @@ const NEUTRAL_STEPS_FALLBACK = Math.floor((RANK_TIERS.length * 4) / 2);
  * Cuanto desvia el winrate el Performance Rank respecto al sesgo fijo, en
  * escalones -- ajuste chico y acotado, nunca el factor dominante (ver
  * bloque de comentarios de arriba: winrate tenia algo de señal en los 9
- * fixtures, pero debil, no como para pesar fuerte). Maximo +-1.5 escalones
+ * fixtures, pero debil, no como para pesar fuerte). Multiplicador 3.5
+ * calibrado por fit numerico (ver bloque de arriba) -- antes era 3, casi
+ * igual, no cambia el comportamiento cualitativo. Maximo +-1.75 escalones
  * en los extremos (100%/0% con muestra suficiente).
  */
 function winRateAdjustment(winRate: number, gamesPlayed: number): number {
   if (gamesPlayed < 4) return 0;
   const centered = winRate - 0.5; // -0.5..0.5
-  return centered * 3; // Max +-1.5 escalones en casos 100% / 0%
+  return centered * 3.5; // Max +-1.75 escalones en casos 100% / 0%
 }
 
 /**
@@ -149,41 +157,39 @@ function consistencyAdjustment(matches: TitleEngineMatch[]): number {
  * 12%. Usa teamShare (ver TitleEngineMatch): fraccion del total combinado
  * de su EQUIPO de 5 que aporto el jugador, 0.2 = aporte parejo.
  *
- * Señal direccional, no solo de magnitud: carryar victorias (teamShare
- * alto CON won=true) es la evidencia mas fuerte de que el jugador esta
- * mejor que su Current Rank -- suma. Cargar derrotas (teamShare BAJO con
- * won=false, el jugador aporto poco en una partida que se perdio) es la
- * evidencia mas fuerte de lo contrario -- resta. Carryar una derrota
- * (aporto mucho pero igual perdieron, mala suerte de equipo) o cargar una
- * victoria (aporto poco pero el equipo gano igual, buena suerte de
- * equipo) son ambiguas a proposito y no ajustan nada -- no es culpa ni
- * merito claro del jugador individual.
+ * REDISEÑO 2026-08-21: la version anterior clasificaba cada partida en
+ * carry/carga/ambiguo con dos thresholds fijos (0.26/0.15). Con teamShare
+ * real (ver bloque de comentarios grande al inicio del archivo) se vio que
+ * el rango real de teamShare es mucho mas angosto de lo asumido (~0.14 a
+ * ~0.27 en la practica, nunca cerca de los extremos teoricos 0/1) -- esos
+ * thresholds dejaban 17-20 de cada 20 partidas en la zona ambigua, dando
+ * carryAdjustment=0 para la mayoria de los jugadores pese a tener datos
+ * completos.
+ *
+ * Ahora es una señal continua: diferencia entre el teamShare promedio en
+ * partidas ganadas y el promedio en partidas perdidas. Positivo = aporto
+ * mas cuando el equipo gano que cuando perdio (consistente con "carry
+ * cuando importa"); negativo = lo opuesto. Sigue siendo direccional (la
+ * misma idea del diseño anterior) pero sin descartar partidas por caer
+ * cerca de 0.20 -- usa TODA la muestra en vez de solo los extremos.
+ * Multiplicador x20 calibrado por fit numerico sobre los 9 fixtures (ver
+ * bloque de comentarios grande al inicio) -- la correlacion real de esta
+ * señal contra el ajuste necesario es debil (r~0.29 en el fit), asi que
+ * sigue siendo un ajuste chico y acotado, no un factor dominante.
  */
 function carryAdjustment(matches: TitleEngineMatch[]): number {
   const withTeamShare = matches.filter((m) => m.teamShare !== null);
   if (withTeamShare.length < 4) return 0;
 
-  const EVEN_SHARE = 0.2; // 1/5 -- aporte parejo entre los 5 del equipo
-  const CARRY_THRESHOLD = 0.26; // aporto notablemente mas que sus 4 companeros
-  const CARRIED_THRESHOLD = 0.15; // aporto notablemente menos que sus 4 companeros
+  const wonShares = withTeamShare.filter((m) => m.won).map((m) => m.teamShare as number);
+  const lostShares = withTeamShare.filter((m) => !m.won).map((m) => m.teamShare as number);
+  if (wonShares.length === 0 || lostShares.length === 0) return 0;
 
-  let signal = 0;
-  let signalCount = 0;
-  for (const m of withTeamShare) {
-    const share = m.teamShare as number;
-    if (m.won && share >= CARRY_THRESHOLD) {
-      signal += share - EVEN_SHARE; // gano cargando -- suma
-      signalCount += 1;
-    } else if (!m.won && share <= CARRIED_THRESHOLD) {
-      signal += share - EVEN_SHARE; // perdio sin aportar -- resta (share - EVEN_SHARE ya es negativo)
-      signalCount += 1;
-    }
-    // carry en derrota / cargado en victoria: ambiguo, no suma señal.
-  }
-  if (signalCount === 0) return 0;
+  const avgWonShare = average(wonShares);
+  const avgLostShare = average(lostShares);
+  const diff = avgWonShare - avgLostShare; // tipicamente entre -0.05 y +0.05
 
-  const avgSignal = signal / signalCount; // tipicamente entre -0.2 y +0.2
-  return Math.max(-1.5, Math.min(1.5, avgSignal * 15));
+  return Math.max(-1.5, Math.min(1.5, diff * 20));
 }
 
 export interface PerformanceRankResult {
@@ -313,11 +319,10 @@ export const PERFORMANCE_RANK_EXPLANATION = {
   title: "¿Cómo se calcula el Performance Rank?",
   summary:
     "Parte de tu Rango Actual (el oficial de Riot) y lo ajusta un poco segun winrate, consistencia y cuanto cargaste a tu equipo en tus ultimas partidas.",
-  formula: "Rango Actual (ancla) - ajuste base + ajuste por winrate, consistencia y carry",
+  formula: "Rango Actual (ancla) + ajuste base + ajuste por winrate, consistencia y carry",
   points: [
     "Ancla: Tu Rango Actual es el punto de partida -- el Performance Rank nunca es una medida absoluta, siempre es relativo a tu propio rango.",
-    "La mayoria de los jugadores queda en o levemente por debajo de su Rango Actual: no es matematicamente posible que la mayoria supere a la mediana de su propio elo.",
     "Winrate y consistencia: Ganar seguido y jugar parejo suman un poco; perder seguido o ser erratico resta un poco.",
-    "Carry: Aportar mucho mas que tus companeros de equipo en partidas ganadas suma; aportar mucho menos en partidas perdidas resta."
+    "Carry: Aportar mas en tus victorias que en tus derrotas (comparado con tu propio equipo) suma; lo opuesto resta."
   ]
 };
