@@ -2377,6 +2377,108 @@ era el de arriba, no whitelist).
   real del cron para confirmar cuantos participantes se refrescaron y si
   hubo algun error puntual.
 
+## Sesion 2026-08-21 (3): terminado statProfileAdjustment (quedaba a medias) + fix de alineacion 1v1/Performance en roster + hints agrupados + explicacion de formulas al dia
+- Retomando una sesion cortada a medias (chat pegado por el usuario, no en
+  este AGENT.md): `statProfileAdjustment` en `packages/core/performanceRank.ts`
+  estaba completamente escrita y documentada, pero nunca se sumaba en
+  `computePerformanceRank`/`computePerformanceRankDebug` ni figuraba en
+  `PerformanceRankDebug` -- calculada y descartada, sin efecto real.
+  Integrada en ambas funciones (`rawAdjustment`/`adjustment` ahora la
+  incluyen) y agregada al debug/al log de `scripts/test-rank-calibration.test.ts`.
+  Verificado a mano con los datos reales de Nashi/YourDaddyDrinks (ver
+  chat previo): con el multiplicador x18 ya elegido, YourDaddyDrinks se
+  acerca (Platinum II -> Platinum III) pero NO llega al Gold I esperado, y
+  confirmado matematicamente que ningun multiplicador mayor cierra esa
+  brecha sin romper a Nashi (el ajuste satura en +-1.5 escalones antes de
+  mover lo suficiente) -- documentado en el comentario de la funcion en
+  vez de perseguir un 9/9 imposible con estas variables. Pendiente para el
+  usuario: correr `bun run calibrate:rank` para confirmar el resultado
+  real con los 9 fixtures completos.
+- **Bug real de alineacion en `/peleadores` (RosterExplorer.tsx)**: las
+  columnas PERFORMANCE y 1V1 tenian su `SortHeader` con `justify-end`
+  pero la fila de datos correspondiente (barra + numero) sin `justify-end`
+  -- el header quedaba pegado a la derecha y el contenido de cada fila
+  arrancaba desde la izquierda, visiblemente desalineados entre si.
+  Agregado `justify-end` a ambos `<span>` de fila para que calcen con su
+  header.
+- **Hints de `/peleadores/[id]` reducidos de 8 a 3** (pedido explicito del
+  usuario): antes habia un hint por cada una de las 6 stats individuales
+  (Laning/Farming/Objectives/Combat/Teamfight/Vision) ademas de los de
+  Performance y Habilidad 1v1. Los 6 se agruparon en un unico hint
+  "Desglose" arriba de las 6 barras en `MmradarPerformanceCard.tsx`
+  (`InfoModal` con las bandas de rango tipo mmradar -- 0-1000 "Spectator
+  mode?" hasta 2400+ "Faker?", nuevas en `MMRADAR_SCORES_EXPLAINED.ranges`
+  en `content.ts`, mismo criterio de la referencia visual que mando el
+  usuario -- seguido de la descripcion de cada stat como glosario). Los
+  hints de Performance y Habilidad 1v1 quedaron igual, sin tocar.
+- **Explicaciones de formula actualizadas para reflejar el calculo real**:
+  `PERFORMANCE_RANK_EXPLANATION` (`performanceRank.ts`) no mencionaba
+  perfil de stats como factor pese a que la funcion ya existia (aunque
+  desconectada, ver punto de arriba) -- agregado como cuarto punto/formula.
+  `DUEL_RATING_EXPLANATION` (`duelRating.ts`) ya estaba al dia con el
+  calculo real (ancla por rango + combat power + teamShare + mvp +
+  winrate), no hizo falta tocarla.
+- Archivos tocados y confirmados con `read_text_file` posterior:
+  `packages/core/performanceRank.ts`, `scripts/test-rank-calibration.test.ts`,
+  `apps/web/src/components/RosterExplorer.tsx`,
+  `apps/web/src/components/MmradarPerformanceCard.tsx`,
+  `packages/core/content.ts`.
+- Pendiente para el usuario (sin bash real sobre el proyecto en esta
+  sesion tampoco, todo via filesystem MCP): correr `bun run calibrate:rank`
+  para confirmar el resultado real de los 9 fixtures con statProfileAdjustment
+  ya integrado (deberia seguir en 8/9 o similar, no 9/9 -- ver nota de
+  arriba sobre por que YourDaddyDrinks no cierra del todo). `bun install` +
+  `bun run dev`, entrar a `/peleadores` y confirmar visualmente que las
+  columnas Performance/1V1 quedan alineadas con sus headers; entrar a la
+  ficha de un peleador con datos de mmradar y confirmar que ahora hay un
+  solo hint "Desglose" en vez de 6, con las bandas de color + glosario
+  adentro. `bun run build`/typecheck del editor para confirmar que
+  `MMRADAR_SCORES_EXPLAINED.ranges` (campo nuevo) no rompe ningun otro
+  consumidor del objeto (busqueda manual no encontro otros usos fuera de
+  `MmradarPerformanceCard.tsx`, pero no hay forma de confirmar con un
+  typecheck real sin bash sobre el proyecto).
+
+## Sesion 2026-08-21 (4): verificacion de fidelidad hint Performance/1v1 tras la recalibracion + confidence de duelo agregado al roster
+- Pedido del usuario: confirmar que el hint de `/peleadores/[id]` (Performance
+  y Habilidad 1v1) siga reflejando fielmente el calculo real tras la
+  recalibracion de `performanceRank.ts` (sesion (3) de mas arriba, grid
+  search sobre los 9 fixtures, 8/9), y que el `duelConfidence` se marque de
+  forma discreta ('info extra', sin destacar) tanto en la ficha individual
+  como en la lista de peleadores.
+- **Verificado, sin cambios necesarios**: `PERFORMANCE_RANK_EXPLANATION`
+  (`performanceRank.ts`) y `DUEL_RATING_EXPLANATION` (`duelRating.ts`) ya
+  estaban al dia con el calculo real (ancla + bias + winrate + consistencia
+  + carry + perfil de stats para Performance; ancla + combat/teamfight/
+  laning + teamShare + MVP + winrate para 1v1) -- confirmado leyendo ambos
+  archivos linea por linea contra el codigo real de
+  `computePerformanceRank`/`computeDuelRatingFromMatches`. `DuelRatingCard.tsx`
+  ya mostraba el aviso 'Basado en pocas partidas' de forma discreta
+  (texto chico, solo si `duelConfidence < 0.5`) en la ficha individual.
+- **Gap real encontrado**: `RosterExplorer.tsx` (lista de peleadores) no
+  mostraba `duelConfidence` en absoluto, pese a que el campo ya viaja
+  completo desde Supabase hasta `Participant.duelConfidence`
+  (`loadParticipants.ts` ya lo seleccionaba/mapeaba). Agregado un punto
+  chico (`●`, `text-slate-600`, `title` con el mismo texto que la ficha
+  individual) junto al numero de duelRating en la fila del roster, visible
+  SOLO cuando `duelConfidence < LOW_CONFIDENCE_THRESHOLD` (0.5, misma
+  constante que ya usaba `DuelRatingCard.tsx` -- duplicada localmente en
+  `RosterExplorer.tsx` en vez de exportada, mismo criterio que el resto del
+  archivo que no comparte constantes de UI entre componentes). Deliberadamente
+  minimo (sin numero, sin porcentaje, sin color llamativo) para que sea
+  'info extra' que no compite visualmente con el rating mismo, como pidio
+  el usuario -- ancho fijo de la columna (`w-28`) mas `flex-shrink-0` evita
+  que rompa el alineado de la fila cuando aparece.
+- Archivos tocados y confirmados con `read_text_file` posterior:
+  `apps/web/src/components/RosterExplorer.tsx` (unico archivo modificado).
+- Pendiente para el usuario (sin bash real sobre el proyecto en esta
+  sesion, todo via filesystem MCP): `bun run dev`, entrar a `/peleadores`
+  y confirmar visualmente que el puntito aparece solo en jugadores con
+  pocas partidas y no rompe el alineado de la columna 1V1 en ningun ancho
+  de pantalla (`md:` en adelante, la columna esta oculta en mobile igual
+  que el resto de columnas numericas). `bun run build`/typecheck del
+  editor para confirmar que no se rompio nada (cambio chico, un solo
+  bloque JSX nuevo con tipos ya existentes en `Participant`).
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.

@@ -217,6 +217,13 @@ export const MMRADAR_SCORES_EXPLAINED = {
   title: "¿Qué mide cada stat?",
   summary:
     "Estos 6 números resumen tu rendimiento reciente en tus últimas partidas del 0 al 2500",
+  ranges: [
+    { min: 0, max: 1000, label: "Spectator mode?" },
+    { min: 1000, max: 1400, label: "Al menos lo intentaste..." },
+    { min: 1400, max: 1800, label: "Andas bien" },
+    { min: 1800, max: 2400, label: "Modo carry: on" },
+    { min: 2400, max: null, label: "¿Faker?" }
+  ],
   stats: {
     laning: {
       label: "Laning",

@@ -14,6 +14,9 @@ type SortDirection = "asc" | "desc";
 const ROLES: Array<Participant["mainRole"]> = ["Top", "Jungle", "Mid", "ADC", "Support"];
 const copy = PAGES.fighters;
 
+/** Mismo umbral que DuelRatingCard.tsx -- por debajo de esto se marca como poco confiable. */
+const LOW_CONFIDENCE_THRESHOLD = 0.5;
+
 function performanceScoreOf(p: Participant): number | null {
   if (!p.performanceScores) return null;
   const values = Object.values(p.performanceScores);
@@ -233,7 +236,7 @@ export default function RosterExplorer({ participants, votesById }: RosterExplor
                     />
                     {p.lolRank}
                   </span>
-                  <span className="hidden md:flex w-28 items-center gap-1.5">
+                  <span className="hidden md:flex w-28 items-center justify-end gap-1.5">
                     {score !== null && (
                       <>
                         <span className="flex-1 h-1.5 rounded-full bg-black/40 border border-lol-border/40 overflow-hidden">
@@ -248,7 +251,7 @@ export default function RosterExplorer({ participants, votesById }: RosterExplor
                       </>
                     )}
                   </span>
-                  <span className="hidden md:flex w-28 items-center gap-1.5">
+                  <span className="hidden md:flex w-28 items-center justify-end gap-1.5">
                     {typeof p.duelRating === "number" && (
                       <>
                         <span className="flex-1 h-1.5 rounded-full bg-black/40 border border-red-500/30 overflow-hidden shadow-[0_0_6px_rgba(239,68,68,0.25)]">
@@ -263,6 +266,14 @@ export default function RosterExplorer({ participants, votesById }: RosterExplor
                         <span className="text-red-400 text-[10px] font-bold w-9 text-right flex-shrink-0 tabular-nums">
                           {Math.round(p.duelRating)}
                         </span>
+                        {typeof p.duelConfidence === "number" && p.duelConfidence < LOW_CONFIDENCE_THRESHOLD && (
+                          <span
+                            className="text-slate-600 text-[9px] leading-none flex-shrink-0"
+                            title="Basado en pocas partidas"
+                          >
+                            ●
+                          </span>
+                        )}
                       </>
                     )}
                   </span>

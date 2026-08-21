@@ -218,19 +218,32 @@ export default function MmradarPerformanceCard({
       )}
 
       <div className={`mmradar-scores ${status === "checking" ? "mmradar-scores-pulsing" : ""}`}>
+        <div className="mmradar-scores-header">
+          <span className="mmradar-scores-header-label">Desglose</span>
+          <InfoModal label={MMRADAR_SCORES_EXPLAINED.title} title={MMRADAR_SCORES_EXPLAINED.title} iconSize={13}>
+            <p>{MMRADAR_SCORES_EXPLAINED.summary}</p>
+            <div className="mmradar-ranges">
+              {MMRADAR_SCORES_EXPLAINED.ranges.map((range) => (
+                <span key={range.label} className="mmradar-range-chip">
+                  {range.max === null ? `${range.min}+` : `${range.min}-${range.max}`}
+                  <em>{range.label}</em>
+                </span>
+              ))}
+            </div>
+            <ul className="mmradar-stats-glossary">
+              {(Object.keys(STAT_LABELS) as (keyof MmradarPerformanceScores)[]).map((key) => (
+                <li key={key}>
+                  <strong>{MMRADAR_SCORES_EXPLAINED.stats[key].label}:</strong>{" "}
+                  {MMRADAR_SCORES_EXPLAINED.stats[key].description}
+                </li>
+              ))}
+            </ul>
+          </InfoModal>
+        </div>
         {(Object.keys(STAT_LABELS) as (keyof MmradarPerformanceScores)[]).map((key) => (
           <div key={key} className="mmradar-score-row">
             <div className="mmradar-score-label">
-              <span className="mmradar-score-label-with-info">
-                {STAT_LABELS[key]}
-                <InfoModal
-                  label={`Que mide ${MMRADAR_SCORES_EXPLAINED.stats[key].label}`}
-                  title={MMRADAR_SCORES_EXPLAINED.stats[key].label}
-                  iconSize={12}
-                >
-                  <p>{MMRADAR_SCORES_EXPLAINED.stats[key].description}</p>
-                </InfoModal>
-              </span>
+              <span>{STAT_LABELS[key]}</span>
               <span>{hasScores ? displayScores[key] : "--"}</span>
             </div>
             <div className="mmradar-score-track">
@@ -529,6 +542,75 @@ export default function MmradarPerformanceCard({
           transition: opacity 0.3s ease;
         }
 
+        .mmradar-scores-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          margin-bottom: 2px;
+        }
+
+        .mmradar-scores-header-label {
+          font-size: 0.65rem;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          color: #a09b8c;
+        }
+
+        .mmradar-card-compact .mmradar-scores-header-label {
+          font-size: 0.62rem;
+        }
+
+        .mmradar-ranges {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin: 0 0 12px;
+        }
+
+        .mmradar-range-chip {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 2px;
+          flex: 1 1 auto;
+          min-width: 68px;
+          padding: 6px 8px;
+          text-align: center;
+          font-size: 0.68rem;
+          font-weight: 700;
+          color: #f0e6d2;
+          background: rgba(79, 195, 232, 0.08);
+          border: 1px solid rgba(200, 170, 110, 0.3);
+          border-radius: 4px;
+        }
+
+        .mmradar-range-chip em {
+          font-style: normal;
+          font-size: 0.6rem;
+          font-weight: 600;
+          color: #a09b8c;
+          text-transform: uppercase;
+          letter-spacing: 0.02em;
+        }
+
+        .mmradar-stats-glossary {
+          margin: 0;
+          padding-left: 18px;
+        }
+
+        .mmradar-stats-glossary li {
+          margin-bottom: 8px;
+        }
+
+        .mmradar-stats-glossary li:last-child {
+          margin-bottom: 0;
+        }
+
+        .mmradar-stats-glossary strong {
+          color: #C8AA6E;
+        }
+
         .mmradar-card-compact .mmradar-scores {
           gap: 7px;
         }
@@ -550,12 +632,6 @@ export default function MmradarPerformanceCard({
           letter-spacing: 0.03em;
           color: #a09b8c;
           margin-bottom: 3px;
-        }
-
-        .mmradar-score-label-with-info {
-          display: inline-flex;
-          align-items: center;
-          gap: 5px;
         }
 
         .mmradar-card-compact .mmradar-score-label {

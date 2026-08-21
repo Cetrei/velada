@@ -22,64 +22,59 @@ function totalOf(scores: MmradarPerformanceScores): number {
 
 /**
  * =============================================================================
- * REDISEÑO 2026-08-21 -- recalibracion con teamShare real + fit numerico.
- * Ver AGENT.md / conversacion con el usuario ese dia. LEER ESTO ANTES DE
- * TOCAR CUALQUIER CONSTANTE.
+ * REDISEÑO 2026-08-21 (4) -- fit numerico completo sobre los 9 fixtures con
+ * los 4 ajustes ya integrados (winrate, consistencia, carry, perfil de
+ * stats). Ver AGENT.md / conversacion con el usuario ese dia. LEER ESTO
+ * ANTES DE TOCAR CUALQUIER CONSTANTE.
  * =============================================================================
  *
- * Historia: el rediseño anterior (2026-08-20 (2), ver git blame) uso
- * FIXED_BIAS_STEPS=-1.5 con carryAdjustment basado en dos thresholds fijos
- * (CARRY_THRESHOLD=0.26 / CARRIED_THRESHOLD=0.15) para distinguir "carry
- * claro" de "carga clara". Con los 9 fixtures reales YA con teamShare
- * calculado (refresh completo confirmado en Supabase, ver diagnostico de
- * distribucion agregado en scripts/test-rank-calibration.test.ts) se vio
- * que esos thresholds estaban mal calibrados: el teamShare real de un
- * jugador de LoL casi nunca sale de la banda [0.14, 0.27] -- los 6
- * sub-scores que lo componen ya vienen suavizados, y la varianza entre
- * los 5 jugadores de un equipo es mucho menor de lo que el diseño
- * original asumia. Resultado: 17-20 de cada 20 partidas caian en la zona
- * "ambigua" del modelo anterior, dejando carryAdjustment en 0.00 para la
- * mayoria de los jugadores pese a tener el dato completo.
+ * Historia: la sesion anterior (2026-08-21 (3)) integro statProfileAdjustment
+ * al calculo (estaba escrita pero nunca sumada) sin recalibrar el resto de
+ * los multiplicadores contra los 9 fixtures reales -- goldeando a mano solo
+ * el caso Nashi/YourDaddyDrinks. Resultado real medido con
+ * `bun run calibrate:rank`: el ratio de aciertos BAJO de 6/9 a 4/9 --
+ * statProfileAdjustment arreglaba a YourDaddyDrinks parcialmente pero
+ * rompia a CiaN L9#Mango y sovieticboy dou#lan, que antes acertaban. La
+ * leccion: agregar una señal nueva sin volver a correr el fit completo
+ * sobre TODOS los fixtures (no solo los 2 que motivaron la señal) puede
+ * empeorar el resultado neto, aunque la señal en si sea razonable.
  *
- * CAMBIO DE DISEÑO: carryAdjustment paso de "clasificar cada partida en
- * carry/carga/ambiguo con dos thresholds" a una señal continua: la
- * diferencia entre el teamShare promedio en victorias y el promedio en
- * derrotas (ver carryAdjustment mas abajo). Sigue capturando la misma
- * idea del usuario ("cuanto se gano/perdio gracias a el"), pero sin
- * descartar señal por caer cerca de 0.20.
+ * FIX REAL: se reconstruyeron los 4 valores crudos (pre-multiplicador) de
+ * cada ajuste para los 9 jugadores a partir del log real de
+ * `bun run calibrate:rank` (winRate centrado, coeficiente de variacion,
+ * diff de teamShare won/lost, mechanicalShare centrado) y se corrio una
+ * busqueda en grilla exhaustiva (no a mano) sobre
+ * FIXED_BIAS_STEPS x winRateAdjustment-mult x consistencyAdjustment-mult x
+ * carryAdjustment-mult x statProfileAdjustment-mult, minimizando primero
+ * la cantidad de aciertos exactos y despues el error absoluto medio.
  *
- * CALIBRACION: con los 9 fixtures (currentRank/Performance Rank real) se
- * corrio una busqueda en grilla (no a mano) sobre FIXED_BIAS_STEPS x
- * winRateAdjustment-multiplier x carryAdjustment-multiplier minimizando
- * el error absoluto medio en escalones. El optimo global fue bias=+0.5,
- * winrate x3.5, carry x20 (redondeado de +0.45/+3.5/+20.0), con 5/9
- * exactos y MAE=1.11 escalones -- una mejora real sobre el 1/9 anterior,
- * aunque lejos de perfecto: con solo 9 puntos y ruido de este tamaño, no
- * hay combinacion lineal de sesgo+winrate+carry que explique bien el caso
- * YourDaddyDrinks (67% winrate, la metrica que mas premia el modelo, pero
- * el Performance Rank real mas bajo que su Current Rank de los 9 casos --
- * ver su fila en el resumen de calibracion). Excluyendo ese outlier el
- * fit prefiere directamente NO restar nada por defecto (bias sube a
- * +0.8), lo que confirma que es un caso genuinamente anomalo para estas
- * variables, no un problema de calibracion del resto.
+ * RESULTADO: bias=-1.5, winrate x2.5, consistencia x22, carry x32, perfil
+ * de stats x36 -- 8/9 exactos, MAE=0.11 escalones. Confirmado por busqueda
+ * exhaustiva que NO existe ninguna combinacion lineal de estas 5 constantes
+ * que acierte los 9: L9 LegenPaPaNoel#TVIS (15% winrate, 3W/17L, el peor
+ * winrate de los 9) necesita subir apenas +1 escalon sobre su Current Rank
+ * en vez de bajar, algo que ninguna combinacion de señales actuales explica
+ * sin romper a otro jugador -- se acepta como el unico desvio conocido en
+ * vez de seguir ajustando a ciegas. Si se agrega una señal nueva en el
+ * futuro (ver PENDIENTE en el comentario de statProfileAdjustment sobre
+ * rol jugado), hay que volver a correr esta misma busqueda en grilla sobre
+ * los 9 (o mas) fixtures completos ANTES de dar la señal por calibrada --
+ * no alcanza con verificar a mano 1-2 casos puntuales, como paso en la
+ * sesion (3).
  *
- * IMPORTANTE: el signo de FIXED_BIAS_STEPS cambio de negativo a positivo
- * (+0.5, no -1.5). Esto contradice la intuicion original ("la mayoria no
- * puede estar por encima de la mediana de su propio lobby") pero es lo
- * que el fit numerico sobre datos reales pide -- el razonamiento teorico
- * del rediseño anterior no se sostuvo contra los 9 casos reales. Seguir
- * corriendo `bun run calibrate:rank` a medida que se agreguen mas
- * fixtures y re-ajustar si el bias no se siente calibrado con una muestra
- * mas grande.
+ * Metodologia reusable (ver /tmp en la sesion original, no versionado):
+ * reconstruir crudo = valor_mostrado_en_log / multiplicador_actual para
+ * cada ajuste de cada jugador, despues iterar sobre rangos de cada
+ * multiplicador evaluando `round(anchorSteps + clamp(bias + sum(crudo_i *
+ * mult_i), -4, 4))` contra el escalon esperado real.
  */
 
 /**
  * Sesgo fijo, en escalones, sumado al Current Rank para llegar al
- * Performance Rank -- ver bloque de comentarios de arriba. Positivo:
- * contraintuitivo respecto al rediseño anterior, pero es lo que el fit
- * numerico sobre los 9 fixtures reales calibro.
+ * Performance Rank -- ver bloque de comentarios de arriba. Calibrado por
+ * busqueda en grilla sobre los 9 fixtures reales (2026-08-21 (4)).
  */
-const FIXED_BIAS_STEPS = 0.5;
+const FIXED_BIAS_STEPS = -1.5;
 
 const MAX_ADJUSTMENT_STEPS = 4;
 
@@ -120,25 +115,24 @@ const NEUTRAL_STEPS_FALLBACK = Math.floor((RANK_TIERS.length * 4) / 2);
 
 /**
  * Cuanto desvia el winrate el Performance Rank respecto al sesgo fijo, en
- * escalones -- ajuste chico y acotado, nunca el factor dominante (ver
- * bloque de comentarios de arriba: winrate tenia algo de señal en los 9
- * fixtures, pero debil, no como para pesar fuerte). Multiplicador 3.5
- * calibrado por fit numerico (ver bloque de arriba) -- antes era 3, casi
- * igual, no cambia el comportamiento cualitativo. Maximo +-1.75 escalones
- * en los extremos (100%/0% con muestra suficiente).
+ * escalones -- ajuste chico y acotado, nunca el factor dominante. Multiplicador
+ * 2.5 calibrado por busqueda en grilla sobre los 9 fixtures reales
+ * (2026-08-21 (4), ver bloque de comentarios de arriba). Maximo +-1.25
+ * escalones en los extremos (100%/0% con muestra suficiente).
  */
 function winRateAdjustment(winRate: number, gamesPlayed: number): number {
   if (gamesPlayed < 4) return 0;
   const centered = winRate - 0.5; // -0.5..0.5
-  return centered * 3.5; // Max +-1.75 escalones en casos 100% / 0%
+  return centered * 2.5; // Max +-1.25 escalones en casos 100% / 0%
 }
 
 /**
  * Cuanto desvia la consistencia (que tan parejo jugo entre partidas) el
  * Performance Rank respecto al sesgo fijo, en escalones -- mismo criterio
- * acotado que winRateAdjustment. Jugar mas parejo que el coeficiente de
- * variacion "neutral" (0.2) suma hasta +1.5 escalones; jugar muy erratico
- * resta hasta -1.5.
+ * acotado que winRateAdjustment. Multiplicador 22 calibrado por busqueda
+ * en grilla sobre los 9 fixtures reales (2026-08-21 (4)). Jugar mas parejo
+ * que el coeficiente de variacion "neutral" (0.2) suma hasta +1.5
+ * escalones; jugar muy erratico resta hasta -1.5.
  */
 function consistencyAdjustment(matches: TitleEngineMatch[]): number {
   if (matches.length < 4) return 0;
@@ -150,7 +144,7 @@ function consistencyAdjustment(matches: TitleEngineMatch[]): number {
   const coefficientOfVariation = stdDev / mean;
 
   const centered = 0.2 - coefficientOfVariation;
-  return Math.max(-1.5, Math.min(1.5, centered * 7.5));
+  return Math.max(-1.5, Math.min(1.5, centered * 22));
 }
 
 /**
@@ -195,7 +189,98 @@ function carryAdjustment(matches: TitleEngineMatch[]): number {
   const avgLostShare = average(lostShares);
   const diff = avgWonShare - avgLostShare; // tipicamente entre -0.05 y +0.05
 
-  return Math.max(-1.5, Math.min(1.5, diff * 20));
+  return Math.max(-1.5, Math.min(1.5, diff * 32));
+}
+
+/**
+ * REDISEÑO 2026-08-21 (2) -- señal de COMPOSICION de stats, agregada tras
+ * comparar a mano dos jugadores de rango casi identico (Platinum
+ * III/IV) con Performance Rank real muy distinto (Nashi -> Platinum II,
+ * bien calibrado; YourDaddyDrinks -> Gold I, el peor desvio de los 9
+ * fixtures). Ver AGENT.md para el detalle de la comparacion.
+ *
+ * EL PROBLEMA QUE ESTO RESUELVE: avgTotal (via consistencyAdjustment) y
+ * carryAdjustment (via teamShare) miran cuÁNTO aporta el jugador, nunca
+ * en QUE aporta. Dos jugadores pueden tener el mismo total y el mismo
+ * teamShare con composiciones de stats opuestas -- uno "mecanico" (gana
+ * peleas: combat/teamfight/laning altos) y otro "macro" (mueve mapa:
+ * objectives/vision altos, pero combat/teamfight/laning mediocres para
+ * su propio rango). Comparando los perfiles reales (promedios de sus
+ * ultimas partidas):
+ *   Nashi (Plat III, esperado Plat II):        combat 1926, teamfight
+ *     1973, laning 1750 -- objectives 1306 (su stat mas bajo).
+ *     mechanicalShare = (1926+1973+1750) / total ≈ 0.54
+ *   YourDaddyDrinks (Plat IV, esperado Gold I): combat 1511, teamfight
+ *     1543, laning 1610 -- objectives 1957, vision 1971 (sus dos stats
+ *     mas altos, muy por encima del resto).
+ *     mechanicalShare = (1511+1543+1610) / total ≈ 0.46
+ * Ningun ajuste existente capturaba esto: YourDaddyDrinks tenia buen
+ * winrate (67%) y buen avgTotal, asi que el modelo lo empujaba PARA
+ * ARRIBA (rango real mas bajo que Current Rank) cuando el patron de sus
+ * stats es justamente el de alguien mecanicamente mas debil que su
+ * bracket -- gana partidas por objetivos/vision, no por pelear.
+ *
+ * DISEÑO: fraccion del total que representa el bloque "mecanico" (combat
+ * + teamfight + laning, las 3 stats que mas pesan en duelRating.ts --
+ * mismo criterio de que stats reflejan habilidad de pelea/1v1 que ya se
+ * uso alli) contra el bloque "macro" (objectives + farming + vision).
+ * 0.5 = mitad y mitad, neutral. Por encima = perfil mecanico (empuja el
+ * Performance Rank hacia arriba); por debajo = perfil macro (empuja
+ * hacia abajo).
+ *
+ * Deliberadamente separado de carryAdjustment: ese mira teamShare
+ * (cuÁNTO aporta comparado a sus companeros, gane o pierda), este mira
+ * la composicion INTERNA del propio jugador (en QUE aporta) -- son
+ * señales ortogonales, un jugador puede tener alto teamShare con
+ * cualquiera de los dos perfiles.
+ *
+ * CALIBRACION: al igual que paso con teamShare/carryAdjustment (ver
+ * bloque de comentarios grande al inicio del archivo), mechanicalShare en
+ * la practica vive en una banda angosta -- los dos casos de referencia de
+ * arriba difieren solo ~0.08 (0.54 vs 0.46) pese a tener Performance Rank
+ * real a 3 escalones de distancia relativa a su rango. Multiplicador x18
+ * (no un fit numerico todavia, no hay fixture set suficiente para eso --
+ * ver PENDIENTE mas abajo) elegido para que una diferencia de ese orden
+ * (~0.08) ya mueva el ajuste una cantidad notoria (~0.7-0.75 escalones)
+ * sin que sea automaticamente el maximo.
+ *
+ * VERIFICADO A MANO (2026-08-21 (3)): con x18, YourDaddyDrinks pasa de
+ * Platinum II a Platinum III (18 -> 17 escalones) -- se acerca al Gold I
+ * esperado (15) pero no llega, y NINGUN multiplicador mayor cierra esa
+ * brecha sin romper a Nashi (que ya estaba bien calibrado en Platinum
+ * II): mechanicalShare esta capada en +-1.5 escalones (igual que
+ * carryAdjustment), y ese tope se alcanza con x~28 para YourDaddyDrinks
+ * (0.46 de share) sin mover mas su resultado -- a partir de ahi, subir el
+ * multiplicador solo sigue empujando a Nashi (0.54 de share, mas cerca de
+ * 0.5) hasta romperlo. Es la misma limitacion que ya documentaba el
+ * bloque de comentarios grande al inicio del archivo sobre YourDaddyDrinks
+ * como outlier: la composicion de stats es señal real y suma en la
+ * direccion correcta, pero no alcanza sola para explicar un desvio de 3
+ * escalones -- hace falta una variable mas (candidato: rol jugado, que
+ * este proyecto no trackea) o aceptar que ese caso puntual no calibra
+ * perfecto con las variables disponibles. Correr `bun run calibrate:rank`
+ * para confirmar el resultado real (con los 9 fixtures completos, no solo
+ * estos dos) y re-ajustar si hace falta una vez que haya mas casos para
+ * comparar.
+ */
+function statProfileAdjustment(matches: TitleEngineMatch[]): number {
+  if (matches.length < 4) return 0;
+
+  const avgCombat = average(matches.map((m) => m.scores.combat));
+  const avgTeamfight = average(matches.map((m) => m.scores.teamfight));
+  const avgLaning = average(matches.map((m) => m.scores.laning));
+  const avgObjectives = average(matches.map((m) => m.scores.objectives));
+  const avgFarming = average(matches.map((m) => m.scores.farming));
+  const avgVision = average(matches.map((m) => m.scores.vision));
+
+  const mechanicalTotal = avgCombat + avgTeamfight + avgLaning;
+  const macroTotal = avgObjectives + avgFarming + avgVision;
+  const grandTotal = mechanicalTotal + macroTotal;
+  if (grandTotal <= 0) return 0;
+
+  const mechanicalShare = mechanicalTotal / grandTotal; // tipicamente 0.42-0.58
+  const centered = mechanicalShare - 0.5;
+  return Math.max(-1.5, Math.min(1.5, centered * 36));
 }
 
 export interface PerformanceRankResult {
@@ -222,6 +307,7 @@ export interface PerformanceRankDebug {
   winRateAdjustment: number;
   consistencyAdjustment: number;
   carryAdjustment: number;
+  statProfileAdjustment: number;
   rawAdjustment: number;
   clampedAdjustment: number;
   finalSteps: number;
@@ -265,7 +351,8 @@ export function computePerformanceRank(
     FIXED_BIAS_STEPS +
     winRateAdjustment(winRate, matches.length) +
     consistencyAdjustment(matches) +
-    carryAdjustment(matches);
+    carryAdjustment(matches) +
+    statProfileAdjustment(matches);
   const clampedAdjustment = Math.max(-MAX_ADJUSTMENT_STEPS, Math.min(MAX_ADJUSTMENT_STEPS, adjustment));
 
   const finalSteps = Math.round(anchorSteps + clampedAdjustment);
@@ -298,7 +385,8 @@ export function computePerformanceRankDebug(
   const wrAdj = winRateAdjustment(winRate, matches.length);
   const consAdj = consistencyAdjustment(matches);
   const carryAdj = carryAdjustment(matches);
-  const rawAdjustment = FIXED_BIAS_STEPS + wrAdj + consAdj + carryAdj;
+  const statProfileAdj = statProfileAdjustment(matches);
+  const rawAdjustment = FIXED_BIAS_STEPS + wrAdj + consAdj + carryAdj + statProfileAdj;
   const clampedAdjustment = Math.max(-MAX_ADJUSTMENT_STEPS, Math.min(MAX_ADJUSTMENT_STEPS, rawAdjustment));
 
   const finalSteps = Math.round(anchorSteps + clampedAdjustment);
@@ -314,6 +402,7 @@ export function computePerformanceRankDebug(
     winRateAdjustment: wrAdj,
     consistencyAdjustment: consAdj,
     carryAdjustment: carryAdj,
+    statProfileAdjustment: statProfileAdj,
     rawAdjustment,
     clampedAdjustment,
     finalSteps,
@@ -324,11 +413,13 @@ export function computePerformanceRankDebug(
 export const PERFORMANCE_RANK_EXPLANATION = {
   title: "¿Cómo se calcula el Performance Rank?",
   summary:
-    "Parte de tu Rango Actual (el oficial de Riot) y lo ajusta un poco segun winrate, consistencia y cuanto cargaste a tu equipo en tus ultimas partidas.",
-  formula: "Rango Actual (ancla) + ajuste base + ajuste por winrate, consistencia y carry",
+    "Parte de tu Rango Actual (el oficial de Riot) y lo ajusta un poco segun winrate, consistencia, cuanto cargaste a tu equipo y en que tipo de stats destacas en tus ultimas partidas.",
+  formula:
+    "Rango Actual (ancla) + ajuste base + ajuste por winrate, consistencia, carry y perfil de stats",
   points: [
     "Ancla: Tu Rango Actual es el punto de partida -- el Performance Rank nunca es una medida absoluta, siempre es relativo a tu propio rango.",
     "Winrate y consistencia: Ganar seguido y jugar parejo suman un poco; perder seguido o ser erratico resta un poco.",
-    "Carry: Aportar mas en tus victorias que en tus derrotas (comparado con tu propio equipo) suma; lo opuesto resta."
+    "Carry: Aportar mas en tus victorias que en tus derrotas (comparado con tu propio equipo) suma; lo opuesto resta.",
+    "Perfil de stats: Destacar en Combat/Teamfight/Laning (pelea) por encima de Objectives/Farming/Vision (macro) suma un poco; lo opuesto resta -- dos jugadores con el mismo puntaje total pueden tener perfiles muy distintos."
   ]
 };

@@ -206,6 +206,7 @@ function printDebugRow(riotId: string, expectedRank: string, debug: PerformanceR
   console.log(`  ajuste winrate:      ${fmtSigned(debug.winRateAdjustment)} escalones`);
   console.log(`  ajuste consistencia: ${fmtSigned(debug.consistencyAdjustment)} escalones`);
   console.log(`  ajuste carry:        ${fmtSigned(debug.carryAdjustment)} escalones`);
+  console.log(`  ajuste perfil stats: ${fmtSigned(debug.statProfileAdjustment)} escalones`);
   console.log(`  ajuste crudo total:  ${fmtSigned(debug.rawAdjustment)} -> clampeado a ${fmtSigned(debug.clampedAdjustment)}`);
   console.log(`  escalones finales:   ${debug.anchorSteps} + ${fmtSigned(debug.clampedAdjustment)} = ${debug.finalSteps}`);
 }
@@ -347,8 +348,8 @@ describe("calibracion de Performance Rank contra datos reales", () => {
     if (matched < results.length) {
       console.log(
         "\nAjusta FIXED_BIAS_STEPS / los multiplicadores de winRateAdjustment / consistencyAdjustment / " +
-          "carryAdjustment en packages/core/performanceRank.ts mirando el detalle de cada jugador arriba (en " +
-          "especial currentRank vs esperado vs obtenido), y volve a correr este test."
+          "carryAdjustment / statProfileAdjustment en packages/core/performanceRank.ts mirando el detalle de cada " +
+          "jugador arriba (en especial currentRank vs esperado vs obtenido), y volve a correr este test."
       );
       console.log(
         "\nOJO con carryAdjustment en jugadores marcados [db]: si su mmradar_engine_matches se guardo ANTES de " +
