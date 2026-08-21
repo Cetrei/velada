@@ -1,12 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import type { Match, Participant, SpinStartPayload } from "@velada/core";
+import { pickNextPair, countRandomAppearances, PAGES } from "@velada/core";
 import { getSupabaseClient, ROULETTE_CHANNEL, SPIN_START_EVENT } from "../lib/supabase";
+import { hasUnseenRaffleResults, markRaffleResultsSeen } from "../lib/revealTracking";
+import SequentialReveal from "./SequentialReveal";
 
 interface RouletteWheelProps {
   participants: Participant[];
   rouletteUnlocked: boolean;
   existingMatches: Match[];
+}
+
+/** Un par ya sorteado, con una clave estable para tracking de "ya visto". */
+interface RaffledPair {
+  key: string;
+  player1: Participant;
+  player2: Participant;
 }
 
 const WHEEL_COLORS = ["#C8AA6E", "#050914"];
@@ -93,6 +103,26 @@ function easeOutQuart(t: number): number {
   return 1 - Math.pow(1 - t, 4);
 }
 
+/** Clave estable por match para el tracking de "visto" -- prioriza el id
+ * real (uuid de Supabase); si falta (insert cuya fila no volvio con id,
+ * ver AdminControl.triggerRandomMatch) cae a una combinacion de los dos
+ * jugadores + createdAt, suficiente para no colisionar entre pares
+ * distintos dentro de la misma carga de la pagina. */
+function pairKey(m: { id?: string; player1Id: string; player2Id: string; createdAt?: string }): string {
+  return m.id ?? `${m.player1Id}-${m.player2Id}-${m.createdAt ?? ""}`;
+}
+
+function resolvePairsFromMatches(matches: Match[], pool: Participant[]): RaffledPair[] {
+  const byId = new Map(pool.map((p) => [p.id, p]));
+  const pairs: RaffledPair[] = [];
+  for (const m of matches) {
+    const p1 = byId.get(m.player1Id);
+    const p2 = byId.get(m.player2Id);
+    if (p1 && p2) pairs.push({ key: pairKey(m), player1: p1, player2: p2 });
+  }
+  return pairs;
+}
+
 export default function RouletteWheel({ participants, rouletteUnlocked, existingMatches }: RouletteWheelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const angleRef = useRef(0);
@@ -107,19 +137,31 @@ export default function RouletteWheel({ participants, rouletteUnlocked, existing
   // agregue en esta misma sesion (broadcast recibido o giro local) -- asi
   // la lista de "resultados del sorteo" crece en vivo sin recargar,
   // ademas de arrancar poblada con lo que ya existia en la base.
-  const [pastPairs, setPastPairs] = useState<[Participant, Participant][]>(() =>
+  const [pastPairs, setPastPairs] = useState<RaffledPair[]>(() =>
     resolvePairsFromMatches(existingMatches, participants)
   );
 
-  function resolvePairsFromMatches(matches: Match[], pool: Participant[]): [Participant, Participant][] {
-    const byId = new Map(pool.map((p) => [p.id, p]));
-    const pairs: [Participant, Participant][] = [];
-    for (const m of matches) {
-      const p1 = byId.get(m.player1Id);
-      const p2 = byId.get(m.player2Id);
-      if (p1 && p2) pairs.push([p1, p2]);
-    }
-    return pairs;
+  // Presentacion secuencial en la primera visita despues de que el sorteo
+  // ya salio (pedido del usuario 2026-08-21): se calcula UNA sola vez al
+  // montar, con los pares que ya vinieron del server -- si mientras se
+  // esta viendo la revelacion entra un giro nuevo en vivo, ese no se suma
+  // a la revelacion en curso (se vera en la grilla normal apenas termine),
+  // para no mover el piso bajo los pies de alguien que ya esta a mitad de
+  // la animacion.
+  const initialPairsRef = useRef<RaffledPair[] | null>(null);
+  if (initialPairsRef.current === null) {
+    initialPairsRef.current = resolvePairsFromMatches(existingMatches, participants);
+  }
+  const [revealPending, setRevealPending] = useState(() => {
+    const ids = initialPairsRef.current!.map((p) => p.key);
+    return hasUnseenRaffleResults(ids);
+  });
+  const [revealIndex, setRevealIndex] = useState(0);
+
+  function finishReveal() {
+    const ids = initialPairsRef.current!.map((p) => p.key);
+    markRaffleResultsSeen(ids);
+    setRevealPending(false);
   }
 
   useEffect(() => {
@@ -211,7 +253,13 @@ export default function RouletteWheel({ participants, rouletteUnlocked, existing
         isSpinningRef.current = false;
         setIsSpinning(false);
         setWinnerPair([player1, player2]);
-        setPastPairs((prev) => [...prev, [player1, player2]]);
+        const key = payload.matchId ?? `${player1.id}-${player2.id}-${payload.timestamp}`;
+        setPastPairs((prev) => [...prev, { key, player1, player2 }]);
+        // Un giro que ocurre EN VIVO ya lo esta viendo el espectador en el
+        // momento (la animacion de la ruleta misma es la revelacion) -- se
+        // marca visto de una vez para que no dispare la presentacion
+        // secuencial de nuevo la proxima vez que entre a /sorteo.
+        markRaffleResultsSeen([key]);
       }
     }
 
@@ -221,9 +269,22 @@ export default function RouletteWheel({ participants, rouletteUnlocked, existing
   async function triggerLocalSpin() {
     if (isSpinningRef.current || participants.length < 2) return;
 
-    const shuffled = [...participants].sort(() => Math.random() - 0.5);
-    const player1 = shuffled[0];
-    const player2 = shuffled[1];
+    // pickNextPair sobre pastPairs (estado MAS FRESCO de esta sesion, no un
+    // snapshot viejo) -- mismas reglas de cobertura sin repeticion que
+    // AdminControl.triggerRandomMatch, ver packages/core/roulette.ts.
+    const existingAsMatches = pastPairs.map((p) => ({
+      player1Id: p.player1.id,
+      player2Id: p.player2.id,
+      isRandom: true
+    }));
+    const pair = pickNextPair(
+      participants.map((p) => p.id),
+      existingAsMatches
+    );
+    if (!pair) return;
+
+    const player1 = findParticipant(pair.player1Id);
+    const player2 = findParticipant(pair.player2Id);
     if (!player1 || !player2) return;
 
     const payload: SpinStartPayload = {
@@ -259,37 +320,154 @@ export default function RouletteWheel({ participants, rouletteUnlocked, existing
     );
   }
 
+  // Presentacion secuencial: solo corre sobre los pares que YA estaban
+  // generados al entrar (initialPairsRef), no sobre pastPairs (que puede
+  // crecer en vivo mientras tanto). Termina en RaffleRevealCard y marca
+  // como visto, dejando paso a la grilla normal de "Sorteo Ya Realizado".
+  if (!isSpinning && !winnerPair && revealPending && initialPairsRef.current!.length > 0) {
+    const revealPairs = initialPairsRef.current!;
+    const current = revealPairs[Math.min(revealIndex, revealPairs.length - 1)];
+    const copy = PAGES.raffle;
+
+    return (
+      <SequentialReveal
+        total={revealPairs.length}
+        currentIndex={revealIndex}
+        onAdvance={setRevealIndex}
+        onFinished={finishReveal}
+        eyebrow={copy.revealEyebrow}
+        title={copy.revealTitle}
+        skipCta={copy.revealSkipCta}
+      >
+        <div className="bg-black/50 backdrop-blur border border-lol-gold rounded-xl p-8 text-center shadow-[0_0_40px_rgba(200,170,110,0.2)] w-full max-w-lg mx-auto relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-lol-gold m-2" />
+          <div className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-lol-gold m-2" />
+
+          <h4 className="text-lol-blue font-bold tracking-widest uppercase mb-6 text-sm">
+            Combate {revealIndex + 1}
+          </h4>
+
+          <div className="flex items-center justify-center gap-6">
+            {[current.player1, current.player2].map((fighter, i) => (
+              <div key={fighter.id} className="flex flex-col items-center flex-1 min-w-0">
+                <img
+                  src={fighter.photo ?? `https://placehold.co/120x120/0A1428/C8AA6E?text=${encodeURIComponent(fighter.nickname[0] ?? "?")}`}
+                  alt=""
+                  className="w-20 h-20 rounded-full object-cover border-2 border-lol-gold/50 mb-3"
+                />
+                <p className="text-lg text-lol-gold font-display italic mb-1 truncate max-w-full">
+                  "{fighter.nickname}"
+                </p>
+                <p className="text-xl font-display font-bold text-white uppercase tracking-wide truncate max-w-full">
+                  {fighter.name}
+                </p>
+                <span className="text-slate-400 text-xs uppercase mt-1">{fighter.mainRole}</span>
+                {i === 0 && <span className="text-lol-blue font-bold mt-3">VS</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      </SequentialReveal>
+    );
+  }
+
   if (!isSpinning && !winnerPair && pastPairs.length > 0) {
+    // Cobertura real (mismo criterio que pickNextPair en
+    // packages/core/roulette.ts): cuantos participantes ya tuvieron al
+    // menos un 1v1 sorteado, sobre el total del pool -- pedido del usuario
+    // de poder ver de un vistazo si falta alguien por salir.
+    const appearances = countRandomAppearances(
+      pastPairs.map((p) => ({ player1Id: p.player1.id, player2Id: p.player2.id, isRandom: true }))
+    );
+    const coveredCount = participants.filter((p) => appearances.has(p.id)).length;
+    const totalCount = participants.length;
+    const coveragePct = totalCount > 0 ? Math.round((coveredCount / totalCount) * 100) : 0;
+    const allCovered = coveredCount >= totalCount && totalCount > 0;
+    const lastPairIndex = pastPairs.length - 1;
+
     return (
       <div className="w-full">
-        <div className="bg-lol-cardBg border border-lol-border p-8 rounded-xl text-center mb-10">
-          <h3 className="font-display text-2xl font-bold text-white uppercase mb-2">Sorteo Ya Realizado</h3>
-          <p className="text-slate-400 text-sm">
-            Estos son los combates que salieron del sorteo. {isLive ? "Si se gira otro, aparecera aca en vivo." : ""}
-          </p>
+        <div className="bg-lol-cardBg border border-lol-border p-8 rounded-xl mb-10">
+          <div className="text-center mb-6">
+            <h3 className="font-display text-2xl font-bold text-white uppercase mb-2">Sorteo Ya Realizado</h3>
+            <p className="text-slate-400 text-sm">
+              Estos son los combates que salieron del sorteo.{" "}
+              {isLive ? "Si se gira otro, aparecera aca en vivo." : ""}
+            </p>
+          </div>
+
+          <div className="max-w-md mx-auto">
+            <div className="flex items-center justify-between mb-2 text-xs uppercase tracking-wide">
+              <span className="text-slate-500">Cobertura del sorteo</span>
+              <span className={`font-bold ${allCovered ? "text-lol-gold" : "text-slate-300"}`}>
+                {coveredCount}/{totalCount} peleadores
+              </span>
+            </div>
+            <div className="h-2 rounded-full overflow-hidden bg-black/40 border border-lol-border/50">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  allCovered ? "bg-gradient-to-r from-lol-gold to-yellow-400" : "bg-gradient-to-r from-lol-blue to-lol-gold"
+                }`}
+                style={{ width: `${coveragePct}%` }}
+              />
+            </div>
+            {allCovered && (
+              <p className="text-lol-gold text-xs text-center mt-2 uppercase tracking-wide font-bold">
+                Todos ya tuvieron su 1v1 -- el proximo giro arranca una ronda nueva
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {pastPairs.map(([p1, p2], i) => (
-            <div
-              key={`${p1.id}-${p2.id}-${i}`}
-              className="bg-black/50 backdrop-blur border border-lol-gold/60 rounded-xl p-6 text-center relative overflow-hidden"
-            >
-              <div className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 border-lol-gold m-2" />
-              <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-lol-gold m-2" />
-              <div className="flex items-center justify-center gap-4">
-                {[p1, p2].map((fighter, idx) => (
-                  <div key={fighter.id} className="flex flex-col items-center">
-                    <p className="text-sm text-lol-gold font-display italic mb-1">"{fighter.nickname}"</p>
-                    <p className="text-lg font-display font-bold text-white uppercase tracking-wide">
-                      {fighter.name}
-                    </p>
-                    {idx === 0 && <span className="text-lol-blue font-bold mt-2 text-xs">VS</span>}
-                  </div>
-                ))}
+          {pastPairs.map((pair, i) => {
+            const { player1: p1, player2: p2 } = pair;
+            const isLast = i === lastPairIndex;
+            return (
+              <div
+                key={pair.key}
+                className={`relative overflow-hidden rounded-xl p-6 text-center backdrop-blur transition-colors ${
+                  isLast
+                    ? "bg-lol-gold/[0.07] border-2 border-lol-gold shadow-[0_0_30px_rgba(200,170,110,0.15)]"
+                    : "bg-black/50 border border-lol-gold/40"
+                }`}
+              >
+                <div className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 border-lol-gold m-2" />
+                <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-lol-gold m-2" />
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                    Combate {i + 1}
+                  </span>
+                  {isLast && (
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-lol-gold">Ultimo</span>
+                  )}
+                </div>
+                <div className="flex items-center justify-center gap-4">
+                  {[p1, p2].map((fighter) => (
+                    <div key={fighter.id} className="flex flex-col items-center flex-1 min-w-0">
+                      <img
+                        src={fighter.photo ?? `https://placehold.co/80x80/0A1428/C8AA6E?text=${encodeURIComponent(fighter.nickname[0] ?? "?")}`}
+                        alt=""
+                        loading="lazy"
+                        className="w-14 h-14 rounded-full object-cover border-2 border-lol-gold/50 mb-2"
+                      />
+                      <p className="text-xs text-lol-gold font-display italic mb-0.5 truncate max-w-full">
+                        "{fighter.nickname}"
+                      </p>
+                      <p className="text-sm font-display font-bold text-white uppercase tracking-wide truncate max-w-full">
+                        {fighter.name}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center gap-3 mt-3">
+                  <span className="flex-1 h-px bg-lol-border/40" />
+                  <span className="text-lol-blue font-display font-bold text-xs">VS</span>
+                  <span className="flex-1 h-px bg-lol-border/40" />
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     );

@@ -9,3 +9,4 @@ export * from "./skillRating";
 export * from "./duelRating";
 export * from "./teamBalancer";
 export * from "./countries";
+export * from "./roulette";

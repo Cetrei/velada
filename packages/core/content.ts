@@ -45,15 +45,20 @@ export const PAGES = {
       teamsSubtitle: "Combates por equipos de La Follada del Año.",
       teamsCta: "Ver todos los combates por equipos",
       lockedTitle: "Próximamente",
-      lockedSubtitle: "Los combates todavía no fueron generados."
+      lockedSubtitle: "Los combates todavía no fueron generados.",
+      unseenTitle: "Ya hay combates",
+      unseenSubtitle: "Todavía no viste los combates que se generaron. Entra para verlos.",
+      unseenCta: "Ver los combates"
     },
     raffle: {
       title: "Sorteo Oficial",
       subtitleLive: "El sorteo ya está en vivo; mira quien folla a quien en tiempo real.",
       subtitleWaiting:
         "La suerte decidira quien folla a quien. El sorteo se replica en vivo para todos.",
+      subtitleUnseenResults: "El sorteo ya salio. Entra para ver quien folla a quien.",
       ctaLive: "Entrar al sorteo en vivo",
-      ctaWaiting: "Ver estado del sorteo"
+      ctaWaiting: "Ver estado del sorteo",
+      ctaUnseenResults: "Ver el sorteo"
     }
   },
 
@@ -111,7 +116,10 @@ export const PAGES = {
     teamsEmptyState: "Todavía no hay combates por equipos cargados.",
     teamALabel: "Equipo A",
     teamBLabel: "Equipo B",
-    teamWinnerLabel: "Equipo ganador"
+    teamWinnerLabel: "Equipo ganador",
+    teamsRevealEyebrow: "Combates por equipo",
+    teamsRevealTitle: "Asi quedaron los equipos",
+    teamsRevealSkipCta: "Saltar"
   },
 
   predictions: {
@@ -131,7 +139,10 @@ export const PAGES = {
   raffle: {
     tabTitle: "Sorteo en Vivo - La Follada del Año",
     title: "Sorteo Oficial",
-    subtitle: "La suerte decidira quien folla a quien. En vivo para todo el mundo."
+    subtitle: "La suerte decidira quien folla a quien. En vivo para todo el mundo.",
+    revealEyebrow: "Resultado del sorteo",
+    revealTitle: "Asi quedaron los combates",
+    revealSkipCta: "Saltar"
   },
 
   panelLogin: {

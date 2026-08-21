@@ -1,10 +1,11 @@
 import { useState } from "react";
-import type { Participant, SpinStartPayload } from "@velada/core";
-import { ADMIN_CONTROL } from "@velada/core";
+import type { Match, Participant, SpinStartPayload } from "@velada/core";
+import { ADMIN_CONTROL, pickNextPair, countRandomAppearances } from "@velada/core";
 import { getSupabaseClient, ROULETTE_CHANNEL, SPIN_START_EVENT } from "../lib/supabase";
 
 interface AdminControlProps {
   participants: Participant[];
+  initialMatches: Match[];
   initialRouletteUnlocked: boolean;
   initialStartTime: string;
   initialRegistrationsOpen: boolean;
@@ -41,6 +42,7 @@ function toDatetimeLocalValue(iso: string): string {
 
 export default function AdminControl({
   participants,
+  initialMatches,
   initialRouletteUnlocked,
   initialStartTime,
   initialRegistrationsOpen,
@@ -53,6 +55,11 @@ export default function AdminControl({
     votingEnabled: initialVotingEnabled,
     eventStarted: initialEventStarted
   });
+  // Combates ya sorteados (isRandom: true), para que pickNextPair sepa a
+  // quien ya le toco un 1v1 y no lo repita mientras haya frescos --
+  // arranca con lo que ya existia en la base y crece localmente cada vez
+  // que se emite un sorteo nuevo desde este panel (ver triggerRandomMatch).
+  const [matches, setMatches] = useState<Match[]>(initialMatches);
   const [startTime, setStartTime] = useState(initialStartTime);
   const [startTimeInput, setStartTimeInput] = useState(toDatetimeLocalValue(initialStartTime));
   const [status, setStatus] = useState<StatusMessage>(null);
@@ -147,11 +154,27 @@ export default function AdminControl({
       return;
     }
 
+    // pickNextPair recalculado con el estado `matches` MAS FRESCO disponible
+    // (no un snapshot capturado antes) -- prioriza a quien todavia no salio
+    // en ningun sorteo, y solo repite forzosamente cuando queda 1 sobrante
+    // sin pareja. Ver packages/core/roulette.ts para el detalle de las reglas.
+    const pair = pickNextPair(
+      participants.map((p) => p.id),
+      matches
+    );
+    if (!pair) {
+      setStatus({ type: "error", text: "No se pudo armar un par -- revisa el roster." });
+      return;
+    }
+    const player1 = participants.find((p) => p.id === pair.player1Id);
+    const player2 = participants.find((p) => p.id === pair.player2Id);
+    if (!player1 || !player2) {
+      setStatus({ type: "error", text: "No se pudo armar un par -- revisa el roster." });
+      return;
+    }
+
     setIsBusy(true);
     try {
-      const shuffled = [...participants].sort(() => Math.random() - 0.5);
-      const [player1, player2] = shuffled;
-
       const payload: SpinStartPayload = {
         player1Id: player1.id,
         player2Id: player2.id,
@@ -164,13 +187,16 @@ export default function AdminControl({
         payload
       });
 
-      const { error: insertError } = await supabase.from("matches").insert([
-        {
-          player1_id: player1.id,
-          player2_id: player2.id,
-          is_random: true
-        }
-      ]);
+      const { data: insertedRows, error: insertError } = await supabase
+        .from("matches")
+        .insert([
+          {
+            player1_id: player1.id,
+            player2_id: player2.id,
+            is_random: true
+          }
+        ])
+        .select("id, player1_id, player2_id, is_random, created_at");
 
       if (broadcastResult !== "ok" || insertError) {
         setStatus({
@@ -179,6 +205,23 @@ export default function AdminControl({
         });
         return;
       }
+
+      // Aunque el insert haya fallado en devolver la fila (RLS/select
+      // restringido), el par ya esta confirmado y emitido -- lo agregamos
+      // igual al estado local minimo para que pickNextPair lo vea en el
+      // proximo giro de esta misma sesion, aunque no tengamos el id real.
+      const insertedRow = insertedRows?.[0];
+      setMatches((prev) => [
+        ...prev,
+        {
+          id: insertedRow?.id,
+          player1Id: player1.id,
+          player2Id: player2.id,
+          isRandom: true,
+          predictionsOpen: false,
+          createdAt: insertedRow?.created_at
+        }
+      ]);
 
       setStatus({ type: "success", text: `Combate emitido: ${player1.name} vs ${player2.name}` });
     } catch (err) {
@@ -276,6 +319,7 @@ export default function AdminControl({
         >
           {ADMIN_CONTROL.emitRandomMatch}
         </button>
+        <RouletteCoverageHint participants={participants} matches={matches} />
       </div>
 
       <div className="bg-lol-cardBg border border-lol-border p-6 rounded-xl">
@@ -337,5 +381,30 @@ function EventFlagToggle({
         </span>
       </span>
     </button>
+  );
+}
+
+/**
+ * Hint chico bajo el boton de "Emitir sorteo" -- pedido del usuario de ver
+ * cobertura sin tener que ir a /sorteo. Mismo criterio de conteo que
+ * countRandomAppearances/pickNextPair (packages/core/roulette.ts): solo
+ * cuenta apariciones en combates isRandom, no los cargados a mano.
+ */
+function RouletteCoverageHint({ participants, matches }: { participants: Participant[]; matches: Match[] }) {
+  const appearances = countRandomAppearances(matches);
+  const coveredCount = participants.filter((p) => appearances.has(p.id)).length;
+  const totalCount = participants.length;
+  if (totalCount === 0) return null;
+
+  const allCovered = coveredCount >= totalCount;
+
+  return (
+    <p className="text-xs text-center mt-3 text-slate-500">
+      Cobertura del sorteo:{" "}
+      <span className={allCovered ? "text-lol-gold font-bold" : "text-slate-300 font-bold"}>
+        {coveredCount}/{totalCount}
+      </span>{" "}
+      {allCovered ? "-- el proximo giro arranca una ronda nueva" : "peleadores ya tuvieron su 1v1"}
+    </p>
   );
 }

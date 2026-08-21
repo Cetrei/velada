@@ -1,7 +1,7 @@
 ---
 import Layout from "../layouts/Layout.astro";
-import MatchesSection from "../components/MatchesSection.astro";
-import TeamMatchesSection from "../components/TeamMatchesSection.astro";
+import MatchesGate from "../components/MatchesGate";
+import TeamMatchesGate from "../components/TeamMatchesGate";
 import { loadParticipants } from "../lib/loadParticipants";
 import { fetchMatches, withOfficialResult } from "../lib/matches";
 import { fetchTeamMatches } from "../lib/teamMatches";
@@ -39,10 +39,10 @@ const copy = PAGES.matches;
         </div>
 
         <div class="matches-tab-panel" id="panel-1v1">
-          <MatchesSection matches={officialMatches} participantsById={participantsById} />
+          <MatchesGate client:load matches={officialMatches} participantsById={participantsById} tabRadioGroup="matches-tab" tabPanelId="tab-1v1" />
         </div>
         <div class="matches-tab-panel" id="panel-teams">
-          <TeamMatchesSection teamMatches={teamMatches} participantsById={participantsById} />
+          <TeamMatchesGate client:load teamMatches={teamMatches} participantsById={participantsById} tabRadioGroup="matches-tab" tabPanelId="tab-teams" />
         </div>
       </div>
     </div>

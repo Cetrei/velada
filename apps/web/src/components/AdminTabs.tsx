@@ -43,6 +43,7 @@ export default function AdminTabs({ initialParticipants, eventState, initialMatc
       {tab === "event" && (
         <AdminControl
           participants={realParticipants}
+          initialMatches={initialMatches}
           initialRouletteUnlocked={eventState.rouletteUnlocked}
           initialStartTime={eventState.startTime}
           initialRegistrationsOpen={eventState.registrationsOpen}

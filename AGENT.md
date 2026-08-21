@@ -2479,6 +2479,129 @@ era el de arriba, no whitelist).
   editor para confirmar que no se rompio nada (cambio chico, un solo
   bloque JSX nuevo con tipos ya existentes en `Participant`).
 
+## Sesion 2026-08-21 (5): sorteo 1v1 sin repeticion (pickNextPair) + rediseno de "Sorteo Ya Realizado" + fix de alineacion 1V1/confidence en roster
+- Pedidos del usuario, en la misma sesion: (1) alinear el titulo "1V1" del
+  header de `/peleadores` con la barra de la fila (regresion introducida en
+  la sesion anterior al agregar el punto de confidence -- ver mas abajo);
+  (2) confirmar si se pueden borrar resultados del sorteo y volver a girar;
+  (3) mejorar la interfaz de "Sorteo Ya Realizado"; (4) que la ruleta genere
+  un 1v1 para cada participante SIN repetir, salvo cuando uno se queda
+  afuera por numero impar (unica repeticion permitida, forzosa).
+- **(1) Fix real de alineacion**: el punto de confidence agregado en la
+  sesion anterior (`RosterExplorer.tsx`) se insertaba solo cuando
+  `duelConfidence` era bajo, asi que el ancho total de la fila (barra +
+  numero + punto opcional) variaba jugador a jugador -- el numero de
+  algunos quedaba mas a la izquierda que el de otros, desalineado del
+  header fijo "1V1". Envuelto el punto en un `<span className="w-2.5
+  flex-shrink-0 flex justify-center">` que SIEMPRE reserva el mismo ancho,
+  este el punto o no -- el numero ahora termina siempre en el mismo borde
+  derecho.
+- **(2) Confirmado con el codigo real (sin cambios de codigo, solo
+  lectura)**: si se puede. `MatchManager.tsx` (pestana "Combates" del
+  panel `/gestion-roster-x9f2`) ya tenia boton "Eliminar" con `confirm()`
+  por cada match (sorteado o cargado a mano) via `actions.deleteMatch`.
+  Aviso dado al usuario: el broadcast en vivo de la ruleta ya se emitio
+  para quien lo vio en el momento del giro -- borrar el registro de la
+  base no deshace la animacion que ya vieron los espectadores, solo
+  corrige el dato guardado para el proximo sorteo/pickNextPair.
+- **(4) Nuevo `packages/core/roulette.ts`** (`pickNextPair`,
+  `countRandomAppearances`, exportados desde `index.ts`): logica pura y
+  testeable de emparejamiento sin repeticion. Reglas: prioriza 2
+  "frescos" (sin ninguna aparicion en combates `isRandom: true`) al azar;
+  si queda exactamente 1 fresco sobrante (pool impar), lo empareja
+  forzosamente contra alguien ya usado (unica repeticion permitida); si
+  YA no queda ningun fresco (cobertura completa), arranca una ronda nueva
+  tratando a todo el pool como fresco de nuevo. Reemplaza el
+  `[...participants].sort(() => Math.random() - 0.5)` que tenian tanto
+  `AdminControl.triggerRandomMatch` como `RouletteWheel.triggerLocalSpin`
+  -- sin memoria de quien ya salio, con sesgo de orden conocido del patron
+  `sort` con comparador random, y sin garantia de cobertura.
+- **Sobre Math.random y el seed** (pregunta explicita del usuario): NO se
+  sembro Math.random manualmente en ningun lado -- V8 ya lo auto-siembra
+  con entropia real del sistema en cada arranque del proceso, sembrarlo a
+  mano con algo como `Date.now()` lo haria MENOS aleatorio (predecible
+  entre llamadas cercanas), no mas. La funcion `random` es inyectable
+  (`PickNextPairOptions.random`, default `Math.random`) unicamente para
+  poder testear con una implementacion determinista (ver
+  `test-roulette.test.ts`). El riesgo real que si se corrigio: que el pool
+  de candidatos se recalculara con un snapshot de `matches` viejo en vez
+  del mas fresco disponible justo antes de girar -- por eso
+  `AdminControl` ahora lleva su propio estado `matches` (inicializado con
+  `initialMatches`, la prop nueva que le pasa `AdminTabs.tsx`) que se
+  actualiza inmediatamente despues de cada insert exitoso, y
+  `RouletteWheel` deriva el historial de `pastPairs` (que ya crecia en
+  vivo con broadcasts) en cada click de `triggerLocalSpin` en vez de un
+  valor memoizado.
+- **Reemplazado `sort(() => Math.random() - 0.5)` por Fisher-Yates real**
+  (`shuffle` interno en `roulette.ts`) para el desempate dentro del pool
+  de "frescos" -- el patron anterior ademas de no llevar memoria tampoco
+  es un shuffle uniforme (sesga el orden), problema conocido de ese
+  comparador.
+- **Herramientas usadas mal al principio de la sesion, corregido en el
+  momento**: intente usar `create_file`/`str_replace` (herramientas del
+  sandbox de bash aislado, sin acceso a `~/Proyectos`) en vez del
+  filesystem MCP real -- el usuario lo marco de inmediato. A partir de ahi
+  se uso exclusivamente `filesystem:write_file`/`filesystem:edit_file`
+  sobre el proyecto real. Un intento de `filesystem:edit_file` sobre
+  `AdminControl.tsx` con un `oldText` mal transcripto (backticks anidados
+  de un template literal) fallo limpio sin aplicarse -- se reintento con
+  `filesystem:write_file` reescribiendo el archivo completo tras releerlo,
+  sin perder contenido.
+- **`AdminControl.tsx`**: nueva prop `initialMatches: Match[]` (agregada
+  en `AdminTabs.tsx` al invocarlo). `triggerRandomMatch` ahora usa
+  `pickNextPair` en vez del shuffle viejo, y el insert a Supabase ahora
+  pide `.select(...)` de vuelta para poder agregar la fila real (con id)
+  al estado local `matches` -- si el select no devuelve nada (RLS), igual
+  agrega una version minima sin id para que `pickNextPair` la vea en el
+  proximo giro de la sesion. Nuevo componente `RouletteCoverageHint`
+  (mismo archivo) bajo el boton de emitir sorteo: "Cobertura del sorteo:
+  X/Y peleadores", mismo criterio de conteo que `countRandomAppearances`.
+- **`RouletteWheel.tsx`**: `triggerLocalSpin` ahora usa `pickNextPair`
+  sobre `pastPairs` convertido a `RouletteMatchLike[]`. Rediseñado el
+  bloque "Sorteo Ya Realizado" (pedido de interfaz del usuario, ver
+  captura que mando): barra de progreso de cobertura arriba ("Cobertura
+  del sorteo: X/Y peleadores", con mensaje especial cuando llega a 100%
+  avisando que el proximo giro arranca ronda nueva); cada tarjeta de
+  combate ahora muestra foto de cada peleador (`fighter.photo` con
+  fallback a placehold.co, mismo patron que `RosterExplorer.tsx`),
+  numero de combate ("Combate N"), un separador con "VS" mas prolijo
+  (linea-VS-linea en vez de texto suelto al costado), y la tarjeta del
+  ULTIMO combate agregado se resalta con borde dorado mas grueso y glow
+  (`isLast`) para que se note cual fue el mas reciente sin tener que
+  contar.
+- **Nuevo `scripts/test-roulette.test.ts`** (`bun run test:roulette`,
+  script nuevo agregado a `package.json` siguiendo el patron de
+  `test:scrapping`/`calibrate:rank`): test unitario puro de
+  `pickNextPair`/`countRandomAppearances`, sin red ni Supabase --
+  confirma cobertura secuencial sin repetir en pool par, la repeticion
+  forzosa unica en pool impar, el reseteo de ronda al llegar a cobertura
+  completa, deduplicacion de ids, y que nunca empareje a alguien consigo
+  mismo (con una fuente de aleatoriedad determinista inyectada para que
+  el test sea reproducible). NO se pudo correr `bun test` real en esta
+  sesion (sin bash con acceso al proyecto, todo via filesystem MCP) --
+  queda pendiente para el usuario.
+- Archivos tocados y confirmados con `read_file`/`read_text_file`
+  posterior: `apps/web/src/components/RosterExplorer.tsx` (fix alineacion),
+  `packages/core/roulette.ts` (nuevo), `packages/core/index.ts` (export),
+  `apps/web/src/components/AdminControl.tsx`,
+  `apps/web/src/components/AdminTabs.tsx`,
+  `apps/web/src/components/RouletteWheel.tsx`,
+  `scripts/test-roulette.test.ts` (nuevo), `package.json`.
+- Pendiente para el usuario (sin bash real sobre el proyecto en esta
+  sesion, todo via filesystem MCP): `bun run test:roulette` para confirmar
+  que el test nuevo pasa de verdad. `bun run dev`, entrar a `/peleadores`
+  y confirmar visualmente que el numero de 1V1 ahora calza con el header
+  en todos los jugadores (con y sin el punto de confidence). Entrar a
+  `/gestion-roster-x9f2` (pestana Evento) y girar el sorteo varias veces
+  seguidas para confirmar en la consola/UI que no repite a nadie hasta
+  cubrir a todos, y que el hint de cobertura se actualiza. Entrar a
+  `/sorteo` (sin sesion admin, flujo publico/`triggerLocalSpin`) y hacer
+  lo mismo para confirmar que el modo standalone tambien respeta la
+  cobertura, y que el rediseño de "Sorteo Ya Realizado" se ve bien en
+  mobile (`grid-cols-1` a ese ancho). `bun run build`/typecheck del editor
+  para confirmar que no quedo ningun tipo roto (cambio de props de
+  `AdminControl`, import nuevo de `@velada/core` en dos componentes).
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.
