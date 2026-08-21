@@ -145,6 +145,8 @@ export default function TeamMatchManager({ initialTeamMatches, participants }: T
     data.set("teamBIds", JSON.stringify(manualForm.teamBIds));
     if (manualForm.winnerTeam) data.set("winnerTeam", manualForm.winnerTeam);
     data.set("generationMode", "manual");
+    const existingPredictionsOpen = editingId ? teamMatches.find((m) => m.id === editingId)?.predictionsOpen ?? false : false;
+    data.set("predictionsOpen", String(existingPredictionsOpen));
 
     const { data: result, error } = await actions.saveTeamMatch(data);
     setIsBusy(false);
@@ -160,7 +162,8 @@ export default function TeamMatchManager({ initialTeamMatches, participants }: T
       teamAIds: manualForm.teamAIds,
       teamBIds: manualForm.teamBIds,
       winnerTeam: manualForm.winnerTeam || null,
-      generationMode: "manual"
+      generationMode: "manual",
+      predictionsOpen: existingPredictionsOpen
     };
 
     setTeamMatches((prev) => {
@@ -187,6 +190,7 @@ export default function TeamMatchManager({ initialTeamMatches, participants }: T
     data.set("teamBIds", JSON.stringify(tm.teamBIds));
     data.set("winnerTeam", winnerTeam);
     data.set("generationMode", tm.generationMode);
+    data.set("predictionsOpen", String(tm.predictionsOpen ?? false));
 
     const { error } = await actions.saveTeamMatch(data);
     setIsBusy(false);
@@ -197,6 +201,31 @@ export default function TeamMatchManager({ initialTeamMatches, participants }: T
     }
 
     setTeamMatches((prev) => prev.map((m) => (m.id === tm.id ? { ...m, winnerTeam } : m)));
+  }
+
+  async function togglePredictions(tm: TeamMatch) {
+    if (!tm.id) return;
+    setIsBusy(true);
+    const data = new FormData();
+    data.set("id", tm.id);
+    if (tm.name) data.set("name", tm.name);
+    data.set("teamAIds", JSON.stringify(tm.teamAIds));
+    data.set("teamBIds", JSON.stringify(tm.teamBIds));
+    if (tm.winnerTeam) data.set("winnerTeam", tm.winnerTeam);
+    data.set("generationMode", tm.generationMode);
+    data.set("predictionsOpen", String(!tm.predictionsOpen));
+
+    const { error } = await actions.saveTeamMatch(data);
+    setIsBusy(false);
+
+    if (error) {
+      setStatus({ type: "error", text: error.message });
+      return;
+    }
+
+    setTeamMatches((prev) =>
+      prev.map((row) => (row.id === tm.id ? { ...row, predictionsOpen: !tm.predictionsOpen } : row))
+    );
   }
 
   async function handleDelete(id: string | undefined) {
@@ -414,6 +443,19 @@ export default function TeamMatchManager({ initialTeamMatches, participants }: T
                 </div>
               </div>
               <div className="flex items-center gap-3 text-sm flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => togglePredictions(tm)}
+                  disabled={isBusy}
+                  className={`text-xs uppercase font-bold px-3 py-1.5 rounded border disabled:opacity-50 ${
+                    tm.predictionsOpen
+                      ? "border-lol-gold text-lol-gold bg-lol-gold/10"
+                      : "border-lol-border text-slate-400"
+                  }`}
+                  title={TEAM_MATCH_MANAGER.predictionsOpenLabel}
+                >
+                  {tm.predictionsOpen ? TEAM_MATCH_MANAGER.predictionsOpenLabel : TEAM_MATCH_MANAGER.togglePredictionsCta}
+                </button>
                 <button
                   onClick={() => loadIntoForm(tm)}
                   className="text-lol-blue hover:underline font-bold uppercase text-xs"

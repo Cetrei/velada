@@ -174,7 +174,22 @@ export const TeamMatchSchema = z.object({
   teamBIds: z.array(z.string()).min(1),
   winnerTeam: z.enum(["A", "B"]).nullable().optional(),
   generationMode: z.enum(["manual", "random", "balanced", "unfair"]).default("manual"),
+  predictionsOpen: z.boolean().default(false),
   createdAt: z.string().datetime().optional()
+});
+
+export const TeamPredictionSchema = z.object({
+  teamMatchId: z.string().uuid(),
+  voterId: z.string().min(1),
+  predictedWinnerTeam: z.enum(["A", "B"]),
+  createdAt: z.string().datetime().optional()
+});
+
+export const TeamPredictionTallySchema = z.object({
+  teamMatchId: z.string().uuid(),
+  teamAVotes: z.number().int().nonnegative(),
+  teamBVotes: z.number().int().nonnegative(),
+  totalVotes: z.number().int().nonnegative()
 });
 
 export type Participant = z.infer<typeof ParticipantSchema>;
@@ -188,5 +203,7 @@ export type Prediction = z.infer<typeof PredictionSchema>;
 export type PredictionTally = z.infer<typeof PredictionTallySchema>;
 export type SpinStartPayload = z.infer<typeof SpinStartPayloadSchema>;
 export type TeamMatch = z.infer<typeof TeamMatchSchema>;
+export type TeamPrediction = z.infer<typeof TeamPredictionSchema>;
+export type TeamPredictionTally = z.infer<typeof TeamPredictionTallySchema>;
 export type MmradarPerformanceScores = z.infer<typeof MmradarPerformanceScoresSchema>;
 export type MmradarTitle = z.infer<typeof MmradarTitleSchema>;

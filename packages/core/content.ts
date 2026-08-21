@@ -133,7 +133,10 @@ export const PAGES = {
     emptyState: "No hay combates abiertos a pronóstico todavía.",
     closedLabel: "Pronóstico cerrado",
     votingPhaseClosedTitle: "Votaciones cerradas",
-    votingPhaseClosedSubtitle: "El host todavía no habilitó la fase de votaciones."
+    votingPhaseClosedSubtitle: "El host todavía no habilitó la fase de votaciones.",
+    tab1v1: "1 vs 1",
+    tabTeams: "Por equipos",
+    teamsEmptyState: "No hay combates por equipos abiertos a pronóstico todavía."
   },
 
   raffle: {
@@ -326,11 +329,11 @@ export const ADMIN_CONTROL = {
 
 export const TEAM_MATCH_MANAGER = {
   title: "Combates por equipos",
-  hint: "Marca quien ya tiene equipo asignado antes de generar (no se excluye automaticamente, ni siquiera si el combate ya termino).",
-  excludeListTitle: "Participantes disponibles",
-  markAllCta: "Marcar todos",
-  unmarkAllCta: "Desmarcar todos",
-  excludedHint: (excluded: number, total: number) => `${excluded} de ${total} marcados como ya asignados (excluidos de la proxima generacion).`,
+  hint: "Tildá quien ya tiene equipo asignado para EXCLUIRLO de la proxima generacion (no se excluye automaticamente, ni siquiera si el combate ya termino). Dejá SIN tildar a quienes SÍ queres incluir en el proximo generar.",
+  excludeListTitle: "Excluir de la proxima generacion",
+  markAllCta: "Excluir todos",
+  unmarkAllCta: "Incluir todos",
+  excludedHint: (excluded: number, total: number) => `${excluded} de ${total} excluidos (ya asignados). Disponibles para generar: ${total - excluded}.`,
   modeLabel: "Modo de generacion",
   modeRandom: "Aleatorio",
   modeBalanced: "Balanceado",
@@ -357,7 +360,9 @@ export const TEAM_MATCH_MANAGER = {
   errorNoOverlap: "Un mismo jugador no puede estar en los dos equipos.",
   errorNotEnoughPlayers: "Se necesitan al menos 6 participantes disponibles (para un 3v3).",
   ratingLabel: "Rating",
-  vsLabel: "vs"
+  vsLabel: "vs",
+  predictionsOpenLabel: "Pronóstico abierto al público",
+  togglePredictionsCta: "Cambiar"
 };
 
 export const PARTICIPANT_MANAGER = {

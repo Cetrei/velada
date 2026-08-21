@@ -7,6 +7,7 @@ import { loadParticipants } from "../../lib/loadParticipants";
 import { fetchMatches, fetchPredictionTallies } from "../../lib/matches";
 import { fetchTeamMatches } from "../../lib/teamMatches";
 import TeamRoster from "../../components/TeamRoster.astro";
+import MatchResultCard from "../../components/MatchResultCard.astro";
 import { PAGES, flagForCountry } from "@velada/core";
 
 const { id } = Astro.params;
@@ -33,31 +34,51 @@ const canUpdateMmradar = !!session || !!adminSession;
 
 const participantsById = Object.fromEntries(participants.map((p) => [p.id, p]));
 const allMatches = await fetchMatches();
-const match = allMatches.find((m) => m.player1Id === participant.id || m.player2Id === participant.id) ?? null;
-const rival = match
-  ? participantsById[match.player1Id === participant.id ? match.player2Id : match.player1Id]
-  : undefined;
+// TODOS los combates 1v1 donde participa (antes era un solo `.find`, que
+// escondia el resto si alguien tenia mas de un 1v1 -- pedido del usuario
+// 2026-08-21: cada persona puede tener varios individuales y todos deben
+// verse en su ficha). Se ordenan igual que /combates (matchNumber, luego
+// createdAt) para que el orden sea consistente en todo el sitio.
+const participantMatches = allMatches
+  .filter((m) => m.player1Id === participant.id || m.player2Id === participant.id)
+  .sort((a, b) => {
+    const an = a.matchNumber ?? Number.MAX_SAFE_INTEGER;
+    const bn = b.matchNumber ?? Number.MAX_SAFE_INTEGER;
+    if (an !== bn) return an - bn;
+    return (a.createdAt ?? "").localeCompare(b.createdAt ?? "");
+  });
+
+function rivalOf(m: (typeof participantMatches)[number]) {
+  return participantsById[m.player1Id === participant.id ? m.player2Id : m.player1Id];
+}
+
+const firstRival = participantMatches[0] ? rivalOf(participantMatches[0]) : undefined;
 
 // Combate por equipos donde este peleador participa (si hay varios, el mas
 // reciente -- fetchTeamMatches ya devuelve ordenado por created_at desc).
-// Se usa junto con "match" (1v1) de arriba para decidir si mostrar el
-// bloque de "Sin definir" con candado: solo cuando NINGUNO de los dos tipos
-// de combate existe todavia para este participante.
+// Se usa junto con participantMatches (1v1) de arriba para decidir si
+// mostrar el bloque de "Sin definir" con candado: solo cuando NINGUNO de
+// los dos tipos de combate existe todavia para este participante.
 const allTeamMatches = await fetchTeamMatches();
 const teamMatch =
   allTeamMatches.find((tm) => tm.teamAIds.includes(participant.id) || tm.teamBIds.includes(participant.id)) ?? null;
 const teamA = teamMatch ? teamMatch.teamAIds.map((tid) => participantsById[tid]).filter((p): p is (typeof participants)[number] => Boolean(p)) : [];
 const teamB = teamMatch ? teamMatch.teamBIds.map((tid) => participantsById[tid]).filter((p): p is (typeof participants)[number] => Boolean(p)) : [];
-const hasNoCombatYet = !match && !teamMatch;
+const hasNoCombatYet = participantMatches.length === 0 && !teamMatch;
 
-const tallies = match ? await fetchPredictionTallies([match]) : new Map();
-const tally = match?.id ? tallies.get(match.id) : undefined;
+// Tallies de pronostico para TODOS los 1v1 del participante a la vez (no
+// solo el primero), keyed por match.id.
+const tallies = participantMatches.length > 0 ? await fetchPredictionTallies(participantMatches) : new Map();
 
-const isPlayer1 = match?.player1Id === participant.id;
-const participantVotes = tally ? (isPlayer1 ? tally.player1Votes : tally.player2Votes) : 0;
-const totalVotes = tally?.totalVotes ?? 0;
-const participantPct = totalVotes > 0 ? Math.round((participantVotes / totalVotes) * 1000) / 10 : 50;
-const rivalPct = totalVotes > 0 ? Math.round((100 - participantPct) * 10) / 10 : 50;
+function predictionPctsFor(m: (typeof participantMatches)[number]) {
+  const tally = m.id ? tallies.get(m.id) : undefined;
+  const isPlayer1 = m.player1Id === participant.id;
+  const participantVotes = tally ? (isPlayer1 ? tally.player1Votes : tally.player2Votes) : 0;
+  const totalVotes = tally?.totalVotes ?? 0;
+  const participantPct = totalVotes > 0 ? Math.round((participantVotes / totalVotes) * 1000) / 10 : 50;
+  const rivalPct = totalVotes > 0 ? Math.round((100 - participantPct) * 10) / 10 : 50;
+  return { participantPct, rivalPct, totalVotes };
+}
 
 // Contenido 100% de meme (ver ParticipantSchema.memeTitles/memeIconUrl/
 // memeFakeMatch/memeFakeTeamMatch y data/meme-participants.yml): solo
@@ -121,7 +142,7 @@ const copy = PAGES.fighterDetail;
                 memeIconUrl: participant.memeIconUrl
               }}
               canUpdate={canUpdateMmradar}
-              rival={rival ? { name: rival.name, duelRating: rival.duelRating, lolRank: rival.lolRank } : null}
+              rival={firstRival ? { name: firstRival.name, duelRating: firstRival.duelRating, lolRank: firstRival.lolRank } : null}
             />
           </div>
           <div class="flex items-center gap-4 mt-4">
@@ -248,23 +269,47 @@ const copy = PAGES.fighterDetail;
             </div>
           )}
 
-          {rival && (
-            <div class="flex items-center justify-between bg-lol-cardBg border border-lol-border p-5 mb-8">
-              <div>
-                <p class="text-slate-500 text-xs uppercase tracking-wide mb-1">{copy.rivalLabel}</p>
-                <a href={`/peleadores/${rival.id}`} class="text-lol-gold font-bold hover:underline">
-                  {rival.name}
-                </a>
-              </div>
-              {match?.id && (
-                <a
-                  href="/combates"
-                  class="inline-flex items-center gap-2 text-sm text-white bg-lol-gold/10 border border-lol-gold text-lol-gold px-4 py-2 hover:bg-lol-gold hover:text-lol-darkBg transition-all font-bold uppercase tracking-wide clip-edges"
-                >
-                  {copy.viewMatchCta}
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-                </a>
-              )}
+          {participantMatches.length > 0 && (
+            <div class="space-y-6 mb-8">
+              <p class="text-slate-500 text-xs uppercase tracking-wide">
+                {PAGES.matches.tab1v1} {participantMatches.length > 1 ? `(${participantMatches.length})` : ""}
+              </p>
+              {participantMatches.map((m, i) => {
+                const rival = rivalOf(m);
+                if (!rival) return null;
+                const player1 = participantsById[m.player1Id];
+                const player2 = participantsById[m.player2Id];
+                if (!player1 || !player2) return null;
+                const { participantPct, rivalPct, totalVotes } = predictionPctsFor(m);
+                const showPrediction = m.predictionsOpen && !m.winnerId;
+                return (
+                  <div>
+                    <MatchResultCard match={m} player1={player1} player2={player2} index={i} />
+                    {showPrediction && (
+                      <div class="bg-lol-cardBg border border-lol-border border-t-0 p-6">
+                        <div class="flex items-center justify-between mb-4">
+                          <span class="text-xs uppercase text-slate-500 tracking-wide">{copy.predictionTitle}</span>
+                          <span class="text-xs text-slate-500">{totalVotes.toLocaleString("es")} votos</span>
+                        </div>
+                        <div class="flex items-center justify-between gap-4 mb-3">
+                          <div>
+                            <p class="text-white font-bold text-sm">{participant.name}</p>
+                            <p class="font-display font-bold text-2xl text-lol-gold">{participantPct}%</p>
+                          </div>
+                          <div class="text-right">
+                            <p class="text-white font-bold text-sm">{rival.name}</p>
+                            <p class="font-display font-bold text-2xl text-lol-blue">{rivalPct}%</p>
+                          </div>
+                        </div>
+                        <div class="h-2.5 rounded-full overflow-hidden bg-lol-darkBg border border-lol-border/50 flex">
+                          <div class="h-full bg-gradient-to-r from-lol-gold to-yellow-400" style={`width: ${participantPct}%`} />
+                          <div class="h-full bg-gradient-to-r from-lol-blue to-cyan-400" style={`width: ${rivalPct}%`} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -278,29 +323,6 @@ const copy = PAGES.fighterDetail;
               {!teamMatch.winnerTeam && (
                 <p class="text-slate-500 text-xs text-center mt-3 uppercase tracking-wide">{PAGES.matches.pendingResult}</p>
               )}
-            </div>
-          )}
-
-          {rival && match?.predictionsOpen && !match.winnerId && (
-            <div class="bg-lol-cardBg border border-lol-border p-6">
-              <div class="flex items-center justify-between mb-4">
-                <span class="text-xs uppercase text-slate-500 tracking-wide">{copy.predictionTitle}</span>
-                <span class="text-xs text-slate-500">{totalVotes.toLocaleString("es")} votos</span>
-              </div>
-              <div class="flex items-center justify-between gap-4 mb-3">
-                <div>
-                  <p class="text-white font-bold text-sm">{participant.name}</p>
-                  <p class="font-display font-bold text-2xl text-lol-gold">{participantPct}%</p>
-                </div>
-                <div class="text-right">
-                  <p class="text-white font-bold text-sm">{rival.name}</p>
-                  <p class="font-display font-bold text-2xl text-lol-blue">{rivalPct}%</p>
-                </div>
-              </div>
-              <div class="h-2.5 rounded-full overflow-hidden bg-lol-darkBg border border-lol-border/50 flex">
-                <div class="h-full bg-gradient-to-r from-lol-gold to-yellow-400" style={`width: ${participantPct}%`} />
-                <div class="h-full bg-gradient-to-r from-lol-blue to-cyan-400" style={`width: ${rivalPct}%`} />
-              </div>
             </div>
           )}
         </div>

@@ -194,7 +194,22 @@ CREATE TABLE IF NOT EXISTS team_matches (
   team_b_ids JSONB NOT NULL,
   winner_team TEXT DEFAULT NULL,
   generation_mode TEXT NOT NULL DEFAULT 'manual',
+  predictions_open BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE team_matches ADD COLUMN IF NOT EXISTS predictions_open BOOLEAN DEFAULT FALSE;
+
+-- Pronosticos de la comunidad para combates por equipo, mismo patron que
+-- predictions (1v1) pero votando por equipo completo (A o B) en vez de
+-- por jugador individual -- pedido del usuario 2026-08-21: los combates
+-- por equipo tambien necesitan su propia seccion en /pronosticos.
+CREATE TABLE IF NOT EXISTS team_predictions (
+  team_match_id UUID NOT NULL REFERENCES team_matches(id) ON DELETE CASCADE,
+  voter_id TEXT NOT NULL,
+  predicted_winner_team TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (team_match_id, voter_id)
 );
 
 DO $$
@@ -219,15 +234,23 @@ BEGIN
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE predictions;
   END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND tablename = 'team_predictions'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE team_predictions;
+  END IF;
 END $$;
 
 -- RLS deshabilitado en todo: sin Supabase Auth no hay auth.uid() con el
--- que escribir policies con sentido. La tabla predictions es la unica
--- excepcion real (el cliente anon vota directo desde el browser via
--- getSupabaseClient), asi que se queda con RLS + policies publicas de
--- antes. Todo lo demas (event_state, matches, participants,
--- participant_users, sessions) solo se toca desde el service-role client
--- en las Astro Actions, que ya hace sus propios checks de permisos.
+-- que escribir policies con sentido. predictions/team_predictions son la
+-- unica excepcion real (el cliente anon vota directo desde el browser via
+-- getSupabaseClient), asi que ambas se quedan con RLS + policies publicas
+-- de antes. Todo lo demas (event_state, matches, team_matches,
+-- participants, participant_users, sessions) solo se toca desde el
+-- service-role client en las Astro Actions, que ya hace sus propios
+-- checks de permisos.
 ALTER TABLE event_state DISABLE ROW LEVEL SECURITY;
 ALTER TABLE matches DISABLE ROW LEVEL SECURITY;
 ALTER TABLE team_matches DISABLE ROW LEVEL SECURITY;
@@ -235,6 +258,7 @@ ALTER TABLE participants DISABLE ROW LEVEL SECURITY;
 ALTER TABLE participant_users DISABLE ROW LEVEL SECURITY;
 ALTER TABLE sessions DISABLE ROW LEVEL SECURITY;
 ALTER TABLE predictions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE team_predictions ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Lectura publica de predictions" ON predictions;
 CREATE POLICY "Lectura publica de predictions" ON predictions FOR SELECT USING (true);
@@ -244,6 +268,15 @@ CREATE POLICY "Voto publico anonimo" ON predictions FOR INSERT WITH CHECK (true)
 
 DROP POLICY IF EXISTS "Cambio de voto publico anonimo" ON predictions;
 CREATE POLICY "Cambio de voto publico anonimo" ON predictions FOR UPDATE USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Lectura publica de team_predictions" ON team_predictions;
+CREATE POLICY "Lectura publica de team_predictions" ON team_predictions FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Voto publico anonimo team_predictions" ON team_predictions;
+CREATE POLICY "Voto publico anonimo team_predictions" ON team_predictions FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Cambio de voto publico anonimo team_predictions" ON team_predictions;
+CREATE POLICY "Cambio de voto publico anonimo team_predictions" ON team_predictions FOR UPDATE USING (true) WITH CHECK (true);
 
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('participant-photos', 'participant-photos', true)

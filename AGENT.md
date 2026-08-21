@@ -1,5 +1,69 @@
 # AGENT.md — velada_lol
 
+## Sesion 2026-08-21: fix exclusion equipos, multi-1v1 en perfil, pronosticos por equipo
+Tres pedidos del usuario, resueltos via filesystem MCP (sin bash real sobre
+el proyecto en esta sesion):
+
+1. **"Con 12 no detecta para generar equipos"**: NO era un bug de conteo
+   (`participantIdsInTeamMatches` en `teamMatches.ts` ya filtraba
+   correctamente solo por `team_matches`, nunca por 1v1). El problema real
+   era el copy de `TeamMatchManager.tsx`: la lista se titulaba
+   "Participantes disponibles" pero tildar a alguien lo EXCLUYE de la
+   generacion (`availableIds = participants.filter(p => !excludedIds.has)`).
+   En la captura del usuario los 12 estaban tildados -> 0 disponibles ->
+   error, exactamente el comportamiento por diseño pero con un copy que
+   invita al error opuesto. Fix: reescrito `TEAM_MATCH_MANAGER` en
+   `packages/core/content.ts` para que sea inequivoco ("Excluir de la
+   proxima generacion", botones "Excluir todos"/"Incluir todos", hint que
+   muestra explicitamente cuantos quedan disponibles). Sin cambios de
+   logica, solo texto.
+2. **Perfil individual (`/peleadores/[id].astro`) solo mostraba UN combate
+   1v1**: usaba `allMatches.find(...)` en vez de `filter`, asi que si
+   alguien tenia varios 1v1 el resto quedaba invisible en su ficha (aunque
+   ya aparecian bien en `/combates`, que si listaba todos). Reescrito para
+   calcular `participantMatches` (filter + sort igual que `/combates`) y
+   renderizar cada uno con `MatchResultCard.astro` (reutilizado, mismo
+   componente que `/combates`) + su propia barra de pronostico si
+   `predictionsOpen`. `MmradarPanel`'s prop `rival` ahora usa el rival del
+   primer match (`firstRival`) como aproximacion razonable, ya que ese
+   panel solo acepta un rival.
+3. **Pronosticos de combates por equipo no existian**: `TeamMatchSchema`
+   no tenia `predictionsOpen` y no habia tabla de votos por equipo. Agregado
+   de punta a punta:
+   - `packages/core/schemas.ts`: `TeamMatchSchema.predictionsOpen`,
+     `TeamPredictionSchema`, `TeamPredictionTallySchema` (+ tipos).
+   - `scripts/setup-supabase.ts`: columna `predictions_open` en
+     `team_matches`, tabla nueva `team_predictions` (mismo PK compuesto
+     `(team_match_id, voter_id)` que `predictions`), RLS + policies
+     publicas de lectura/voto/cambio-de-voto, publicacion realtime.
+   - `apps/web/src/lib/teamMatches.ts`: `openForTeamPredictions`,
+     `fetchTeamPredictionTallies` (mismo patron server-side-count que
+     `fetchPredictionTallies` en `matches.ts`, para que no se pueda
+     falsear el conteo desde el cliente).
+   - `apps/web/src/actions/index.ts`: `saveTeamMatch` ahora acepta/persiste
+     `predictionsOpen`.
+   - `TeamMatchManager.tsx`: boton toggle "Pronostico abierto al publico"
+     por cada team match (mismo patron que `togglePredictions` en
+     `MatchManager.tsx`), y `predictionsOpen` se preserva al editar
+     manualmente.
+   - Componentes nuevos `TeamPredictionCard.tsx` / `TeamPredictionsSection.tsx`
+     (analogos a `PredictionCard.tsx`/`PredictionsSection.tsx`, votando por
+     equipo A/B completo en vez de por jugador; reusa `voterId.ts` tal cual,
+     los localStorage keys namespacean por id asi que no colisionan con
+     votos 1v1).
+   - `pronosticos.astro`: agregadas tabs "1 vs 1" / "Por equipos" (mismo
+     patron de radio-input+CSS que ya usaba `combates.astro`).
+
+**Pendiente para el usuario**: correr `bun run scripts/setup-supabase.ts`
+para aplicar la migracion SQL nueva (columna + tabla + RLS) contra el
+proyecto real; sin eso `predictionsOpen` en team_matches y el voto de
+equipo van a fallar en runtime aunque el codigo compile. Confirmar visual
+en `/peleadores/[id]` de alguien con 2+ 1v1. Confirmar en
+`/gestion-roster-x9f2` (pestana Equipos) que el boton de pronostico
+togglea bien y que el hint de "excluidos/disponibles" ahora se entiende. No
+se corrio ningun build/typecheck real en esta sesion (todo via filesystem
+MCP).
+
 ## Que es esto
 Sitio web para "La Velada del Año - Especial LoL" (evento entre amigos).
 Landing + roster de peleadores + sorteo en vivo (ruleta sincronizada via

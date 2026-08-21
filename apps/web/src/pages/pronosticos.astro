@@ -1,8 +1,10 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import PredictionsSection from "../components/PredictionsSection";
+import TeamPredictionsSection from "../components/TeamPredictionsSection";
 import { loadParticipants } from "../lib/loadParticipants";
 import { fetchMatches, openForPredictions, fetchPredictionTallies } from "../lib/matches";
+import { fetchTeamMatches, openForTeamPredictions, fetchTeamPredictionTallies } from "../lib/teamMatches";
 import { fetchEventState } from "../lib/eventState";
 import { PAGES } from "@velada/core";
 
@@ -11,16 +13,23 @@ const eventState = await fetchEventState();
 /**
  * votingEnabled is the host's global switch for the whole "fase de
  * votaciones" (independent of registrations/roulette/event-started). Each
- * match still has its own predictionsOpen flag from the admin match editor
- * for per-combat control, so when the global phase is off we skip the
- * per-match fetch entirely rather than fetching then hiding.
+ * match (1v1 or por equipo) still has its own predictionsOpen flag from
+ * the admin editor for per-combat control, so when the global phase is
+ * off we skip the per-match fetch entirely rather than fetching then
+ * hiding.
  */
 const participants = eventState.votingEnabled ? await loadParticipants() : [];
 const participantsById = Object.fromEntries(participants.map((p) => [p.id, p]));
+
 const allMatches = eventState.votingEnabled ? await fetchMatches() : [];
 const predictionMatches = eventState.votingEnabled ? openForPredictions(allMatches) : [];
 const tallies = eventState.votingEnabled ? await fetchPredictionTallies(predictionMatches) : [];
 const talliesRecord = Object.fromEntries(tallies);
+
+const allTeamMatches = eventState.votingEnabled ? await fetchTeamMatches() : [];
+const predictionTeamMatches = eventState.votingEnabled ? openForTeamPredictions(allTeamMatches) : [];
+const teamTallies = eventState.votingEnabled ? await fetchTeamPredictionTallies(predictionTeamMatches) : [];
+const teamTalliesRecord = Object.fromEntries(teamTallies);
 
 const copy = PAGES.predictions;
 ---
@@ -38,12 +47,74 @@ const copy = PAGES.predictions;
         </p>
       </div>
 
-      <PredictionsSection
-        client:load
-        matches={predictionMatches}
-        participantsById={participantsById}
-        tallies={talliesRecord}
-      />
+      <div class="predictions-tabs">
+        <input type="radio" name="predictions-tab" id="ptab-1v1" class="predictions-tab-input" checked />
+        <input type="radio" name="predictions-tab" id="ptab-teams" class="predictions-tab-input" />
+
+        <div class="predictions-tab-labels flex justify-center gap-2 mb-12">
+          <label for="ptab-1v1" class="predictions-tab-label">{copy.tab1v1}</label>
+          <label for="ptab-teams" class="predictions-tab-label">{copy.tabTeams}</label>
+        </div>
+
+        <div class="predictions-tab-panel" id="ppanel-1v1">
+          <PredictionsSection
+            client:load
+            matches={predictionMatches}
+            participantsById={participantsById}
+            tallies={talliesRecord}
+          />
+        </div>
+        <div class="predictions-tab-panel" id="ppanel-teams">
+          <TeamPredictionsSection
+            client:load
+            teamMatches={predictionTeamMatches}
+            participantsById={participantsById}
+            tallies={teamTalliesRecord}
+          />
+        </div>
+      </div>
     </div>
   </section>
 </Layout>
+
+<style>
+  .predictions-tab-input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .predictions-tab-label {
+    padding: 0.6rem 1.5rem;
+    border: 1px solid rgba(200, 170, 110, 0.3);
+    color: #94a3b8;
+    font-family: var(--font-display, inherit);
+    font-weight: 700;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: color 0.2s, background-color 0.2s, border-color 0.2s;
+    user-select: none;
+  }
+
+  .predictions-tab-label:hover {
+    color: #c8aa6e;
+  }
+
+  .predictions-tab-panel {
+    display: none;
+  }
+
+  #ptab-1v1:checked ~ .predictions-tab-labels label[for="ptab-1v1"],
+  #ptab-teams:checked ~ .predictions-tab-labels label[for="ptab-teams"] {
+    background-color: #c8aa6e;
+    border-color: #c8aa6e;
+    color: #0a1428;
+  }
+
+  #ptab-1v1:checked ~ #ppanel-1v1,
+  #ptab-teams:checked ~ #ppanel-teams {
+    display: block;
+  }
+</style>

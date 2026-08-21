@@ -828,7 +828,8 @@ export const server = {
       teamAIds: z.string().min(1),
       teamBIds: z.string().min(1),
       winnerTeam: z.enum(["A", "B"]).optional(),
-      generationMode: z.enum(["manual", "random", "balanced", "unfair"]).default("manual")
+      generationMode: z.enum(["manual", "random", "balanced", "unfair"]).default("manual"),
+      predictionsOpen: z.coerce.boolean().default(false)
     }),
     handler: async (input, context) => {
       requirePanelAuth(await getAdminSession(context.cookies));
@@ -861,7 +862,8 @@ export const server = {
         team_a_ids: teamAIds,
         team_b_ids: teamBIds,
         winner_team: input.winnerTeam ?? null,
-        generation_mode: input.generationMode
+        generation_mode: input.generationMode,
+        predictions_open: input.predictionsOpen
       };
 
       const { data, error } = await admin.from("team_matches").upsert(row).select("id").single();
@@ -942,7 +944,8 @@ export const server = {
         team_a_ids: m.teamAIds,
         team_b_ids: m.teamBIds,
         winner_team: null,
-        generation_mode: mode
+        generation_mode: mode,
+        predictions_open: false
       }));
 
       const { data: inserted, error: insertError } = await admin
