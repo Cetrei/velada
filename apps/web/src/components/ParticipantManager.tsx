@@ -38,6 +38,15 @@ function makeStatKey(): string {
 
 type StatusMessage = { type: "success" | "error"; text: string } | null;
 
+/**
+ * Espera entre cada consulta a mmradar.gg cuando se actualiza el roster
+ * completo -- mismo valor que REQUEST_DELAY_MS en
+ * scripts/test-rank-calibration.test.ts (ver AGENT.md: pegarle a
+ * mmradar.gg en rafaga, aunque sea desde la misma IP, puede disparar su
+ * proteccion anti-bot). Secuencial a proposito, nunca en paralelo.
+ */
+const REFRESH_ALL_DELAY_MS = 4000;
+
 export default function ParticipantManager({ initialParticipants }: ParticipantManagerProps) {
   const [participants, setParticipants] = useState(initialParticipants);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -53,6 +62,7 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
+  const [refreshAllProgress, setRefreshAllProgress] = useState<{ done: number; total: number } | null>(null);
  
   const skipNextLookup = useRef(false);
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -288,6 +298,74 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
     setParticipants((prev) => prev.filter((p) => p.id !== id));
     setStatus({ type: "success", text: PARTICIPANT_MANAGER.successDeleted });
     if (editingId === id) resetForm();
+  }
+
+  function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  async function handleRefreshAll() {
+    const eligible = participants.filter((p) => p.lolUsername);
+    if (eligible.length === 0) {
+      setStatus({ type: "error", text: PARTICIPANT_MANAGER.refreshAllNoneEligible });
+      return;
+    }
+    if (!confirm(PARTICIPANT_MANAGER.refreshAllConfirm(eligible.length))) return;
+
+    setStatus(null);
+    setRefreshAllProgress({ done: 0, total: eligible.length });
+
+    let ok = 0;
+    let failed = 0;
+
+    for (let i = 0; i < eligible.length; i++) {
+      const p = eligible[i];
+      const data = new FormData();
+      data.set("id", p.id);
+
+      try {
+        const { data: result, error } = await actions.refreshMmradarData(data);
+        if (error || !result) {
+          failed += 1;
+        } else {
+          ok += 1;
+          setParticipants((prev) =>
+            prev.map((existing) =>
+              existing.id === p.id
+                ? {
+                    ...existing,
+                    lolRank: result.lolRank,
+                    performanceRank: result.performanceRank,
+                    performanceScores: result.performanceScores,
+                    titles: result.titles,
+                    mmradarIconUrl: result.mmradarIconUrl,
+                    mmradarServer: result.mmradarServer,
+                    mmradarLevel: result.mmradarLevel,
+                    duelRating: result.duelRating,
+                    duelConfidence: result.duelConfidence,
+                    mmradarUpdatedAt: result.mmradarUpdatedAt
+                  }
+                : existing
+            )
+          );
+        }
+      } catch {
+        failed += 1;
+      }
+
+      setRefreshAllProgress({ done: i + 1, total: eligible.length });
+
+      // No esperar despues del ultimo -- nada que espaciar.
+      if (i < eligible.length - 1) {
+        await sleep(REFRESH_ALL_DELAY_MS);
+      }
+    }
+
+    setRefreshAllProgress(null);
+    setStatus({
+      type: failed > 0 ? "error" : "success",
+      text: PARTICIPANT_MANAGER.refreshAllSummary(ok, failed)
+    });
   }
 
   return (
@@ -540,9 +618,24 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
       )}
 
       <div className="bg-lol-cardBg border border-lol-border p-6 rounded-xl">
-        <h3 className="font-display text-xl font-bold text-white uppercase mb-4">
-          {PARTICIPANT_MANAGER.rosterTitle(participants.length)}
-        </h3>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+          <h3 className="font-display text-xl font-bold text-white uppercase">
+            {PARTICIPANT_MANAGER.rosterTitle(participants.length)}
+          </h3>
+          <button
+            type="button"
+            onClick={handleRefreshAll}
+            disabled={refreshAllProgress !== null}
+            className="px-3 py-2 bg-lol-blue/10 border border-lol-blue text-lol-blue text-xs uppercase font-bold whitespace-nowrap disabled:opacity-50"
+          >
+            {refreshAllProgress
+              ? PARTICIPANT_MANAGER.refreshAllCtaBusy(refreshAllProgress.done, refreshAllProgress.total)
+              : PARTICIPANT_MANAGER.refreshAllCta}
+          </button>
+        </div>
+        <p className="text-slate-500 text-xs mb-4">
+          {PARTICIPANT_MANAGER.refreshAllHint(participants.filter((p) => p.lolUsername).length)}
+        </p>
         <div className="space-y-2">
           {participants.map((p) => (
             <div

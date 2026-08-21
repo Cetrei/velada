@@ -385,5 +385,12 @@ export const PARTICIPANT_MANAGER = {
   editCta: "Editar",
   deleteCta: "Borrar",
   submitEditCta: "Guardar cambios",
-  cancelCta: "Cancelar"
+  cancelCta: "Cancelar",
+  refreshAllCta: "Actualizar todos (mmradar)",
+  refreshAllCtaBusy: (done: number, total: number) => `Actualizando ${done}/${total}...`,
+  refreshAllHint: (count: number) => `Se van a consultar ${count} participantes con Riot ID cargado, uno por uno, para no saturar mmradar.gg. Puede tardar varios minutos.`,
+  refreshAllNoneEligible: "Ningun participante tiene un Riot ID cargado para actualizar.",
+  refreshAllSummary: (ok: number, failed: number) =>
+    failed > 0 ? `Listo: ${ok} actualizados, ${failed} fallaron.` : `Listo: ${ok} participantes actualizados.`,
+  refreshAllConfirm: (count: number) => `¿Actualizar el rango y performance de los ${count} participantes con Riot ID? Puede tardar varios minutos.`
 };
