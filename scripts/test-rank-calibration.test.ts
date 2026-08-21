@@ -75,7 +75,7 @@ import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
 import { fetchMmradarProfile, MmradarLookupError, type MmradarProfileResult } from "../packages/core/mmradarScraper";
 import { computePerformanceRankDebug, type PerformanceRankDebug } from "../packages/core/performanceRank";
-import { computeDuelRatingFromMatches } from "../packages/core/duelRating";
+import { computeDuelRatingDebug, type DuelRatingDebug } from "../packages/core/duelRating";
 import { EngineMatchSchema } from "../packages/core/schemas";
 import type { TitleEngineMatch } from "../packages/core/titleEngine";
 
@@ -210,6 +210,18 @@ function printDebugRow(riotId: string, expectedRank: string, debug: PerformanceR
   console.log(`  escalones finales:   ${debug.anchorSteps} + ${fmtSigned(debug.clampedAdjustment)} = ${debug.finalSteps}`);
 }
 
+function printDuelDebugRow(debug: DuelRatingDebug | null) {
+  if (!debug) return;
+  console.log(`  --- duel rating (habilidad 1v1) ---`);
+  console.log(`  ancla por rango:     ${debug.anchorRating.toFixed(1)}/100 (${debug.currentRank ?? "sin dato, centro de la escala"})`);
+  console.log(`  ajuste combat power: ${fmtSigned(debug.combatPowerAdjustment)}`);
+  console.log(`  ajuste teamShare:    ${fmtSigned(debug.teamShareAdjustment)}`);
+  console.log(`  ajuste mvp rate:     ${fmtSigned(debug.mvpRateAdjustment)}`);
+  console.log(`  ajuste winrate:      ${fmtSigned(debug.winRateAdjustment)}`);
+  console.log(`  ajuste crudo total:  ${fmtSigned(debug.rawAdjustment)} -> clampeado a ${fmtSigned(debug.clampedAdjustment)}`);
+  console.log(`  rating final:        ${debug.anchorRating.toFixed(1)} + ${fmtSigned(debug.clampedAdjustment)} = ${debug.finalRating}/100`);
+}
+
 describe("calibracion de Performance Rank contra datos reales", () => {
   const results: { riotId: string; expected: string; obtained: string | null; lolRank: string | null; match: boolean; source: string }[] = [];
   const supabase = createStandaloneSupabaseClient();
@@ -283,16 +295,14 @@ describe("calibracion de Performance Rank contra datos reales", () => {
 
         // Referencia de duelRating tambien, por si hace falta calibrarlo en
         // paralelo (usa los mismos datos crudos) -- no forma parte de la
-        // aserción del test, es solo informativo.
-        const duelRating = computeDuelRatingFromMatches(engineMatches, {
+        // aserción del test, es solo informativo. Desglose completo (ver
+        // computeDuelRatingDebug en duelRating.ts) para poder calibrar a
+        // ojo hasta que exista un fixture set real de habilidad 1v1.
+        const duelDebug = computeDuelRatingDebug(engineMatches, {
           performanceRank: debug?.result?.rank ?? null,
           currentRank: lolRank
         });
-        if (duelRating) {
-          console.log(
-            `  duel rating:     ${duelRating.rating}/100 (confianza ${fmtPct(duelRating.confidence)}, ${duelRating.gamesConsidered} partidas)`
-          );
-        }
+        printDuelDebugRow(duelDebug);
 
         // No se hace expect(obtained).toBe(expected) a proposito: mientras
         // se calibra, un desvio es informacion util, no un fallo que deba

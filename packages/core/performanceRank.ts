@@ -87,8 +87,14 @@ const MAX_ADJUSTMENT_STEPS = 4;
  * Escalon absoluto (0 = Iron IV, ... ver RANK_TIERS) de un rango tipo
  * "Gold II". null si el string no matchea ningun tier conocido -- el
  * caller decide el fallback (normalmente NEUTRAL_STEPS_FALLBACK).
+ *
+ * Exportada para reusar la misma nocion de "fuerza de un rango" fuera de
+ * este archivo -- ver ordenamiento por rango en RosterExplorer.tsx (antes
+ * comparaba el tier solo, alfabeticamente, ignorando division y dando un
+ * orden totalmente incorrecto: Bronze < Diamond < Emerald < Gold...
+ * alfabetico, no por fuerza real).
  */
-function stepsFromRankString(rank: string | null | undefined): number | null {
+export function stepsFromRankString(rank: string | null | undefined): number | null {
   const tier = rankTierOf(rank);
   if (!tier) return null;
   const tierIndex = RANK_TIERS.indexOf(tier);

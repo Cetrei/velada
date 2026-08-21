@@ -71,6 +71,7 @@ export const PAGES = {
     columnRank: "Rango",
     columnVotes: "Votos",
     columnPerformance: "Performance",
+    columnDuel: "1v1",
     sortAscLabel: "Ascendente",
     sortDescLabel: "Descendente",
     emptyState: "Ningún peleador coincide con esa búsqueda."

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Participant } from "@velada/core";
-import { PAGES, rankIconPath } from "@velada/core";
+import { PAGES, rankIconPath, stepsFromRankString } from "@velada/core";
 import Dropdown from "./Dropdown";
 
 interface RosterExplorerProps {
@@ -8,7 +8,7 @@ interface RosterExplorerProps {
   votesById: Record<string, number>;
 }
 
-type SortColumn = "name" | "mainRole" | "lolRank" | "votes" | "performance";
+type SortColumn = "name" | "mainRole" | "lolRank" | "votes" | "performance" | "duel";
 type SortDirection = "asc" | "desc";
 
 const ROLES: Array<Participant["mainRole"]> = ["Top", "Jungle", "Mid", "ADC", "Support"];
@@ -37,6 +37,20 @@ const ELO_TIER_ORDER = [
 function eloTierOf(p: Participant): string {
   const firstWord = p.lolRank?.trim().split(/\s+/)[0];
   return firstWord && ELO_TIER_ORDER.includes(firstWord) ? firstWord : p.lolRank?.trim() || "Sin clasificar";
+}
+
+/**
+ * Fuerza real de un rango (tier*4 + division, ver stepsFromRankString en
+ * @velada/core) para ordenar por rango de verdad -- antes el sort de
+ * "lolRank" usaba eloTierOf(a).localeCompare(eloTierOf(b)), que compara
+ * solo el nombre del tier alfabeticamente ("Bronze" < "Diamond" <
+ * "Emerald" < "Gold" < "Platinum"...) e ignora la division por completo,
+ * dando un orden que no tiene nada que ver con la fuerza real del rango.
+ * null (rango no reconocido / "Sin clasificar") se trata como -1 para que
+ * quede siempre antes que cualquier rango real en orden ascendente.
+ */
+function rankStepsOf(p: Participant): number {
+  return stepsFromRankString(p.lolRank) ?? -1;
 }
 
 function fallbackPhoto(p: Participant): string {
@@ -112,13 +126,16 @@ export default function RosterExplorer({ participants, votesById }: RosterExplor
           cmp = a.mainRole.localeCompare(b.mainRole);
           break;
         case "lolRank":
-          cmp = eloTierOf(a).localeCompare(eloTierOf(b));
+          cmp = rankStepsOf(a) - rankStepsOf(b);
           break;
         case "votes":
           cmp = (votesById[a.id] ?? 0) - (votesById[b.id] ?? 0);
           break;
         case "performance":
           cmp = (performanceScoreOf(a) ?? -1) - (performanceScoreOf(b) ?? -1);
+          break;
+        case "duel":
+          cmp = (a.duelRating ?? -1) - (b.duelRating ?? -1);
           break;
       }
       return sortDirection === "asc" ? cmp : -cmp;
@@ -177,6 +194,7 @@ export default function RosterExplorer({ participants, votesById }: RosterExplor
             <SortHeader className="hidden sm:flex w-24 justify-center" label={copy.columnRole} column="mainRole" active={sortColumn} direction={sortDirection} onSort={toggleSort} />
             <SortHeader className="hidden md:flex w-24 justify-end" label={copy.columnRank} column="lolRank" active={sortColumn} direction={sortDirection} onSort={toggleSort} />
             <SortHeader className="hidden md:flex w-28 justify-end" label={copy.columnPerformance} column="performance" active={sortColumn} direction={sortDirection} onSort={toggleSort} />
+            <SortHeader className="hidden md:flex w-28 justify-end" label={copy.columnDuel} column="duel" active={sortColumn} direction={sortDirection} onSort={toggleSort} />
             <SortHeader className="w-16 justify-end" label={copy.columnVotes} column="votes" active={sortColumn} direction={sortDirection} onSort={toggleSort} />
           </div>
 
@@ -226,6 +244,24 @@ export default function RosterExplorer({ participants, votesById }: RosterExplor
                         </span>
                         <span className="text-slate-400 text-[10px] font-bold w-9 text-right flex-shrink-0 tabular-nums">
                           {Math.round(score)}
+                        </span>
+                      </>
+                    )}
+                  </span>
+                  <span className="hidden md:flex w-28 items-center gap-1.5">
+                    {typeof p.duelRating === "number" && (
+                      <>
+                        <span className="flex-1 h-1.5 rounded-full bg-black/40 border border-red-500/30 overflow-hidden shadow-[0_0_6px_rgba(239,68,68,0.25)]">
+                          <span
+                            className="block h-full rounded-full"
+                            style={{
+                              width: `${Math.min(100, p.duelRating)}%`,
+                              background: "linear-gradient(to right, #C8AA6E, #ef4444)"
+                            }}
+                          />
+                        </span>
+                        <span className="text-red-400 text-[10px] font-bold w-9 text-right flex-shrink-0 tabular-nums">
+                          {Math.round(p.duelRating)}
                         </span>
                       </>
                     )}
