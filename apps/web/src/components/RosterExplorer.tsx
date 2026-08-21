@@ -266,14 +266,13 @@ export default function RosterExplorer({ participants, votesById }: RosterExplor
                         <span className="text-red-400 text-[10px] font-bold w-9 text-right flex-shrink-0 tabular-nums">
                           {Math.round(p.duelRating)}
                         </span>
-                        {typeof p.duelConfidence === "number" && p.duelConfidence < LOW_CONFIDENCE_THRESHOLD && (
-                          <span
-                            className="text-slate-600 text-[9px] leading-none flex-shrink-0"
-                            title="Basado en pocas partidas"
-                          >
-                            ●
-                          </span>
-                        )}
+                        <span className="w-2.5 flex-shrink-0 flex justify-center">
+                          {typeof p.duelConfidence === "number" && p.duelConfidence < LOW_CONFIDENCE_THRESHOLD && (
+                            <span className="text-slate-600 text-[9px] leading-none" title="Basado en pocas partidas">
+                              ●
+                            </span>
+                          )}
+                        </span>
                       </>
                     )}
                   </span>
