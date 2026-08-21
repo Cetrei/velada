@@ -172,8 +172,11 @@ export default function ParticipantManager({ initialParticipants }: ParticipantM
         return;
       }
 
-      setForm((prev) => ({ ...prev, lolRank: `${result.rank} (${result.lp} LP)` }));
-      setStatus({ type: "success", text: PARTICIPANT_MANAGER.successRankUpdated });
+      setForm((prev) => ({ ...prev, lolRank: result.rank }));
+      setStatus({
+        type: "success",
+        text: `${PARTICIPANT_MANAGER.successRankUpdated} (${result.lp} LP)`
+      });
     } catch {
       if (requestId === lookupRequestId.current) setIsLookingUpRank(false);
     }

@@ -103,7 +103,7 @@ function parseCurrentRank(html: string): MmradarCurrentRank | null {
     return null;
   }
 
-  const tierPattern = new RegExp(`\\b(${TIER_WORDS.join("|")})\\b\\s*(I{1,3}|IV)?`, "i");
+  const tierPattern = new RegExp(`\\b(${TIER_WORDS.join("|")})\\b\\s*(IV|III|II|I)?`, "i");
   const match = text.match(tierPattern);
   if (!match) return null;
 
