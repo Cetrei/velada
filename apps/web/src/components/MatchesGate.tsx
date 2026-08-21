@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Match, Participant } from "@velada/core";
 import { PAGES } from "@velada/core";
 import { hasUnseenRaffleResults, markRaffleResultsSeen } from "../lib/revealTracking";
@@ -125,12 +125,25 @@ export default function MatchesGate({ matches, participantsById, tabRadioGroup, 
     );
 
   const initialRef = useState(() => renderable)[0];
-  const [revealPending, setRevealPending] = useState(() =>
-    hasUnseenRaffleResults(initialRef.map((r) => matchKey(r.match)))
-  );
+  // Arranca en null ("todavia no se sabe") en vez de resolver
+  // hasUnseenRaffleResults ya en el useState inicial -- ese initializer
+  // corre tambien en el render de servidor de este componente client:load
+  // (usado en /combates y en el landing), y ahi localStorage no existe
+  // (revealTracking.ts devuelve un Set vacio en el servidor), asi que el
+  // HTML inicial siempre marcaba "no visto" sin importar el localStorage
+  // real del visitante -- eso se pintaba un instante antes de que el
+  // primer effect del cliente corrija el valor, y ese instante era el
+  // flash de la revelacion reportado por el usuario en visitas donde ya
+  // estaba todo visto. Mismo patron que LandingCombatesGate/RouletteWheel.
+  const [revealPending, setRevealPending] = useState<boolean | null>(null);
   const [revealIndex, setRevealIndex] = useState(0);
   const tabActiveFromDom = useTabActive(tabRadioGroup ?? "__no_tabs__", tabPanelId ?? "__no_tabs__");
   const tabActive = forceActive ?? tabActiveFromDom;
+
+  useEffect(() => {
+    setRevealPending(hasUnseenRaffleResults(initialRef.map((r) => matchKey(r.match))));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function finishReveal() {
     markRaffleResultsSeen(initialRef.map((r) => matchKey(r.match)));
@@ -139,6 +152,13 @@ export default function MatchesGate({ matches, participantsById, tabRadioGroup, 
 
   if (renderable.length === 0) {
     return <p className="text-center text-slate-500">{copy.emptyState}</p>;
+  }
+
+  // revealPending === null: todavia no se resolvio el effect de arriba --
+  // placeholder neutro para no arriesgar mostrar la grilla normal ni la
+  // revelacion antes de saber cual le corresponde a este visitante.
+  if (revealPending === null) {
+    return <div className="h-64" aria-hidden="true" />;
   }
 
   if (revealPending && initialRef.length > 0) {

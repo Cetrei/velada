@@ -26,30 +26,72 @@ function sum(values: number[]): number {
   return values.reduce((a, b) => a + b, 0);
 }
 
-export function planTeamBlockSizes(total: number): number[] {
-  if (total < 6) return [];
+const MIN_BLOCK = 6;
+const MAX_BLOCK = 10;
 
-  const blocks: number[] = [];
-  let remaining = total;
+/**
+ * Puntaje de una particion candidata para elegir la mejor: primero MENOS
+ * sobrante (prioridad principal -- pedido del usuario: con 12 participantes
+ * quiere que no quede nadie afuera), despues MENOS bloques (preferir dos
+ * 3v3 en vez de tres 2v2... aunque 2v2 ni siquiera es valido, MIN_BLOCK=6
+ * ya lo evita) y por ultimo bloques mas parejos entre si (mas cerca de 8,
+ * que es el punto medio entre 6 y 10) para no mezclar un 3v3 gigante con
+ * un 5v5 cuando hay una opcion mas pareja con el mismo sobrante.
+ */
+function scoreOf(partition: number[], total: number): [number, number, number] {
+  const leftover = total - sum(partition);
+  const blockCount = partition.length;
+  const spread = sum(partition.map((b) => Math.abs(b - 8)));
+  return [leftover, blockCount, spread];
+}
 
-  while (remaining >= 6) {
-    if (remaining === 7) {
-      blocks.push(6);
-      remaining -= 6;
-      break;
+function isBetter(candidate: number[], best: number[], total: number): boolean {
+  const a = scoreOf(candidate, total);
+  const b = scoreOf(best, total);
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return a[i] < b[i];
+  }
+  return false;
+}
+
+/**
+ * Particiona `total` en bloques pares entre MIN_BLOCK (6, un 3v3) y
+ * MAX_BLOCK (10, un 5v5), minimizando el sobrante -- por ejemplo con 12
+ * devuelve [6, 6] (dos 3v3, 0 sobrante) en vez del viejo comportamiento
+ * greedy que siempre tomaba el bloque de 10 primero si alcanzaba, dejando
+ * un 5v5 + 2 personas sobrantes sin combate. Con empate en sobrante
+ * prefiere menos bloques, y despues bloques mas parejos entre si (ver
+ * scoreOf). DP acotado por MIN_BLOCK/MAX_BLOCK, trivial en tamaño para
+ * cualquier cantidad realista de participantes.
+ */
+function bestPartition(total: number): number[] {
+  if (total < MIN_BLOCK) return [];
+
+  const memo = new Map<number, number[]>();
+
+  function solve(n: number): number[] {
+    if (n < MIN_BLOCK) return [];
+    const cached = memo.get(n);
+    if (cached) return cached;
+
+    let best: number[] = [];
+    for (let block = MIN_BLOCK; block <= Math.min(MAX_BLOCK, n); block += 2) {
+      const rest = solve(n - block);
+      const candidate = [block, ...rest].sort((a, b) => b - a);
+      if (isBetter(candidate, best, total)) {
+        best = candidate;
+      }
     }
-    if (remaining >= 10) {
-      blocks.push(10);
-      remaining -= 10;
-    } else {
-      // remaining es 6, 8 o 9 aca. 9 no es par -> se toma 8 y sobra 1.
-      const block = remaining === 9 ? 8 : remaining;
-      blocks.push(block);
-      remaining -= block;
-    }
+
+    memo.set(n, best);
+    return best;
   }
 
-  return blocks;
+  return solve(total);
+}
+
+export function planTeamBlockSizes(total: number): number[] {
+  return bestPartition(total);
 }
 
 function ratingOf(p: BalancerParticipant): number {

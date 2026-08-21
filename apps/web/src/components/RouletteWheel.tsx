@@ -152,11 +152,24 @@ export default function RouletteWheel({ participants, rouletteUnlocked, existing
   if (initialPairsRef.current === null) {
     initialPairsRef.current = resolvePairsFromMatches(existingMatches, participants);
   }
-  const [revealPending, setRevealPending] = useState(() => {
-    const ids = initialPairsRef.current!.map((p) => p.key);
-    return hasUnseenRaffleResults(ids);
-  });
+  // Arranca en null ("todavia no se sabe") en vez de calcular
+  // hasUnseenRaffleResults ya en el useState inicial -- ese initializer
+  // corre tambien en el render de servidor de este componente client:load,
+  // y en el servidor localStorage no existe (revealTracking.ts devuelve un
+  // Set vacio ahi), asi que siempre daba "no visto" en el HTML inicial sin
+  // importar lo que diga el localStorage real del visitante -- ese HTML se
+  // pintaba un instante antes de que el primer effect del cliente corrija
+  // el valor, y ese instante era el flash de la animacion reportado por el
+  // usuario en visitas donde ya estaba todo visto. Mismo patron que ya usan
+  // LandingCombatesGate/LandingRaffleCta (null -> resuelve en useEffect).
+  const [revealPending, setRevealPending] = useState<boolean | null>(null);
   const [revealIndex, setRevealIndex] = useState(0);
+
+  useEffect(() => {
+    const ids = initialPairsRef.current!.map((p) => p.key);
+    setRevealPending(hasUnseenRaffleResults(ids));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function finishReveal() {
     const ids = initialPairsRef.current!.map((p) => p.key);
@@ -318,6 +331,16 @@ export default function RouletteWheel({ participants, rouletteUnlocked, existing
         </p>
       </div>
     );
+  }
+
+  // revealPending === null: todavia no se resolvio el useEffect de arriba
+  // (que lee localStorage, solo disponible en el cliente) -- placeholder
+  // neutro para no arriesgar mostrar la rueda/grilla normal ni la
+  // revelacion antes de saber cual de las dos le corresponde a este
+  // visitante. Se resuelve en el primer paint del cliente, asi que este
+  // estado dura un instante imperceptible en la practica.
+  if (revealPending === null && initialPairsRef.current!.length > 0) {
+    return <div className="h-96" aria-hidden="true" />;
   }
 
   // Presentacion secuencial: solo corre sobre los pares que YA estaban

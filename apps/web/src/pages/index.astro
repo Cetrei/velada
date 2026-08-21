@@ -8,7 +8,7 @@ import LandingCombatesGate from "../components/LandingCombatesGate";
 import LandingRaffleCta from "../components/LandingRaffleCta";
 import { loadParticipants } from "../lib/loadParticipants";
 import { fetchEventState } from "../lib/eventState";
-import { fetchMatches, withOfficialResult, openForPredictions, fetchPredictionTallies } from "../lib/matches";
+import { fetchMatches, openForPredictions, fetchPredictionTallies } from "../lib/matches";
 import { fetchTeamMatches } from "../lib/teamMatches";
 import { PAGES, SITE } from "@velada/core";   // <-- agregué SITE
 
@@ -26,7 +26,11 @@ const rivalByParticipantId = Object.fromEntries(
   ])
 );
 
-const officialMatches = withOfficialResult(allMatches).slice(0, 3);
+// Antes filtraba con withOfficialResult (solo con winnerId) -- mismo bug
+// que combates.astro: dejaba invisible en el landing cualquier 1v1 recien
+// sorteado sin resultado todavia. Se muestran todos, igual que ya hacian
+// los combates por equipo (nunca se filtraron por resultado).
+const officialMatches = allMatches.slice(0, 3);
 const predictionMatches = openForPredictions(allMatches).slice(0, 4);
 const tallies = await fetchPredictionTallies(predictionMatches);
 const talliesRecord = Object.fromEntries(tallies);

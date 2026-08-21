@@ -3,14 +3,22 @@ import Layout from "../layouts/Layout.astro";
 import MatchesGate from "../components/MatchesGate";
 import TeamMatchesGate from "../components/TeamMatchesGate";
 import { loadParticipants } from "../lib/loadParticipants";
-import { fetchMatches, withOfficialResult } from "../lib/matches";
+import { fetchMatches } from "../lib/matches";
 import { fetchTeamMatches } from "../lib/teamMatches";
 import { PAGES } from "@velada/core";
 
 const participants = await loadParticipants();
 const participantsById = Object.fromEntries(participants.map((p) => [p.id, p]));
-const allMatches = await fetchMatches();
-const officialMatches = withOfficialResult(allMatches);
+// Antes esto filtraba con withOfficialResult (solo matches con winnerId),
+// lo que dejaba invisibles en /combates los 1v1 recien salidos del sorteo
+// (sin resultado todavia) -- bug reportado por el usuario: el sorteo ya
+// habia generado combates pero en ningun lado de la pagina aparecian salvo
+// en la ficha de cada peleador. MatchResultCard/MatchesGate ya sabian
+// mostrar el estado "Resultado pendiente" (mismo patron que ya usan los
+// combates por equipo, que nunca se filtraron por resultado), asi que el
+// fix es simplemente no filtrar: se muestran TODOS los combates que
+// existen (sorteados o cargados a mano), con o sin resultado.
+const officialMatches = await fetchMatches();
 const teamMatches = await fetchTeamMatches();
 
 const copy = PAGES.matches;

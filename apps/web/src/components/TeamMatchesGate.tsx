@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Participant, TeamMatch } from "@velada/core";
 import { PAGES, rankIconPath } from "@velada/core";
 import { hasUnseenTeamMatches, markTeamMatchesSeen } from "../lib/revealTracking";
@@ -122,12 +122,21 @@ export default function TeamMatchesGate({ teamMatches, participantsById, tabRadi
   const copy = PAGES.matches;
 
   const initialRef = useState(() => teamMatches)[0];
-  const [revealPending, setRevealPending] = useState(() =>
-    hasUnseenTeamMatches(initialRef.map(teamMatchKey))
-  );
+  // Arranca en null -- mismo fix que MatchesGate/RouletteWheel: resolver
+  // hasUnseenTeamMatches ya en el useState inicial corria tambien en el
+  // render de servidor de este componente client:load, y ahi localStorage
+  // no existe (siempre "no visto" en el HTML inicial sin importar lo que
+  // diga el localStorage real del visitante) -- eso causaba un flash de la
+  // revelacion en visitas donde ya estaba todo visto.
+  const [revealPending, setRevealPending] = useState<boolean | null>(null);
   const [revealIndex, setRevealIndex] = useState(0);
   const tabActiveFromDom = useTabActive(tabRadioGroup ?? "__no_tabs__", tabPanelId ?? "__no_tabs__");
   const tabActive = forceActive ?? tabActiveFromDom;
+
+  useEffect(() => {
+    setRevealPending(hasUnseenTeamMatches(initialRef.map(teamMatchKey)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function finishReveal() {
     markTeamMatchesSeen(initialRef.map(teamMatchKey));
@@ -136,6 +145,12 @@ export default function TeamMatchesGate({ teamMatches, participantsById, tabRadi
 
   if (teamMatches.length === 0) {
     return <p className="text-center text-slate-500">{copy.teamsEmptyState}</p>;
+  }
+
+  // revealPending === null: todavia no se resolvio el effect de arriba --
+  // placeholder neutro, mismo criterio que MatchesGate.
+  if (revealPending === null) {
+    return <div className="h-64" aria-hidden="true" />;
   }
 
   if (revealPending && initialRef.length > 0) {
