@@ -2127,6 +2127,175 @@ era el de arriba, no whitelist).
   comparten el mismo bucle, revisar que no haya quedado ninguna variable
   sin usar si el linter del proyecto es estricto con eso).
 
+## Sesion 2026-08-20 (11): recalibrado performanceRank.ts a sesgo fijo negativo (avgTotal descartado como predictor) sobre los 9 fixtures reales
+- Retomando un chat previo (transcripcion pegada por el usuario, no en
+  este AGENT.md) que ya habia hecho el trabajo analitico completo antes de
+  tocar codigo: con currentRank vs Performance Rank esperado de los 9
+  jugadores de `scripts/rank-calibration-fixtures.json`, se corrio una
+  regresion lineal simple (desviacion = a + b*avgTotal_centrado +
+  c*winRate_centrado + d*consistencia_centrada) -- fit debil (residual std
+  ~1.65 escalones sobre un rango de -4 a +1), ninguna variable por
+  separado correlaciono fuerte (todas |r| < 0.4, avgTotal con signo hasta
+  contraintuitivo). Confirmado con el usuario: con 9 puntos y ese ruido,
+  forzar un modelo multivariable ajustado de mas es sobreajustar ruido --
+  literalmente lo que ya le habia pasado a la version anterior del
+  archivo (rediseño (1), umbrales absolutos de avgTotal, ver historial mas
+  arriba). Lo que SI mostraron los 9 datos con claridad: el Performance
+  Rank casi siempre es igual o menor al Current Rank (7/9 desviaciones
+  negativas o cero, las 2 excepciones son apenas +1) -- consistente con
+  que la mayoria de la gente no puede estar sistematicamente por encima de
+  la mediana de su propio elo. Decision explicita del usuario: modelo
+  simple -- sesgo fijo negativo (~1-2 escalones) restado del Current Rank,
+  mas un ajuste chico y acotado por winrate/consistencia, sin pretender
+  precision exacta jugador por jugador.
+- **`packages/core/performanceRank.ts`** (unico archivo de logica
+  tocado): reescrito el bloque de comentarios de cabecera documentando
+  este rediseño (2) completo (el anterior, rediseño (1) del mismo dia, se
+  deja como historia). `NEUTRAL_AVG_TOTAL`/`AVG_TOTAL_DEVIATION_SCALE`/
+  `avgTotalDeviation()` borrados por completo -- avgTotal ya no participa
+  del calculo (sigue calculandose y exponiendose en `PerformanceRankDebug`
+  para diagnostico, pero no como input). Nueva `FIXED_BIAS_STEPS = -1.5`
+  (media de las 9 desviaciones observadas, -1.33, redondeada). `MAX_ADJUSTMENT_STEPS`
+  bajado de 8 a 4 (el ajuste total ya no necesita tanto rango sin avgTotal
+  empujando). `winRateAdjustment`/`consistencyAdjustment` con
+  multiplicadores reducidos (`* 3` y `* 7.5` respectivamente, antes `* 8`
+  y `* 40`) para que cada uno tope en +-1.5 escalones -- ajustes chicos y
+  acotados como decidio el usuario, no factores dominantes.
+  `computePerformanceRank`/`computePerformanceRankDebug` ahora suman
+  `FIXED_BIAS_STEPS` en vez de `avgTotalDeviation(avgTotal)`.
+  `PerformanceRankDebug.avgTotalDeviation` renombrado a `fixedBiasSteps`.
+  `PERFORMANCE_RANK_EXPLANATION` (copy user-facing) actualizado para
+  reflejar el modelo nuevo sin mencionar avgTotal como factor.
+- **`scripts/test-rank-calibration.test.ts`**: `printDebugRow` y el
+  mensaje final de sugerencia de ajuste actualizados para referenciar
+  `fixedBiasSteps`/`FIXED_BIAS_STEPS` en vez de los campos/constantes
+  borrados.
+- Simulado el sesgo fijo solo (sin winrate/consistencia real, que no
+  estaban disponibles en el chat pegado por el usuario) contra los 9
+  fixtures como sanity check minimo antes de dar esto por terminado: cae
+  dentro de 1 escalon en 4/9 casos usando SOLO el sesgo -- consistente con
+  lo esperado, ya que winrate/consistencia reales (que si existen en
+  Supabase para estos jugadores) deberian acercar el resto. No reemplaza
+  correr `bun run calibrate:rank` de verdad contra la DB real, que sigue
+  siendo lo pendiente.
+- Archivos tocados y confirmados con `read_text_file` posterior (nunca
+  `str_replace`/`create_file` del sandbox de ejecucion -- confirmado de
+  nuevo el mismo error de herramienta documentado en la sesion (5) de mas
+  arriba, corregido antes de escribir nada real):
+  `packages/core/performanceRank.ts`, `scripts/test-rank-calibration.test.ts`.
+- Pendiente para el usuario (sin bash real sobre el proyecto en esta
+  sesion tampoco, todo via filesystem MCP): correr `bun run
+  calibrate:rank` para ver el resultado real contra los 9 (o mas, si ya
+  cargaron perfiles nuevos) jugadores con datos reales de Supabase, y
+  ajustar `FIXED_BIAS_STEPS`/los multiplicadores de
+  `winRateAdjustment`/`consistencyAdjustment` si el resultado no calibra
+  bien -- son constantes sueltas pensadas para tocarse libremente. Correr
+  `bun run build`/typecheck del editor para confirmar que no quedo ninguna
+  referencia rota a `avgTotalDeviation`/`NEUTRAL_AVG_TOTAL`/
+  `AVG_TOTAL_DEVIATION_SCALE` en otro archivo que no se haya revisado esta
+  sesion (busqueda manual no encontro otros usos, pero no hay forma de
+  confirmar con un typecheck real sin bash sobre el proyecto).
+
+## Sesion 2026-08-20 (12): corrida real de calibrate:rank confirmo 1/9, agregada variable de carry (teamShare) a pedido del usuario
+- El usuario corrio `bun run calibrate:rank` (output real, no simulado)
+  con el modelo de sesgo fijo de la sesion (11): 1/9 coincide (peor que
+  los 2/9 que la simulacion sin datos reales de winrate/consistencia
+  habia estimado). Analizado el output real con Python: la desviacion
+  NECESARIA por jugador (esperado - ancla) no correlaciona con el
+  winrate real (r=-0.24, y donde correlaciona va al reves --
+  YourDaddyDrinks tiene el winrate MAS ALTO de los 9 (67%) pero necesita
+  el ajuste MAS NEGATIVO (-4)). El mejor sesgo fijo puro (sin
+  winrate/consistencia) topea en 2/9 exactos. Presentado esto al usuario
+  con los numeros antes de seguir ajustando constantes a ciegas.
+- **Decision del usuario**: el problema no es de calibracion de pesos,
+  es que faltaba una variable -- ninguna de las 3 actuales
+  (avgTotal/winrate/consistencia) mide "cuanto se gano/perdio GRACIAS a
+  el" dentro de su propio equipo. Pidio agregar señal de contribucion
+  relativa al equipo: MVP, top score, y el performance de sus aliados.
+- **Investigado que datos crudos ya trae `/load-matches` de mmradar.gg**
+  (revisado `fetchRawMatches` en `mmradarScraper.ts` antes de tocar
+  nada): cada partida ya trae `participants[]` con los 10 jugadores
+  (scores + `teamId`), pero `TitleEngineMatch` solo guardaba el score del
+  propio jugador despues de calcular `wasTopScoreInMatch` (MVP contra los
+  10) -- el resto se descartaba. La señal que pedia el usuario (aporte
+  relativo a SU EQUIPO de 5, no a los 10) estaba disponible en los datos
+  que ya se piden, simplemente nunca se guardaba.
+- **Nueva variable `teamShare`** (`TitleEngineMatch.teamShare: number |
+  null`, `titleEngine.ts`): fraccion del total combinado de su equipo de
+  5 (el jugador incluido) que aporto en esa partida puntual --
+  `own.total / sum(team.total)`. 0.2 = aporte parejo (1/5 exacto).
+  Distinta de `wasTopScoreInMatch` (que compara contra los 10, no solo el
+  propio equipo). `null` si mmradar no trajo `teamId`/scores completos de
+  los 4 companeros para esa partida puntual (no se puede armar el equipo
+  con confianza) -- calculado en `fetchRawMatches`
+  (`mmradarScraper.ts`) filtrando `match.participants` por
+  `teamId === player.teamId` y exigiendo exactamente 5 con scores
+  completos.
+- **`EngineMatchSchema`** (`schemas.ts`): agregado `teamShare:
+  z.number().nullable().optional()` -- `.optional()` a proposito para que
+  las filas YA guardadas en Supabase de sesiones anteriores (sin este
+  campo) sigan pasando `safeParse` sin romper el roster (mismo criterio
+  de retrocompatibilidad que el resto de columnas opcionales nuevas del
+  proyecto).
+- **Nueva `carryAdjustment(matches)`** en `performanceRank.ts`, sumada al
+  ajuste junto a `winRateAdjustment`/`consistencyAdjustment`
+  (`FIXED_BIAS_STEPS` sin cambios, `-1.5`). Señal DIRECCIONAL, no solo de
+  magnitud, siguiendo el pedido del usuario de distinguir "gano gracias a
+  el" de "perdio a pesar de el": carryar una victoria (`teamShare >=
+  0.26` con `won: true`) es la evidencia mas fuerte de que el jugador
+  esta mejor que su Current Rank -- suma. Cargar una derrota (`teamShare
+  <= 0.15` con `won: false`) es la evidencia mas fuerte de lo contrario
+  -- resta. Carryar una derrota (aporto mucho pero igual perdieron) o
+  cargar una victoria (aporto poco pero el equipo gano igual) son
+  ambiguas A PROPOSITO y no suman señal -- no es merito/culpa clara del
+  jugador individual en esos casos. Acotado a +-1.5 escalones, mismo tope
+  que winrate/consistencia (ninguna de las 3 domina). Requiere al menos 4
+  partidas con `teamShare` no-null para activarse, si no devuelve 0.
+- **`PerformanceRankDebug`**: agregado `carryAdjustment: number` al
+  desglose (`computePerformanceRank`/`computePerformanceRankDebug`
+  actualizados para sumarlo). `PERFORMANCE_RANK_EXPLANATION` (copy
+  user-facing) actualizado para mencionar carry como tercer factor de
+  ajuste.
+- **`scripts/test-rank-calibration.test.ts`**: `printDebugRow` ahora
+  imprime `ajuste carry`. Agregada una nota explicita en el resumen final
+  avisando que los 9 fixtures actuales (marcados `[db]`) tienen
+  `mmradar_engine_matches` guardado de ANTES de que `teamShare` existiera
+  -- esas partidas no van a tener el campo, asi que `carryAdjustment` va
+  a dar 0 para los 9 hasta que alguien apriete "Actualizar" en
+  `/mi-perfil` o el panel para cada uno (eso dispara un fetch nuevo a
+  mmradar.gg que si va a guardar `teamShare`).
+- Revisado que ningun otro archivo del proyecto construya un
+  `TitleEngineMatch` literal a mano (tests con fixtures, mocks) que
+  ahora le faltara el campo `teamShare` y rompiera el build --
+  `mmradarScraper.ts` (ya actualizado) es el UNICO lugar que arma estos
+  objetos; el resto del codigo (`duelRating.ts`, `titleEngine.ts`,
+  `performanceRank.ts`, los tests) solo los RECIBE como parametro.
+- Archivos tocados y confirmados con `read_text_file` posterior (nunca
+  `str_replace`/`create_file` del sandbox de ejecucion):
+  `packages/core/titleEngine.ts` (interface `TitleEngineMatch`),
+  `packages/core/mmradarScraper.ts` (calculo de `teamShare` en
+  `fetchRawMatches`), `packages/core/schemas.ts` (`EngineMatchSchema`),
+  `packages/core/performanceRank.ts` (`carryAdjustment` +
+  wiring), `scripts/test-rank-calibration.test.ts` (logging).
+- Pendiente para el usuario (sin bash real sobre el proyecto en esta
+  sesion tampoco, todo via filesystem MCP): correr `bun run
+  scripts/setup-supabase.ts` NO hace falta esta vez (nada de schema SQL
+  cambio, `teamShare` vive dentro del JSON de `mmradar_engine_matches`,
+  no es una columna nueva). Si, hace falta que ALGUIEN apriete
+  "Actualizar" en el perfil de cada uno de los 9 fixtures (o simplemente
+  correr `bun run calibrate:rank`, que ya cae al fetch en vivo para
+  cualquiera sin datos en DB -- pero eso le pega a mmradar.gg con el
+  delay/retry existente, mas lento) para que sus
+  `mmradar_engine_matches` se re-guarden con `teamShare` incluido antes
+  de que `carryAdjustment` pueda aportar algo real en la proxima corrida
+  de `calibrate:rank`. Con eso, volver a correr `bun run calibrate:rank`
+  y ajustar `CARRY_THRESHOLD`/`CARRIED_THRESHOLD`/el multiplicador de
+  `carryAdjustment` en `performanceRank.ts` mirando el detalle real de
+  cada jugador (van a ser constantes sueltas para tocar, igual que las
+  otras). Correr `bun run build`/typecheck del editor para confirmar que
+  el campo nuevo no rompe nada tipado en otro lugar no revisado esta
+  sesion.
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.

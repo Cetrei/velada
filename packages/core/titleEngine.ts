@@ -30,6 +30,17 @@ export interface TitleEngineMatch {
   won: boolean;
   /** true si tuvo el "total" mas alto de los 10 jugadores de esa partida puntual. */
   wasTopScoreInMatch: boolean;
+  /**
+   * Fraccion del total combinado de SU EQUIPO (los 5, el jugador incluido)
+   * que aporto el jugador en esa partida puntual -- own.total / sum(team.total).
+   * 0.2 = aporte parejo (1/5 exacto, ni carry ni carga). Distinto de
+   * wasTopScoreInMatch (que compara contra los 10, no solo el propio
+   * equipo): esta variable es la señal de "cuanto se gano/perdio gracias a
+   * el" dentro de su propio equipo, ver performanceRank.ts. null si la
+   * partida no traia scores de los 4 companeros de equipo (dato
+   * incompleto de mmradar para esa partida puntual).
+   */
+  teamShare: number | null;
 }
 
 /** Parametros ya derivados de las partidas, pensados para que una regla nueva no tenga que recalcular nada comun. */

@@ -37,7 +37,8 @@ export const EngineMatchSchema = z.object({
   championName: z.string(),
   scores: MmradarPerformanceScoresSchema.extend({ total: z.number() }),
   won: z.boolean(),
-  wasTopScoreInMatch: z.boolean()
+  wasTopScoreInMatch: z.boolean(),
+  teamShare: z.number().nullable().optional()
 });
 
 export const ParticipantSchema = z.object({

@@ -1,22 +1,36 @@
 /**
  * Test de CALIBRACION para packages/core/performanceRank.ts (y de paso
- * duelRating.ts, ver el resumen final). No es un test de regresion en el
- * sentido tradicional -- esta pensado para correrse en loop mientras se
- * ajustan las constantes de performanceRank.ts (TIER_THRESHOLDS,
- * multiplicadores de winRateAdjustment/consistencyAdjustment) hasta que el
- * output se acerque a los valores de referencia reales.
+ * duelRating.ts, ver el resumen final).
  *
- * FUENTE DE DATOS (2026-08-20, pedido del usuario): ya NO le pega a
- * mmradar.gg en cada corrida por defecto. Los 6 Riot IDs de
- * scripts/rank-calibration-fixtures.json son participantes reales
- * cargados en la tabla `participants` de Supabase, y
+ * REDISEÑO 2026-08-20 -- Current Rank como ancla (ver el bloque de
+ * comentarios grande al inicio de performanceRank.ts para el porque
+ * completo). Resumen: mmradar.gg calcula su Performance Rank en el
+ * cliente (JS) a partir de una comparacion poblacional a la que no
+ * tenemos acceso -- intentar scrapearlo del HTML es una ruta muerta (esa
+ * seccion no viene en el HTML servido por el server) y NO debe
+ * reintentarse. En cambio, computePerformanceRank ahora usa el Current
+ * Rank oficial (lol_rank, que SI se scrapea de forma confiable) como
+ * ancla, y desvia desde ahi segun avgTotal/winrate/consistencia.
+ *
+ * Este test compara "esperado" (el Performance Rank real, capturado a
+ * mano por el usuario entrando a cada perfil de mmradar.gg -- ver
+ * rank-calibration-fixtures.json) contra el resultado de
+ * computePerformanceRankDebug(engineMatches, lolRank), e imprime lolRank
+ * explicitamente en cada fila para poder calibrar las constantes de
+ * performanceRank.ts (NEUTRAL_AVG_TOTAL, AVG_TOTAL_DEVIATION_SCALE,
+ * winRateAdjustment, consistencyAdjustment) con el Current Rank real de
+ * cada jugador delante.
+ *
+ * FUENTE DE DATOS: no le pega a mmradar.gg en cada corrida por defecto.
+ * Los Riot IDs de scripts/rank-calibration-fixtures.json son
+ * participantes reales cargados en la tabla `participants` de Supabase, y
  * saveOwnParticipant/saveParticipant/refreshMmradarData (ver
- * apps/web/src/actions/index.ts) ya persisten las partidas crudas de cada
- * uno en la columna `mmradar_engine_matches` cada vez que alguien hace
- * refresh desde la web. Este test primero intenta LEER esa columna directo
- * de Supabase (via @supabase/supabase-js con la service role key del .env
- * de la raiz -- bun test carga .env automaticamente) y corre
- * computePerformanceRankDebug sobre lo que encuentra ahi.
+ * apps/web/src/actions/index.ts) ya persisten ahi tanto las partidas
+ * crudas (`mmradar_engine_matches`) como el Current Rank oficial
+ * (`lol_rank`) cada vez que alguien hace refresh desde la web. Este test
+ * primero intenta LEER esas columnas directo de Supabase (via
+ * @supabase/supabase-js con la service role key del .env de la raiz --
+ * bun test carga .env automaticamente).
  *
  * FALLBACK: si un jugador todavia no tiene mmradar_engine_matches en la DB
  * (nunca se hizo refresh desde la web para ese perfil, el campo vino
@@ -25,16 +39,16 @@
  * criterio que scripts/test-mmradar-scraper.test.ts), con el mismo
  * delay/retry contra bloqueos de Cloudflare que ya existia. Asi el test
  * sigue funcionando de punta a punta la primera vez, antes de que nadie
- * haya refrescado nada desde la web para alguno de los 6 fixtures.
+ * haya refrescado nada desde la web para alguno de los fixtures.
  *
- * Por cada jugador imprime una tabla de diagnostico completa (promedio,
- * winrate, consistencia, tier base, ajuste crudo vs clampeado, resultado) --
- * eso es lo que hay que mirar para decidir que constante tocar en
- * performanceRank.ts. El assert final no hace fallar el test si un rango no
- * matchea exacto (el objetivo de esta corrida es AJUSTAR constantes, no
- * bloquear un build) -- en cambio junta los desvios y los imprime en un
- * resumen al final, para poder ver de un vistazo cuantos jugadores quedaron
- * bien calibrados.
+ * Por cada jugador imprime una tabla de diagnostico completa (Current
+ * Rank/ancla, promedio, winrate, consistencia, ajuste crudo vs clampeado,
+ * resultado) -- eso es lo que hay que mirar para decidir que constante
+ * tocar en performanceRank.ts. El assert final no hace fallar el test si
+ * un rango no matchea exacto (el objetivo de esta corrida es AJUSTAR
+ * constantes, no bloquear un build) -- en cambio junta los desvios y los
+ * imprime en un resumen al final, para poder ver de un vistazo cuantos
+ * jugadores quedaron bien calibrados.
  *
  * Uso: bun run calibrate:rank
  * (definido en package.json -> "bun test scripts/test-rank-calibration.test.ts")
@@ -128,17 +142,17 @@ function createStandaloneSupabaseClient(): ReturnType<typeof createClient<any>> 
 }
 
 /**
- * Intenta leer mmradar_engine_matches de Supabase para este Riot ID
- * (matcheado contra participants.lol_username, tal como se guarda el
- * campo en saveOwnParticipant/saveParticipant). Devuelve null si la fila
- * no existe, el campo vino null/vacio, no matchea el schema esperado, o
- * el cliente no esta configurado -- en todos esos casos el caller decide
- * caer al fetch en vivo.
+ * Intenta leer mmradar_engine_matches + lol_rank de Supabase para este
+ * Riot ID (matcheado contra participants.lol_username, tal como se guarda
+ * el campo en saveOwnParticipant/saveParticipant). Devuelve null si la
+ * fila no existe, mmradar_engine_matches vino null/vacio, no matchea el
+ * schema esperado, o el cliente no esta configurado -- en todos esos
+ * casos el caller decide caer al fetch en vivo.
  */
 async function fetchEngineMatchesFromDb(
   admin: ReturnType<typeof createClient<any>>,
   riotId: string
-): Promise<{ engineMatches: TitleEngineMatch[]; currentRank: string | null } | null> {
+): Promise<{ engineMatches: TitleEngineMatch[]; lolRank: string | null } | null> {
   const { data, error } = await admin
     .from("participants")
     .select("mmradar_engine_matches, lol_rank")
@@ -154,7 +168,7 @@ async function fetchEngineMatchesFromDb(
   try {
     const engineMatches = z.array(EngineMatchSchema).parse(data.mmradar_engine_matches);
     if (engineMatches.length === 0) return null;
-    return { engineMatches, currentRank: (data.lol_rank as string | null) ?? null };
+    return { engineMatches, lolRank: (data.lol_rank as string | null) ?? null };
   } catch (err) {
     console.warn(
       `  -> mmradar_engine_matches de ${riotId} en Supabase no matchea el schema esperado, se ignora: ${err instanceof Error ? err.message : String(err)}`
@@ -177,30 +191,32 @@ function fmtSigned(value: number): string {
 
 function printDebugRow(riotId: string, expectedRank: string, debug: PerformanceRankDebug | null) {
   console.log(`\n=== ${riotId} ===`);
-  console.log(`  esperado:        ${expectedRank}`);
+  console.log(`  esperado (Performance Rank real de mmradar.gg): ${expectedRank}`);
 
   if (!debug) {
     console.log("  -> sin partidas recientes, no se pudo calcular nada.");
     return;
   }
 
-  console.log(`  obtenido:        ${debug.result?.rank ?? "(null)"}`);
+  console.log(`  obtenido:            ${debug.result?.rank ?? "(null)"}`);
+  console.log(`  current rank (ancla): ${debug.currentRank ?? "(sin dato, se uso el centro de la escala como fallback)"} -> ${debug.anchorSteps} escalones`);
   console.log(`  partidas:        ${debug.gamesPlayed} (${debug.wins}W / ${debug.gamesPlayed - debug.wins}L, winrate ${fmtPct(debug.winRate)})`);
   console.log(`  promedio total:  ${debug.avgTotal.toFixed(1)}`);
-  console.log(`  tier base:       ${debug.baseTierLabel} (indice ${debug.baseTierIndex}, ${(debug.fractionalInTier * 100).toFixed(0)}% dentro del tier) -> ${debug.totalSteps} escalones`);
+  console.log(`  sesgo fijo:          ${fmtSigned(debug.fixedBiasSteps)} escalones`);
   console.log(`  ajuste winrate:      ${fmtSigned(debug.winRateAdjustment)} escalones`);
   console.log(`  ajuste consistencia: ${fmtSigned(debug.consistencyAdjustment)} escalones`);
+  console.log(`  ajuste carry:        ${fmtSigned(debug.carryAdjustment)} escalones`);
   console.log(`  ajuste crudo total:  ${fmtSigned(debug.rawAdjustment)} -> clampeado a ${fmtSigned(debug.clampedAdjustment)}`);
-  console.log(`  escalones finales:   ${debug.totalSteps} + ${Math.round(debug.clampedAdjustment)} = ${debug.finalSteps}`);
+  console.log(`  escalones finales:   ${debug.anchorSteps} + ${fmtSigned(debug.clampedAdjustment)} = ${debug.finalSteps}`);
 }
 
 describe("calibracion de Performance Rank contra datos reales", () => {
-  const results: { riotId: string; expected: string; obtained: string | null; match: boolean; source: string }[] = [];
+  const results: { riotId: string; expected: string; obtained: string | null; lolRank: string | null; match: boolean; source: string }[] = [];
   const supabase = createStandaloneSupabaseClient();
   if (!supabase) {
     console.warn(
       "\nPUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY no estan en .env -- se salta la lectura de Supabase" +
-        " y se cae directo al fetch en vivo contra mmradar.gg para los 6 fixtures."
+        " y se cae directo al fetch en vivo contra mmradar.gg para los fixtures."
     );
   }
   let previousLiveRequestFinishedAt = 0;
@@ -212,12 +228,12 @@ describe("calibracion de Performance Rank contra datos reales", () => {
         const fromDb = supabase ? await fetchEngineMatchesFromDb(supabase, fixture.riotId) : null;
 
         let engineMatches: TitleEngineMatch[];
-        let currentRank: string | null;
+        let lolRank: string | null;
         let source: "db" | "live";
 
         if (fromDb) {
           engineMatches = fromDb.engineMatches;
-          currentRank = fromDb.currentRank;
+          lolRank = fromDb.lolRank;
           source = "db";
         } else {
           console.log(`  (${fixture.riotId}: sin datos en Supabase todavia, consultando mmradar.gg en vivo...)`);
@@ -242,28 +258,35 @@ describe("calibracion de Performance Rank contra datos reales", () => {
 
           if (!profile.engineMatches || profile.engineMatches.length === 0) {
             console.warn(`  -> ${fixture.riotId}: sin partidas recientes en mmradar.gg, no se puede calibrar.`);
-            results.push({ riotId: fixture.riotId, expected: fixture.expectedRank, obtained: null, match: false, source: "live" });
+            results.push({
+              riotId: fixture.riotId,
+              expected: fixture.expectedRank,
+              obtained: null,
+              lolRank: profile.currentRank?.rank ?? null,
+              match: false,
+              source: "live"
+            });
             return;
           }
 
           engineMatches = profile.engineMatches;
-          currentRank = profile.currentRank?.rank ?? null;
+          lolRank = profile.currentRank?.rank ?? null;
           source = "live";
         }
 
-        const debug = computePerformanceRankDebug(engineMatches);
+        const debug = computePerformanceRankDebug(engineMatches, lolRank);
         printDebugRow(`${fixture.riotId} [${source === "db" ? "Supabase" : "mmradar.gg en vivo"}]`, fixture.expectedRank, debug);
 
         const obtained = debug?.result?.rank ?? null;
         const match = obtained !== null && normalizeRank(obtained) === normalizeRank(fixture.expectedRank);
-        results.push({ riotId: fixture.riotId, expected: fixture.expectedRank, obtained, match, source });
+        results.push({ riotId: fixture.riotId, expected: fixture.expectedRank, obtained, lolRank, match, source });
 
         // Referencia de duelRating tambien, por si hace falta calibrarlo en
         // paralelo (usa los mismos datos crudos) -- no forma parte de la
         // aserción del test, es solo informativo.
         const duelRating = computeDuelRatingFromMatches(engineMatches, {
           performanceRank: debug?.result?.rank ?? null,
-          currentRank
+          currentRank: lolRank
         });
         if (duelRating) {
           console.log(
@@ -295,16 +318,34 @@ describe("calibracion de Performance Rank contra datos reales", () => {
 
     const matched = results.filter((r) => r.match).length;
     const fromDb = results.filter((r) => r.source === "db").length;
+    const withoutLolRank = results.filter((r) => !r.lolRank).length;
     console.log(`\n\n===== RESUMEN DE CALIBRACION (${matched}/${results.length} coinciden, ${fromDb}/${results.length} desde Supabase) =====`);
     for (const r of results) {
       const mark = r.match ? "OK" : "!!";
       const tag = r.source === "db" ? "db" : "live";
-      console.log(`  [${mark}] [${tag}] ${r.riotId.padEnd(28)} esperado=${r.expected.padEnd(14)} obtenido=${r.obtained ?? "(sin datos)"}`);
+      console.log(
+        `  [${mark}] [${tag}] ${r.riotId.padEnd(28)} currentRank=${(r.lolRank ?? "(sin dato)").padEnd(14)} esperado=${r.expected.padEnd(14)} obtenido=${r.obtained ?? "(sin datos)"}`
+      );
+    }
+    if (withoutLolRank > 0) {
+      console.log(
+        `\n${withoutLolRank} jugador(es) no tenian Current Rank (lol_rank) guardado -- el algoritmo cayo al centro` +
+          " de la escala como ancla neutral para esos casos, lo cual va a distorsionar la calibracion. Conviene" +
+          " asegurarse de que esos perfiles tengan lol_rank antes de calibrar en serio."
+      );
     }
     if (matched < results.length) {
       console.log(
-        "\nAjusta TIER_THRESHOLDS / winRateAdjustment / consistencyAdjustment en " +
-          "packages/core/performanceRank.ts mirando el detalle de cada jugador arriba, y volve a correr este test."
+        "\nAjusta FIXED_BIAS_STEPS / los multiplicadores de winRateAdjustment / consistencyAdjustment / " +
+          "carryAdjustment en packages/core/performanceRank.ts mirando el detalle de cada jugador arriba (en " +
+          "especial currentRank vs esperado vs obtenido), y volve a correr este test."
+      );
+      console.log(
+        "\nOJO con carryAdjustment en jugadores marcados [db]: si su mmradar_engine_matches se guardo ANTES de " +
+          "que teamShare existiera (ver AGENT.md, sesion de agregado de teamShare), esas partidas no tienen el " +
+          "campo y carryAdjustment va a dar 0 para ellos aunque el codigo ya lo soporte -- hace falta un refresh " +
+          "nuevo (boton Actualizar en /mi-perfil o el panel) para que vuelvan a consultar mmradar.gg y guarden " +
+          "partidas con teamShare incluido."
       );
     }
     if (fromDb < results.length) {

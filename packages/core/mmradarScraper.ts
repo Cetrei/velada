@@ -116,33 +116,6 @@ function parseCurrentRank(html: string): MmradarCurrentRank | null {
   return { rank: `${tier}${division}`, leaguePoints };
 }
 
-function parsePerformanceRank(html: string): string | null {
-  const marker = "Performance</h4>";
-  const idx = html.indexOf(marker);
-  if (idx === -1) return null;
-
-  const window = html.slice(idx + marker.length, idx + marker.length + 300);
-  const text = stripTags(window);
-
-  const tierPattern = new RegExp(`\\b(${TIER_WORDS.join("|")})\\b\\s*(I{1,3}|IV)?`, "i");
-  const textMatch = text.match(tierPattern);
-  if (textMatch) {
-    const tier = textMatch[1].charAt(0).toUpperCase() + textMatch[1].slice(1).toLowerCase();
-    const division = textMatch[2] ? ` ${textMatch[2].toUpperCase()}` : "";
-    return `${tier}${division}`;
-  }
-
-  // Fallback
-  const beforeWindow = html.slice(Math.max(0, idx - 400), idx);
-  const altPattern = new RegExp(`(?:alt|data-tooltip)="(${TIER_WORDS.join("|")})[^"]*"`, "i");
-  const altMatch = beforeWindow.match(altPattern);
-  if (altMatch) {
-    return altMatch[1].charAt(0).toUpperCase() + altMatch[1].slice(1).toLowerCase();
-  }
-
-  return null;
-}
-
 function parsePerformanceScores(html: string): MmradarPerformanceScores | null {
   const keys: (keyof MmradarPerformanceScores)[] = [
     "laning",
@@ -259,6 +232,31 @@ async function fetchRawMatches(gameName: string, tagLine: string): Promise<RawMa
         })
       );
 
+      // teamShare: cuanto aporto el jugador dentro de SU EQUIPO (5
+      // jugadores, el incluido), no contra los 10 -- ver el comentario en
+      // TitleEngineMatch (titleEngine.ts) sobre por que esta senal es
+      // distinta de wasTopScoreInMatch. null si mmradar no trajo teamId/
+      // scores completos para los companeros de esa partida puntual (no
+      // se puede armar el equipo con confianza).
+      const teammates = match.participants.filter(
+        (p) => p.teamId === player.teamId && typeof p.teamId === "number"
+      );
+      const teamTotals = teammates.map((p) => {
+        if (!p.scores) return null;
+        return (
+          p.scores.laning +
+          p.scores.farming +
+          p.scores.objectives +
+          p.scores.combat +
+          p.scores.teamfight +
+          p.scores.vision
+        );
+      });
+      const teamShare =
+        teammates.length === 5 && teamTotals.every((t) => t !== null)
+          ? computedPlayerTotal / (teamTotals as number[]).reduce((sum, t) => sum + t, 0)
+          : null;
+
       engineMatches.push({
         championName: player.championName ?? "?",
         scores: {
@@ -271,7 +269,8 @@ async function fetchRawMatches(gameName: string, tagLine: string): Promise<RawMa
           total: computedPlayerTotal
         },
         won: typeof match.winningTeam === "number" && player.teamId === match.winningTeam,
-        wasTopScoreInMatch: computedPlayerTotal >= highestTotal
+        wasTopScoreInMatch: computedPlayerTotal >= highestTotal,
+        teamShare
       });
     }
 
@@ -442,11 +441,20 @@ export async function fetchMmradarProfile(lolUsername: string): Promise<MmradarP
   try {
     const [gameName, tagLine] = lolUsername.split("#");
     const currentRank = parseCurrentRank(html);
-    const htmlPerformanceRank = parsePerformanceRank(html);
     const raw = await fetchRawMatches(gameName, tagLine);
 
-    const ownPerformanceRank = raw ? computePerformanceRank(raw.engineMatches) : null;
-    const performanceRank = ownPerformanceRank?.rank ?? htmlPerformanceRank;
+    // mmradar.gg calcula su propio Performance Rank en el cliente (JS) a
+    // partir de una comparacion poblacional a la que no tenemos acceso --
+    // ver el comentario extenso en performanceRank.ts sobre por que se
+    // abandono el intento de scrapearlo del HTML (esa seccion no viene en
+    // el HTML servido por el server, se pinta despues via JS, asi que un
+    // fetch() plano nunca la ve; NO reintroducir un parser para esto, es
+    // una ruta muerta confirmada). En su lugar computePerformanceRank usa
+    // currentRank?.rank como ancla (ver performanceRank.ts) y desvia desde
+    // ahi segun avgTotal/winrate/consistencia -- calibrado a mano contra
+    // los Performance Ranks reales de scripts/rank-calibration-fixtures.json.
+    const ownPerformanceRank = raw ? computePerformanceRank(raw.engineMatches, currentRank?.rank ?? null) : null;
+    const performanceRank = ownPerformanceRank?.rank ?? null;
 
     const titles = raw
       ? evaluateTitles(
