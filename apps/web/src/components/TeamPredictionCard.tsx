@@ -89,6 +89,7 @@ export default function TeamPredictionCard({ teamMatch, teamA, teamB, initialTal
           members={teamA}
           pct={aPct}
           isPicked={votedFor === "A"}
+          hasVoted={votedFor !== null}
           justVoted={justVotedFor === "A"}
           isVoting={isVoting}
           onClick={() => vote("A")}
@@ -98,6 +99,7 @@ export default function TeamPredictionCard({ teamMatch, teamA, teamB, initialTal
           members={teamB}
           pct={bPct}
           isPicked={votedFor === "B"}
+          hasVoted={votedFor !== null}
           justVoted={justVotedFor === "B"}
           isVoting={isVoting}
           onClick={() => vote("B")}
@@ -126,6 +128,7 @@ function TeamVoteButton({
   members,
   pct,
   isPicked,
+  hasVoted,
   justVoted,
   isVoting,
   onClick,
@@ -135,25 +138,46 @@ function TeamVoteButton({
   members: Participant[];
   pct: number;
   isPicked: boolean;
+  hasVoted: boolean;
   justVoted: boolean;
   isVoting: boolean;
   onClick: () => void;
   align?: "left" | "right";
 }) {
+  // Mismo affordance sin hover que FighterVoteButton en PredictionCard.tsx
+  // (pedido del usuario: se aplica a "ambas variantes, 1v1 y equipo") --
+  // mientras nadie voto todavia, borde punteado animado + icono de tap
+  // flotante sobre la esquina del bloque, para que quede claro que el
+  // bloque completo es clickeable sin tener que pasar el mouse primero.
+  const showVotePrompt = !hasVoted && !isPicked;
+
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={isVoting}
       title={isPicked ? "Tocá el otro equipo para cambiar tu pronóstico" : "Tocá para pronosticar a este equipo"}
-      className={`team-vote-btn flex-1 text-left disabled:cursor-default rounded-lg p-3 -m-1 border-2 transition-all duration-200 ${
+      className={`team-vote-btn relative flex-1 text-left disabled:cursor-default rounded-lg p-3 -m-1 border-2 transition-all duration-200 ${
         align === "right" ? "text-right" : ""
       } ${
         isPicked
           ? "border-lol-gold bg-lol-gold/10"
-          : "border-transparent hover:border-lol-border hover:bg-white/5"
+          : showVotePrompt
+            ? "border-dashed border-lol-gold/40 hover:border-lol-gold/70 hover:bg-white/5 team-vote-prompt"
+            : "border-transparent hover:border-lol-border hover:bg-white/5"
       } ${justVoted ? "team-vote-pulse" : ""}`}
     >
+      {showVotePrompt && (
+        <span
+          className={`absolute -top-2 ${
+            align === "right" ? "-left-2" : "-right-2"
+          } w-5 h-5 rounded-full bg-lol-darkBg border border-lol-gold/70 flex items-center justify-center team-tap-hint`}
+        >
+          <svg viewBox="0 0 24 24" className="w-2.5 h-2.5" fill="none" stroke="#C8AA6E" strokeWidth="2.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 11.5V4.5a1.5 1.5 0 1 1 3 0v5M12 9.5V3a1.5 1.5 0 1 1 3 0v6.5M15 9.5V5.2a1.5 1.5 0 1 1 3 0V13c0 4-2 7-6 7s-5.5-2-7-4.5l-1.4-2.4a1.4 1.4 0 0 1 2.2-1.7L8 14" />
+          </svg>
+        </span>
+      )}
       <div className={`flex items-center gap-1.5 mb-1 ${align === "right" ? "flex-row-reverse" : ""}`}>
         <p className={`text-white font-bold text-sm ${isPicked ? "text-lol-gold" : ""}`}>{label}</p>
         {isPicked && (
@@ -194,6 +218,20 @@ function TeamVoteButton({
         }
         .check-pop {
           animation: checkPop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        @keyframes teamTapHintPulse {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.15); opacity: 0.75; }
+        }
+        .team-tap-hint {
+          animation: teamTapHintPulse 1.8s ease-in-out infinite;
+        }
+        @keyframes teamVotePromptBorder {
+          0%, 100% { border-color: rgba(200, 170, 110, 0.4); }
+          50% { border-color: rgba(200, 170, 110, 0.75); }
+        }
+        .team-vote-prompt {
+          animation: teamVotePromptBorder 1.8s ease-in-out infinite;
         }
         .team-vote-btn:not(:disabled) {
           cursor: pointer;

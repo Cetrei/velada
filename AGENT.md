@@ -2948,6 +2948,61 @@ era el de arriba, no whitelist).
   sesion, no se pudo correr `bun test` real (sin bash con acceso al
   proyecto, todo via filesystem MCP).
 
+## Sesion 2026-08-21 (9): affordance de voto sin hover (ambas variantes) + voto votable en paginas de detalle de combate
+- Contexto: igual que la sesion anterior, el usuario pego un reporte de
+  agente ("voy al proyecto a ver...") como continuacion directa -- se
+  verifico en disco antes de seguir (mismo criterio que sesion 8: nunca
+  asumir sin `read_file` real). Confirmado que la parte A (rediseno de
+  `PredictionCard.tsx`: like movido a badge sobre la foto, affordance sin
+  hover con borde punteado animado + icono de tap) SI estaba aplicada tal
+  cual se narro. Lo unico que faltaba, exactamente donde se corto el
+  mensaje, era: (1) el mismo affordance en `TeamPredictionCard.tsx`
+  (pedido explicito: "ambas variantes, 1v1 y equipo") y (2) reemplazar
+  `VoteTallyDisplay` (read-only) por las tarjetas votables en
+  `combates/[id].astro` y `combates/equipo/[id].astro`.
+- **`TeamPredictionCard.tsx`**: mismo patron que `FighterVoteButton`
+  (`PredictionCard.tsx`) trasplantado a `TeamVoteButton` -- nueva prop
+  `hasVoted` (pasada desde el padre como `votedFor !== null`), borde
+  punteado animado (`team-vote-prompt`) + icono de tap flotante
+  (`team-tap-hint`) en la esquina del bloque mientras `!hasVoted &&
+  !isPicked`. Mismos keyframes que la version 1v1, renombrados con
+  prefijo `team-` para no colisionar clases si ambos componentes llegan a
+  compartir pagina alguna vez.
+- **`combates/[id].astro`**: reemplaza `VoteTallyDisplay` por
+  `PredictionCard` (votable) cuando `match.predictionsOpen && !match.winnerId`
+  -- mismo criterio que ya usaba `peleadores/[id].astro` para decidir si
+  mostrar el bloque votable. Con el combate cerrado o ya resuelto, se
+  mantiene `VoteTallyDisplay` de siempre (read-only tiene sentido ahi, no
+  se puede seguir votando un combate terminado). Los `FighterLikeButton`
+  sueltos al pie de la pagina (junto a los links "Ver ficha") se dejaron
+  intactos -- no es duplicado real: son un contexto distinto (like +
+  navegacion a la ficha) del corazon `xs` compacto que ya trae
+  `PredictionCard` sobre cada foto, mismo patron que ya convive en
+  `peleadores/[id].astro`.
+- **`combates/equipo/[id].astro`**: mismo tratamiento con
+  `TeamPredictionCard` y `teamMatch.predictionsOpen && !teamMatch.winnerTeam`.
+- Herramientas: exclusivamente `filesystem:edit_file`/`read_file` sobre el
+  proyecto real. Sin deslices de sandbox en esta sesion.
+- Archivos tocados y confirmados con `read_file` posterior:
+  `apps/web/src/components/TeamPredictionCard.tsx`,
+  `apps/web/src/pages/combates/[id].astro`,
+  `apps/web/src/pages/combates/equipo/[id].astro`. (`PredictionCard.tsx` y
+  `FighterLikeButton.tsx` ya estaban aplicados de la sesion del agente
+  anterior, solo se leyeron para confirmar, no se modificaron.)
+- Pendiente para el usuario (sin bash real sobre el proyecto en esta
+  sesion, todo via filesystem MCP): `bun run dev`, entrar a
+  `/combates/[id]` con un combate `predictionsOpen: true` y sin ganador
+  para confirmar que aparece la tarjeta votable (con el mismo affordance
+  sin hover) en vez del resumen read-only, y que un combate ya resuelto
+  sigue mostrando el resumen de siempre. Repetir en
+  `/combates/equipo/[id]` con un combate por equipos, confirmando ademas
+  que el borde punteado + icono de tap se ve bien en el bloque de equipo
+  (nombres de varios miembros listados debajo, mas alto que el boton
+  1v1). `bun run build`/typecheck del editor para confirmar que no quedo
+  ningun tipo roto (prop nueva `hasVoted` en `TeamVoteButton`, unico
+  caller ya la pasa; imports nuevos de `PredictionCard`/`TeamPredictionCard`
+  en las dos paginas .astro).
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.

@@ -2,6 +2,7 @@
 import Layout from "../../layouts/Layout.astro";
 import MatchComparisonCard from "../../components/MatchComparisonCard";
 import VoteTallyDisplay from "../../components/VoteTallyDisplay.astro";
+import PredictionCard from "../../components/PredictionCard";
 import FighterHalf from "../../components/FighterHalf.astro";
 import { loadParticipants } from "../../lib/loadParticipants";
 import { fetchMatches, fetchPredictionTallies } from "../../lib/matches";
@@ -37,6 +38,14 @@ const total = tally?.totalVotes ?? 0;
 const p1Pct = total > 0 ? Math.round((tally!.player1Votes / total) * 1000) / 10 : 50;
 const p2Pct = total > 0 ? Math.round((100 - p1Pct) * 10) / 10 : 50;
 const likeCounts = await fetchLikeCounts();
+
+// Mismo criterio que peleadores/[id].astro: el bloque se muestra votable
+// (PredictionCard) solo mientras el combate sigue abierto a pronostico y
+// sin ganador todavia. Una vez cerrado o con resultado ya cargado, el
+// pedido de "agregar el voto" ya no aplica -- ahi se mantiene el resumen
+// read-only de siempre (VoteTallyDisplay), que es lo correcto para un
+// combate ya definido.
+const showVotablePrediction = match.predictionsOpen && !match.winnerId;
 
 const fallbackPhoto = (p: typeof player1) =>
   `https://placehold.co/100x100/0A1428/C8AA6E?text=${encodeURIComponent(p.nickname[0] ?? "?")}`;
@@ -107,16 +116,29 @@ const pageLabel = `${player1.name} vs ${player2.name}`;
         />
       </div>
 
-      <VoteTallyDisplay
-        title={copy.votesTitle}
-        leftLabel={player1.name}
-        rightLabel={player2.name}
-        leftPct={p1Pct}
-        rightPct={p2Pct}
-        totalVotes={total}
-        leftPhoto={player1.photo ?? fallbackPhoto(player1)}
-        rightPhoto={player2.photo ?? fallbackPhoto(player2)}
-      />
+      {
+        showVotablePrediction ? (
+          <PredictionCard
+            client:load
+            match={match}
+            player1={player1}
+            player2={player2}
+            initialTally={tally ?? { matchId: match.id ?? "", player1Votes: 0, player2Votes: 0, totalVotes: 0 }}
+            initialLikes={likeCounts}
+          />
+        ) : (
+          <VoteTallyDisplay
+            title={copy.votesTitle}
+            leftLabel={player1.name}
+            rightLabel={player2.name}
+            leftPct={p1Pct}
+            rightPct={p2Pct}
+            totalVotes={total}
+            leftPhoto={player1.photo ?? fallbackPhoto(player1)}
+            rightPhoto={player2.photo ?? fallbackPhoto(player2)}
+          />
+        )
+      }
 
       <div class="grid grid-cols-2 gap-4 mt-8">
         <div class="flex flex-col items-center gap-2">

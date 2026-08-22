@@ -11,8 +11,13 @@ export const NAV = {
     { href: "/", label: "Inicio" },
     { href: "/peleadores", label: "Peleadores" },
     { href: "/combates", label: "Combates" },
-    { href: "/pronosticos", label: "Pronósticos" },
-    { href: "/sorteo", label: "Sorteo" }
+    { href: "/pronosticos", label: "Pronósticos" }
+    // { href: "/sorteo", label: "Sorteo" } -- pedido del usuario
+    // 2026-08-21: ocultar la tab de sorteo del nav (mobile y desktop
+    // comparten este mismo array via Layout.astro, asi que comentarla aca
+    // alcanza para los dos). La pagina /sorteo en si NO se toco -- sigue
+    // existiendo y accesible por URL directa, solo se quito el link de
+    // navegacion.
   ],
   liveCta: "Ver en Vivo",
   registerCta: "Inscribirme",

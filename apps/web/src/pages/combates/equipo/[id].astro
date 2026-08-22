@@ -2,6 +2,7 @@
 import Layout from "../../../layouts/Layout.astro";
 import TeamRosterDetailed from "../../../components/TeamRosterDetailed.astro";
 import VoteTallyDisplay from "../../../components/VoteTallyDisplay.astro";
+import TeamPredictionCard from "../../../components/TeamPredictionCard";
 import { loadParticipants } from "../../../lib/loadParticipants";
 import { fetchTeamMatches, fetchTeamPredictionTallies } from "../../../lib/teamMatches";
 import { PAGES, computeTeamAverages } from "@velada/core";
@@ -30,6 +31,11 @@ const tally = teamMatch.id ? tallies.get(teamMatch.id) : undefined;
 const total = tally?.totalVotes ?? 0;
 const aPct = total > 0 ? Math.round((tally!.teamAVotes / total) * 1000) / 10 : 50;
 const bPct = total > 0 ? Math.round((100 - aPct) * 10) / 10 : 50;
+
+// Mismo criterio que combates/[id].astro: votable mientras el combate
+// por equipos siga abierto a pronostico y sin ganador definido, read-only
+// (VoteTallyDisplay) una vez cerrado o ya resuelto.
+const showVotablePrediction = teamMatch.predictionsOpen && !teamMatch.winnerTeam;
 ---
 
 <Layout title={teamMatch.name ? `${teamMatch.name} - ${copy.tabTitle}` : copy.tabTitle}>
@@ -87,14 +93,26 @@ const bPct = total > 0 ? Math.round((100 - aPct) * 10) / 10 : 50;
         </div>
       </div>
 
-      <VoteTallyDisplay
-        title={copy.votesTitle}
-        leftLabel={matchesCopy.teamALabel}
-        rightLabel={matchesCopy.teamBLabel}
-        leftPct={aPct}
-        rightPct={bPct}
-        totalVotes={total}
-      />
+      {
+        showVotablePrediction ? (
+          <TeamPredictionCard
+            client:load
+            teamMatch={teamMatch}
+            teamA={teamA}
+            teamB={teamB}
+            initialTally={tally ?? { teamMatchId: teamMatch.id ?? "", teamAVotes: 0, teamBVotes: 0, totalVotes: 0 }}
+          />
+        ) : (
+          <VoteTallyDisplay
+            title={copy.votesTitle}
+            leftLabel={matchesCopy.teamALabel}
+            rightLabel={matchesCopy.teamBLabel}
+            leftPct={aPct}
+            rightPct={bPct}
+            totalVotes={total}
+          />
+        )
+      }
     </div>
   </section>
 </Layout>

@@ -34,13 +34,13 @@ export default function PredictionCard({ match, player1, player2, initialTally, 
   const total = tally.totalVotes;
   const p1Pct = total > 0 ? Math.round((tally.player1Votes / total) * 1000) / 10 : 50;
   const p2Pct = total > 0 ? Math.round((100 - p1Pct) * 10) / 10 : 50;
+  const hasVoted = votedFor !== null;
 
   async function vote(winnerId: string) {
-    // A diferencia de antes, votedFor ya NO bloquea un segundo click: el
-    // usuario puede cambiar de pronostico las veces que quiera mientras el
-    // combate siga abierto a votacion. Solo se ignora un click sobre la
-    // opcion ya elegida (no hay nada que cambiar) o mientras hay una
-    // escritura en curso.
+    // votedFor ya NO bloquea un segundo click: el usuario puede cambiar de
+    // pronostico las veces que quiera mientras el combate siga abierto a
+    // votacion. Solo se ignora un click sobre la opcion ya elegida (no hay
+    // nada que cambiar) o mientras hay una escritura en curso.
     if (!match.id || isVoting || winnerId === votedFor) return;
 
     const supabase = getSupabaseClient();
@@ -94,11 +94,12 @@ export default function PredictionCard({ match, player1, player2, initialTally, 
         <span className="text-xs text-slate-500">{copy.votesLabel(total)}</span>
       </div>
 
-      <div className="flex items-center justify-between gap-4 mb-4">
+      <div className="flex items-start justify-between gap-3 mb-4">
         <FighterVoteButton
           participant={player1}
           pct={p1Pct}
           isPicked={votedFor === player1.id}
+          hasVoted={hasVoted}
           justVoted={justVotedFor === player1.id}
           isVoting={isVoting}
           onClick={() => vote(player1.id)}
@@ -108,6 +109,7 @@ export default function PredictionCard({ match, player1, player2, initialTally, 
           participant={player2}
           pct={p2Pct}
           isPicked={votedFor === player2.id}
+          hasVoted={hasVoted}
           justVoted={justVotedFor === player2.id}
           isVoting={isVoting}
           onClick={() => vote(player2.id)}
@@ -136,6 +138,7 @@ function FighterVoteButton({
   participant,
   pct,
   isPicked,
+  hasVoted,
   justVoted,
   isVoting,
   onClick,
@@ -145,61 +148,83 @@ function FighterVoteButton({
   participant: Participant;
   pct: number;
   isPicked: boolean;
+  hasVoted: boolean;
   justVoted: boolean;
   isVoting: boolean;
   onClick: () => void;
   likeCount: number;
   align?: "left" | "right";
 }) {
+  // Affordance SIN depender de hover ni de texto: mientras nadie voto
+  // todavia (hasVoted === false), TODOS los botones muestran un borde
+  // punteado + un icono de "tocar" flotando sobre la foto, para que sea
+  // obvio que ahi se puede votar sin tener que pasar el mouse primero
+  // (pedido del usuario: "hay que adivinar que poniendo el mouse ahi se
+  // puede votar"). Una vez que ya se voto por alguien, ese indicio
+  // desaparece de ambos botones y el elegido pasa a mostrar el check
+  // dorado; el no elegido vuelve a un borde neutro con hover normal
+  // (ya quedo claro que esto es votable, no hace falta seguir insistiendo).
+  const showVotePrompt = !hasVoted && !isPicked;
+
   return (
-    <div className={`flex-1 flex items-center gap-2 ${align === "right" ? "flex-row-reverse" : ""}`}>
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={isVoting}
-        title={isPicked ? "Tocá al rival para cambiar tu pronóstico" : "Tocá para pronosticar a este peleador"}
-        className={`vote-btn flex-1 flex items-center gap-3 text-left disabled:cursor-default rounded-lg p-2 -m-2 border-2 transition-all duration-200 ${
-          align === "right" ? "flex-row-reverse text-right" : ""
-        } ${
-          isPicked
-            ? "border-lol-gold bg-lol-gold/10"
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={isVoting}
+      title={isPicked ? "Tocá al rival para cambiar tu pronóstico" : "Tocá para pronosticar a este peleador"}
+      className={`vote-btn flex flex-col items-center gap-2 text-center disabled:cursor-default rounded-lg p-2 border-2 transition-all duration-200 flex-1 min-w-0 ${
+        isPicked
+          ? "border-lol-gold bg-lol-gold/10"
+          : showVotePrompt
+            ? "border-dashed border-lol-gold/40 hover:border-lol-gold/70 hover:bg-white/5 vote-prompt"
             : "border-transparent hover:border-lol-border hover:bg-white/5"
-        } ${justVoted ? "vote-pulse" : ""}`}
-      >
-        <span className="relative shrink-0">
-          <img
-            src={participant.photo ?? fallbackPhoto(participant)}
-            alt={participant.name}
-            className={`w-12 h-12 rounded-full object-cover border-2 transition-colors duration-200 ${
-              isPicked ? "border-lol-gold" : "border-lol-border"
-            }`}
-          />
-          {isPicked && (
-            <span
-              className={`absolute -bottom-1 ${
-                align === "right" ? "-left-1" : "-right-1"
-              } w-5 h-5 rounded-full bg-lol-gold flex items-center justify-center check-pop`}
-            >
-              <svg viewBox="0 0 24 24" className="w-3 h-3" fill="none" stroke="#0A1428" strokeWidth="3">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M20 6L9 17l-5-5" />
-              </svg>
-            </span>
-          )}
-        </span>
-        <div>
-          <p className="text-white font-bold text-sm sm:text-base">{participant.name}</p>
-          <p
-            className={`font-display font-bold text-xl sm:text-2xl ${
-              align === "right" ? "text-lol-blue" : "text-lol-gold"
-            }`}
+      } ${justVoted ? "vote-pulse" : ""}`}
+    >
+      <span className="relative shrink-0">
+        <img
+          src={participant.photo ?? fallbackPhoto(participant)}
+          alt={participant.name}
+          className={`w-14 h-14 rounded-full object-cover border-2 transition-colors duration-200 ${
+            isPicked ? "border-lol-gold" : "border-lol-border"
+          }`}
+        />
+        {isPicked && (
+          <span
+            className={`absolute -bottom-1 ${
+              align === "right" ? "-left-1" : "-right-1"
+            } w-5 h-5 rounded-full bg-lol-gold flex items-center justify-center check-pop`}
           >
-            {pct}%
-          </p>
-        </div>
-      </button>
-      {participant.id && (
-        <FighterLikeButton participantId={participant.id} initialLikes={likeCount} size="sm" />
-      )}
+            <svg viewBox="0 0 24 24" className="w-3 h-3" fill="none" stroke="#0A1428" strokeWidth="3">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M20 6L9 17l-5-5" />
+            </svg>
+          </span>
+        )}
+        {showVotePrompt && (
+          <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-lol-darkBg border border-lol-gold/70 flex items-center justify-center tap-hint">
+            <svg viewBox="0 0 24 24" className="w-2.5 h-2.5" fill="none" stroke="#C8AA6E" strokeWidth="2.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 11.5V4.5a1.5 1.5 0 1 1 3 0v5M12 9.5V3a1.5 1.5 0 1 1 3 0v6.5M15 9.5V5.2a1.5 1.5 0 1 1 3 0V13c0 4-2 7-6 7s-5.5-2-7-4.5l-1.4-2.4a1.4 1.4 0 0 1 2.2-1.7L8 14" />
+            </svg>
+          </span>
+        )}
+        {/* Like sobre la esquina de la foto, no al lado del nombre: con
+            nombres largos el boton al lado del texto se superponia
+            (bug reportado). Absoluto y compacto, no empuja el layout. */}
+        {participant.id && (
+          <span className={`absolute -bottom-1.5 ${align === "right" ? "-right-1.5" : "-left-1.5"}`}>
+            <FighterLikeButton participantId={participant.id} initialLikes={likeCount} size="xs" />
+          </span>
+        )}
+      </span>
+      <div className="min-w-0 w-full">
+        <p className="text-white font-bold text-xs sm:text-sm truncate px-1">{participant.name}</p>
+        <p
+          className={`font-display font-bold text-lg sm:text-xl ${
+            align === "right" ? "text-lol-blue" : "text-lol-gold"
+          }`}
+        >
+          {pct}%
+        </p>
+      </div>
       <style>{`
         @keyframes votePulse {
           0% { transform: scale(1); }
@@ -217,10 +242,24 @@ function FighterVoteButton({
         .check-pop {
           animation: checkPop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
+        @keyframes tapHintPulse {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.15); opacity: 0.75; }
+        }
+        .tap-hint {
+          animation: tapHintPulse 1.8s ease-in-out infinite;
+        }
+        @keyframes votePromptBorder {
+          0%, 100% { border-color: rgba(200, 170, 110, 0.4); }
+          50% { border-color: rgba(200, 170, 110, 0.75); }
+        }
+        .vote-prompt {
+          animation: votePromptBorder 1.8s ease-in-out infinite;
+        }
         .vote-btn:not(:disabled) {
           cursor: pointer;
         }
       `}</style>
-    </div>
+    </button>
   );
 }

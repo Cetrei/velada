@@ -5,8 +5,8 @@ import { getVoterId, isLocallyLiked, setLocalLike } from "../lib/voterId";
 interface FighterLikeButtonProps {
   participantId: string;
   initialLikes: number;
-  /** "sm" para usar dentro de tarjetas de voto ya densas, "lg" para el tab de likes. */
-  size?: "sm" | "lg";
+  /** "xs" como badge compacto sobre una foto (sin contador debajo, ver nota abajo), "sm" para usar suelto en tarjetas, "lg" para el tab de likes. */
+  size?: "xs" | "sm" | "lg";
   /** Opcional: se llama con el nuevo contador tras cada toggle exitoso, para que un padre (ej. el ranking de FighterLikesSection) pueda reordenarse. */
   onCountChange?: (count: number) => void;
 }
@@ -73,7 +73,13 @@ export default function FighterLikeButton({
     window.setTimeout(() => setJustChanged(false), 400);
   }
 
-  const dims = size === "lg" ? "w-11 h-11" : "w-8 h-8";
+  // "xs" es un badge redondo compacto (icono solo, sin numero de
+  // contador debajo -- pensado para superponerse a la esquina de una
+  // foto ya chica, como en PredictionCard, donde apilar icono+numero no
+  // entra). "sm"/"lg" mantienen el layout icono-arriba/numero-abajo.
+  const isCompact = size === "xs";
+  const dims = size === "lg" ? "w-11 h-11" : size === "sm" ? "w-8 h-8" : "w-6 h-6";
+  const iconDims = size === "lg" ? "w-5 h-5" : size === "sm" ? "w-4 h-4" : "w-3 h-3";
   const textSize = size === "lg" ? "text-sm" : "text-xs";
 
   return (
@@ -82,21 +88,24 @@ export default function FighterLikeButton({
       onClick={toggle}
       disabled={isBusy}
       aria-pressed={liked}
-      aria-label={liked ? "Quitar like" : "Dar like"}
+      aria-label={liked ? `Quitar like (${count})` : `Dar like (${count})`}
+      title={liked ? "Quitar like" : "Dar like"}
       className={`fighter-like-btn flex flex-col items-center gap-0.5 group ${isBusy ? "opacity-70" : ""}`}
     >
       <span
         className={`${dims} rounded-full flex items-center justify-center border transition-colors duration-200 ${
           liked
-            ? "border-lol-gold bg-lol-gold/10"
-            : "border-lol-border bg-lol-darkBg group-hover:border-lol-gold/60"
+            ? "border-lol-gold bg-lol-gold/90"
+            : isCompact
+              ? "border-lol-gold/70 bg-lol-darkBg group-hover:border-lol-gold"
+              : "border-lol-border bg-lol-darkBg group-hover:border-lol-gold/60"
         } ${justChanged ? "like-pop" : ""}`}
       >
         <svg
           viewBox="0 0 24 24"
-          className={size === "lg" ? "w-5 h-5" : "w-4 h-4"}
-          fill={liked ? "#C8AA6E" : "none"}
-          stroke={liked ? "#C8AA6E" : "#94a3b8"}
+          className={iconDims}
+          fill={liked ? (isCompact ? "#0A1428" : "#C8AA6E") : "none"}
+          stroke={liked ? (isCompact ? "#0A1428" : "#C8AA6E") : isCompact ? "#C8AA6E" : "#94a3b8"}
           strokeWidth="2"
         >
           <path
@@ -106,7 +115,7 @@ export default function FighterLikeButton({
           />
         </svg>
       </span>
-      <span className={`${textSize} font-bold text-slate-400 tabular-nums`}>{count}</span>
+      {!isCompact && <span className={`${textSize} font-bold text-slate-400 tabular-nums`}>{count}</span>}
       <style>{`
         @keyframes likePop {
           0% { transform: scale(1); }
