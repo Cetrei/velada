@@ -167,17 +167,6 @@ function TeamVoteButton({
             : "border-transparent hover:border-lol-border hover:bg-white/5"
       } ${justVoted ? "team-vote-pulse" : ""}`}
     >
-      {showVotePrompt && (
-        <span
-          className={`absolute -top-2 ${
-            align === "right" ? "-left-2" : "-right-2"
-          } w-5 h-5 rounded-full bg-lol-darkBg border border-lol-gold/70 flex items-center justify-center team-tap-hint`}
-        >
-          <svg viewBox="0 0 24 24" className="w-2.5 h-2.5" fill="none" stroke="#C8AA6E" strokeWidth="2.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 11.5V4.5a1.5 1.5 0 1 1 3 0v5M12 9.5V3a1.5 1.5 0 1 1 3 0v6.5M15 9.5V5.2a1.5 1.5 0 1 1 3 0V13c0 4-2 7-6 7s-5.5-2-7-4.5l-1.4-2.4a1.4 1.4 0 0 1 2.2-1.7L8 14" />
-          </svg>
-        </span>
-      )}
       <div className={`flex items-center gap-1.5 mb-1 ${align === "right" ? "flex-row-reverse" : ""}`}>
         <p className={`text-white font-bold text-sm ${isPicked ? "text-lol-gold" : ""}`}>{label}</p>
         {isPicked && (
@@ -218,13 +207,6 @@ function TeamVoteButton({
         }
         .check-pop {
           animation: checkPop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
-        }
-        @keyframes teamTapHintPulse {
-          0%, 100% { transform: scale(1); opacity: 1; }
-          50% { transform: scale(1.15); opacity: 0.75; }
-        }
-        .team-tap-hint {
-          animation: teamTapHintPulse 1.8s ease-in-out infinite;
         }
         @keyframes teamVotePromptBorder {
           0%, 100% { border-color: rgba(200, 170, 110, 0.4); }
