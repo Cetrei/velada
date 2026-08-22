@@ -60,6 +60,14 @@ export default function AdminControl({
   // arranca con lo que ya existia en la base y crece localmente cada vez
   // que se emite un sorteo nuevo desde este panel (ver triggerRandomMatch).
   const [matches, setMatches] = useState<Match[]>(initialMatches);
+  // Exclusion temporal del sorteo 1v1 -- pedido del usuario: poder sacar a
+  // alguien del CALCULO de la ruleta (ej. ya peleo, esta ausente) sin
+  // tocar su ficha ni el flag permanente excludeFromMatches (ese excluye
+  // de TODO, no solo del sorteo). Mismo patron/UI que excludedIds en
+  // TeamMatchManager.tsx, pero en memoria nomas (no se persiste entre
+  // recargas de pagina a proposito -- es una exclusion de "esta ronda",
+  // no una propiedad del participante).
+  const [excludedRouletteIds, setExcludedRouletteIds] = useState<Set<string>>(new Set());
   const [startTime, setStartTime] = useState(initialStartTime);
   const [startTimeInput, setStartTimeInput] = useState(toDatetimeLocalValue(initialStartTime));
   const [status, setStatus] = useState<StatusMessage>(null);
@@ -159,8 +167,9 @@ export default function AdminControl({
       setStatus({ type: "error", text: "Supabase no está configurado. No se puede emitir en vivo." });
       return;
     }
-    if (participants.length < 2) {
-      setStatus({ type: "error", text: "Se necesitan al menos 2 participantes." });
+    const availableParticipants = participants.filter((p) => !excludedRouletteIds.has(p.id));
+    if (availableParticipants.length < 2) {
+      setStatus({ type: "error", text: ADMIN_CONTROL.rouletteNotEnoughAvailable });
       return;
     }
     // Guard de re-entrada sincrono: si ya hay un giro en vuelo (entre el
@@ -174,9 +183,12 @@ export default function AdminControl({
     // pickNextPair recalculado con el estado `matches` MAS FRESCO disponible
     // (no un snapshot capturado antes) -- prioriza a quien todavia no salio
     // en ningun sorteo, y solo repite forzosamente cuando queda 1 sobrante
-    // sin pareja. Ver packages/core/roulette.ts para el detalle de las reglas.
+    // sin pareja. El pool ya viene filtrado de excludedRouletteIds -- un
+    // participante excluido no puede salir sorteado, pero SI sigue contando
+    // para la cobertura de matches previos en los que ya haya salido antes
+    // de ser excluido (pickNextPair solo mira el pool que se le pasa).
     const pair = pickNextPair(
-      participants.map((p) => p.id),
+      availableParticipants.map((p) => p.id),
       matches
     );
     if (!pair) {
@@ -249,6 +261,23 @@ export default function AdminControl({
       setIsBusy(false);
       isEmittingRef.current = false;
     }
+  }
+
+  function toggleRouletteExclusion(id: string) {
+    setExcludedRouletteIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function markAllRouletteExcluded() {
+    setExcludedRouletteIds(new Set(participants.map((p) => p.id)));
+  }
+
+  function unmarkAllRouletteExcluded() {
+    setExcludedRouletteIds(new Set());
   }
 
   return (
@@ -332,6 +361,52 @@ export default function AdminControl({
           />
         </div>
 
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm uppercase text-slate-400 font-bold">
+              {ADMIN_CONTROL.rouletteExcludeTitle}
+            </span>
+            <div className="flex gap-3 text-xs">
+              <button
+                type="button"
+                onClick={markAllRouletteExcluded}
+                className="text-lol-blue hover:underline font-bold uppercase"
+              >
+                {ADMIN_CONTROL.rouletteMarkAllCta}
+              </button>
+              <button
+                type="button"
+                onClick={unmarkAllRouletteExcluded}
+                className="text-lol-blue hover:underline font-bold uppercase"
+              >
+                {ADMIN_CONTROL.rouletteUnmarkAllCta}
+              </button>
+            </div>
+          </div>
+          <p className="text-slate-500 text-xs mb-3">{ADMIN_CONTROL.rouletteExcludeHint}</p>
+          <p className="text-slate-500 text-xs mb-3">
+            {ADMIN_CONTROL.rouletteExcludedHint(excludedRouletteIds.size, participants.length)}
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-64 overflow-y-auto">
+            {participants.map((p) => (
+              <label
+                key={p.id}
+                className="flex items-center gap-2 bg-lol-darkBg border border-lol-border/50 rounded px-3 py-2 text-sm cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={excludedRouletteIds.has(p.id)}
+                  onChange={() => toggleRouletteExclusion(p.id)}
+                  className="accent-lol-gold"
+                />
+                <span className={`truncate ${excludedRouletteIds.has(p.id) ? "text-slate-500 line-through" : "text-white"}`}>
+                  {p.name}
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+
         <button
           disabled={isBusy || !flags.rouletteUnlocked}
           onClick={triggerRandomMatch}
@@ -339,7 +414,7 @@ export default function AdminControl({
         >
           {ADMIN_CONTROL.emitRandomMatch}
         </button>
-        <RouletteCoverageHint participants={participants} matches={matches} />
+        <RouletteCoverageHint participants={participants} matches={matches} excludedIds={excludedRouletteIds} />
       </div>
 
       <div className="bg-lol-cardBg border border-lol-border p-6 rounded-xl">
@@ -409,11 +484,25 @@ function EventFlagToggle({
  * cobertura sin tener que ir a /sorteo. Mismo criterio de conteo que
  * countRandomAppearances/pickNextPair (packages/core/roulette.ts): solo
  * cuenta apariciones en combates isRandom, no los cargados a mano.
+ *
+ * excludedIds (exclusion temporal del sorteo, ver AdminControl arriba) se
+ * resta del total antes de calcular cobertura -- alguien excluido no
+ * deberia contar como "pendiente" ya que no puede salir sorteado mientras
+ * este marcado, sin importar si ya tuvo su 1v1 o no.
  */
-function RouletteCoverageHint({ participants, matches }: { participants: Participant[]; matches: Match[] }) {
+function RouletteCoverageHint({
+  participants,
+  matches,
+  excludedIds
+}: {
+  participants: Participant[];
+  matches: Match[];
+  excludedIds: Set<string>;
+}) {
   const appearances = countRandomAppearances(matches);
-  const coveredCount = participants.filter((p) => appearances.has(p.id)).length;
-  const totalCount = participants.length;
+  const availableParticipants = participants.filter((p) => !excludedIds.has(p.id));
+  const coveredCount = availableParticipants.filter((p) => appearances.has(p.id)).length;
+  const totalCount = availableParticipants.length;
   if (totalCount === 0) return null;
 
   const allCovered = coveredCount >= totalCount;
@@ -425,6 +514,7 @@ function RouletteCoverageHint({ participants, matches }: { participants: Partici
         {coveredCount}/{totalCount}
       </span>{" "}
       {allCovered ? "-- el proximo giro arranca una ronda nueva" : "peleadores ya tuvieron su 1v1"}
+      {excludedIds.size > 0 && <span className="block mt-1">({excludedIds.size} excluidos del calculo)</span>}
     </p>
   );
 }

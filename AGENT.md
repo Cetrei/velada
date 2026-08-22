@@ -2718,6 +2718,71 @@ era el de arriba, no whitelist).
   confirmar que no quedo ningun tipo roto (prop `side` nueva es requerida,
   pero el unico caller ya la pasa).
 
+## Sesion 2026-08-21 (7): exclusion de participantes del calculo de la ruleta 1v1
+- Pedido del usuario: "agrega a la ruleta de 1 vs 1 que se pueda excluir
+  usuarios del calculo". Se distingue explicitamente de
+  `Participant.excludeFromMatches` (schema.ts), que ya existia pero es un
+  flag PERMANENTE de la ficha (excluye de TODO: roster, sorteo, combates
+  por equipo -- ver `AdminTabs.tsx`/`sorteo.astro` filtrando por el).
+  Lo nuevo es una exclusion TEMPORAL, solo del calculo del sorteo 1v1,
+  que el host activa/desactiva desde el panel sin tocar la ficha de nadie
+  -- mismo espiritu que `excludedIds` en `TeamMatchManager.tsx` ("Excluir
+  de la proxima generacion"), que ya resolvia el mismo problema para
+  equipos pero nunca se replico al 1v1.
+- **`AdminControl.tsx`** (panel `/gestion-roster-x9f2`, pestana Evento --
+  unico lugar donde se dispara `triggerRandomMatch`/`pickNextPair` con
+  control humano en tiempo real, `RouletteWheel.tsx` en `/sorteo` solo
+  reacciona al broadcast o corre standalone sin admin): nuevo estado
+  `excludedRouletteIds: Set<string>` (en memoria, deliberadamente NO
+  persistido -- es una exclusion de "esta ronda del sorteo", no una
+  propiedad del participante, se resetea si se recarga la pagina).
+  `triggerRandomMatch` ahora arma `availableParticipants` filtrando ese
+  set ANTES de llamar a `pickNextPair` -- alguien excluido no puede salir
+  como candidato del proximo par, pero sigue contando su historial si ya
+  habia salido antes en `matches` (pickNextPair solo mira el pool que se
+  le pasa, no reescribe cobertura pasada). Nuevo bloque de UI (mismo
+  patron visual que `TeamMatchManager.tsx`: checkboxes en grid, "Excluir
+  todos"/"Incluir todos", hint de cuantos excluidos/disponibles) debajo
+  de los toggles de fase de evento y antes del boton "Emitir sorteo".
+  `RouletteCoverageHint` ahora recibe `excludedIds` y calcula cobertura
+  solo sobre el pool DISPONIBLE (un excluido no cuenta como "pendiente"
+  mientras este marcado) mas una linea aparte con cuantos estan excluidos.
+- **`packages/core/content.ts`** (`ADMIN_CONTROL`): copy nuevo
+  (`rouletteExcludeTitle`, `rouletteExcludeHint`, `rouletteMarkAllCta`,
+  `rouletteUnmarkAllCta`, `rouletteExcludedHint`,
+  `rouletteNotEnoughAvailable`) siguiendo el mismo tono/estructura que ya
+  usa `TEAM_MATCH_MANAGER` para su propio bloque de exclusion.
+- **`packages/core/roulette.ts` -- SIN CAMBIOS**: `pickNextPair` ya
+  aceptaba `allParticipantIds` como parametro, asi que la exclusion se
+  resuelve enteramente en el caller (filtrar antes de llamarla) sin tocar
+  la logica pura del sorteo. Deliberado: mantiene `pickNextPair` sin saber
+  nada de "exclusion", solo de "pool de candidatos", igual que ya no sabe
+  nada de `excludeFromMatches` (eso tambien lo filtra el caller,
+  `sorteo.astro`).
+- **`RouletteWheel.tsx`/`/sorteo` -- deliberadamente SIN cambios**: esa
+  pagina es publica (sin gate de sesion admin), a diferencia de
+  `AdminControl` que vive detras del login del panel -- agregar
+  checkboxes de exclusion ahi expondria control administrativo a
+  cualquier visitante. Si en el futuro se quiere excluir tambien desde el
+  flujo standalone (`triggerLocalSpin`, sin Supabase), habria que pasar
+  `excludedRouletteIds` como prop nueva desde `sorteo.astro`, pero ese
+  flujo no tiene UI de admin embebida hoy.
+- Herramientas: exclusivamente `filesystem:edit_file` sobre el proyecto
+  real.
+- Archivos tocados y confirmados con `read_text_file` posterior:
+  `apps/web/src/components/AdminControl.tsx`,
+  `packages/core/content.ts` (bloque `ADMIN_CONTROL`).
+- Pendiente para el usuario (sin bash real sobre el proyecto en esta
+  sesion, todo via filesystem MCP): `bun run dev`, entrar a
+  `/gestion-roster-x9f2` (pestana Evento), tildar 1-2 participantes en
+  "Excluir del sorteo 1v1" y confirmar que "Emitir sorteo" nunca los saca
+  como par mientras esten tildados, que el contador de cobertura baja el
+  total acorde, y que destildarlos los vuelve a hacer elegibles sin perder
+  el resto del estado del panel. `bun run build`/typecheck del editor
+  para confirmar que no quedo ningun tipo roto (prop nueva
+  `excludedIds: Set<string>` en `RouletteCoverageHint`, unico caller ya
+  la pasa).
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.
