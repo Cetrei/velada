@@ -2,6 +2,7 @@
 import Layout from "../layouts/Layout.astro";
 import PredictionsSection from "../components/PredictionsSection";
 import TeamPredictionsSection from "../components/TeamPredictionsSection";
+import PredictionsInsights from "../components/PredictionsInsights";
 import { loadParticipants } from "../lib/loadParticipants";
 import { fetchMatches, openForPredictions, fetchPredictionTallies } from "../lib/matches";
 import { fetchTeamMatches, openForTeamPredictions, fetchTeamPredictionTallies } from "../lib/teamMatches";
@@ -45,6 +46,20 @@ const copy = PAGES.predictions;
         <p class="text-slate-400 mt-6 max-w-xl mx-auto">
           {copy.subtitle}
         </p>
+      </div>
+
+      <div class="mb-14">
+        <h2 class="font-display text-xl font-bold text-white uppercase tracking-widest text-center mb-6">
+          {copy.insightsTitle}
+        </h2>
+        <PredictionsInsights
+          client:load
+          matches={predictionMatches}
+          teamMatches={predictionTeamMatches}
+          participantsById={participantsById}
+          tallies={talliesRecord}
+          teamTallies={teamTalliesRecord}
+        />
       </div>
 
       <div class="predictions-tabs">

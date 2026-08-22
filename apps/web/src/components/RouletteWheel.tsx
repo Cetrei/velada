@@ -280,7 +280,16 @@ export default function RouletteWheel({ participants, rouletteUnlocked, existing
   }
 
   async function triggerLocalSpin() {
+    // Guard de re-entrada sincrono -- chequeo y set en el mismo tick, ANTES
+    // de calcular el par y de cualquier await. isSpinningRef.current recien
+    // se ponia en true DENTRO de runSpin, que en el flujo "live" corre
+    // despues de un `await supabase...send(...)` -- dos clicks casi
+    // simultaneos en "Girar Ruleta" podian entrar los dos con
+    // isSpinningRef.current todavia en false, calcular pickNextPair sobre el
+    // mismo pastPairs, y salir con el mismo par (o repetir peleador) antes
+    // de que el primero terminara de marcar el flag. Bug real 2026-08-21.
     if (isSpinningRef.current || participants.length < 2) return;
+    isSpinningRef.current = true;
 
     // pickNextPair sobre pastPairs (estado MAS FRESCO de esta sesion, no un
     // snapshot viejo) -- mismas reglas de cobertura sin repeticion que
@@ -294,11 +303,17 @@ export default function RouletteWheel({ participants, rouletteUnlocked, existing
       participants.map((p) => p.id),
       existingAsMatches
     );
-    if (!pair) return;
+    if (!pair) {
+      isSpinningRef.current = false;
+      return;
+    }
 
     const player1 = findParticipant(pair.player1Id);
     const player2 = findParticipant(pair.player2Id);
-    if (!player1 || !player2) return;
+    if (!player1 || !player2) {
+      isSpinningRef.current = false;
+      return;
+    }
 
     const payload: SpinStartPayload = {
       player1Id: player1.id,
@@ -308,15 +323,21 @@ export default function RouletteWheel({ participants, rouletteUnlocked, existing
 
     const supabase = getSupabaseClient();
     if (supabase && isLive) {
-      await supabase.channel(ROULETTE_CHANNEL).send({
+      // El flag ya quedo en true arriba -- se libera si el broadcast falla
+      // sin llegar a runSpin (que es quien lo maneja en el caso exitoso, via
+      // el evento recibido de vuelta por el propio canal).
+      const result = await supabase.channel(ROULETTE_CHANNEL).send({
         type: "broadcast",
         event: SPIN_START_EVENT,
         payload
       });
+      if (result !== "ok") isSpinningRef.current = false;
       return;
     }
 
     // Standalone fallback: no Supabase connection, animate locally.
+    // isSpinningRef.current ya esta en true; runSpin lo reutiliza (no lo
+    // vuelve a setear a true, ya lo esta) y lo libera el mismo al terminar.
     runSpin(payload);
   }
 

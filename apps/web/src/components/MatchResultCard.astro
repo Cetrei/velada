@@ -8,16 +8,21 @@ interface Props {
   player1: Participant;
   player2: Participant;
   index: number;
+  /** Si es false, la tarjeta no es clickeable (ej. dentro de la ficha de un peleador, donde ya se esta viendo el detalle). Default true. */
+  linkToDetail?: boolean;
 }
 
-const { match, player1, player2, index } = Astro.props;
+const { match, player1, player2, index, linkToDetail = true } = Astro.props;
 const copy = PAGES.matches;
 
 const winner = match.winnerId === player1.id ? player1 : match.winnerId === player2.id ? player2 : null;
+const href = linkToDetail && match.id ? `/combates/${match.id}` : null;
+const Wrapper = href ? "a" : "div";
 ---
 
-<div
-  class="reveal-on-scroll bg-lol-cardBg border border-lol-border overflow-hidden clip-edges"
+<Wrapper
+  href={href ?? undefined}
+  class={`reveal-on-scroll match-card bg-lol-cardBg border border-lol-border overflow-hidden clip-edges block ${href ? "match-card-clickable" : ""}`}
   style={`transition-delay: ${(index % 4) * 80}ms`}
 >
   <div class="grid grid-cols-2">
@@ -44,7 +49,7 @@ const winner = match.winnerId === player1.id ? player1 : match.winnerId === play
       )
     }
   </div>
-</div>
+</Wrapper>
 
 <script>
   const observer = new IntersectionObserver(
@@ -71,11 +76,23 @@ const winner = match.winnerId === player1.id ? player1 : match.winnerId === play
     opacity: 1;
     transform: translateY(0);
   }
+  .match-card-clickable {
+    cursor: pointer;
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+  }
+  .match-card-clickable:hover {
+    transform: translateY(-4px);
+    border-color: rgba(200, 170, 110, 0.6);
+    box-shadow: 0 12px 24px rgba(200, 170, 110, 0.15);
+  }
   @media (prefers-reduced-motion: reduce) {
     .reveal-on-scroll {
       opacity: 1;
       transform: none;
       transition: none;
+    }
+    .match-card-clickable:hover {
+      transform: none;
     }
   }
 </style>

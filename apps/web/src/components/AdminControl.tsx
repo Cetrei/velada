@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Match, Participant, SpinStartPayload } from "@velada/core";
 import { ADMIN_CONTROL, pickNextPair, countRandomAppearances } from "@velada/core";
 import { getSupabaseClient, ROULETTE_CHANNEL, SPIN_START_EVENT } from "../lib/supabase";
@@ -64,6 +64,16 @@ export default function AdminControl({
   const [startTimeInput, setStartTimeInput] = useState(toDatetimeLocalValue(initialStartTime));
   const [status, setStatus] = useState<StatusMessage>(null);
   const [isBusy, setIsBusy] = useState(false);
+  // Guard de re-entrada para triggerRandomMatch -- useRef (no useState) porque
+  // necesita ser sincrono y visible DENTRO del mismo tick de un segundo click,
+  // antes de que React llegue a re-renderizar con isBusy=true. Bug real
+  // encontrado 2026-08-21: dos clicks casi simultaneos en "Emitir sorteo"
+  // corrian pickNextPair(participants, matches) DOS VECES sobre el mismo
+  // `matches` (el primer setMatches recien se aplica despues de los awaits de
+  // broadcast+insert), asi que ambos calculos podian elegir el mismo par o
+  // pisarse la cobertura -- de ahi los duplicados y el contador que nunca
+  // llegaba a mostrar n/n antes de reiniciar la ronda.
+  const isEmittingRef = useRef(false);
 
   const supabase = getSupabaseClient();
   const isConnected = supabase !== null;
@@ -153,6 +163,13 @@ export default function AdminControl({
       setStatus({ type: "error", text: "Se necesitan al menos 2 participantes." });
       return;
     }
+    // Guard de re-entrada sincrono: si ya hay un giro en vuelo (entre el
+    // pickNextPair de una llamada anterior y que su setMatches termine de
+    // aplicarse), un segundo click no debe ni siquiera calcular un par --
+    // leeria el mismo `matches` desactualizado y podia repetir peleador.
+    // Chequeo y set en el mismo tick sincrono, antes de cualquier await.
+    if (isEmittingRef.current) return;
+    isEmittingRef.current = true;
 
     // pickNextPair recalculado con el estado `matches` MAS FRESCO disponible
     // (no un snapshot capturado antes) -- prioriza a quien todavia no salio
@@ -164,12 +181,14 @@ export default function AdminControl({
     );
     if (!pair) {
       setStatus({ type: "error", text: "No se pudo armar un par -- revisa el roster." });
+      isEmittingRef.current = false;
       return;
     }
     const player1 = participants.find((p) => p.id === pair.player1Id);
     const player2 = participants.find((p) => p.id === pair.player2Id);
     if (!player1 || !player2) {
       setStatus({ type: "error", text: "No se pudo armar un par -- revisa el roster." });
+      isEmittingRef.current = false;
       return;
     }
 
@@ -228,6 +247,7 @@ export default function AdminControl({
       setStatus({ type: "error", text: ADMIN_CONTROL.errorUnexpected(errorMessage(err)) });
     } finally {
       setIsBusy(false);
+      isEmittingRef.current = false;
     }
   }
 

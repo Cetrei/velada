@@ -16,6 +16,16 @@ if (!adminSession) {
   return Astro.redirect("/panel-login?error=forbidden");
 }
 
+// El form de logout de mas abajo hace un POST nativo (sin JS) a esta misma
+// pagina -- sin este chequeo, destroyAdminSession ya corrio server-side
+// (cookie borrada) pero Astro seguia renderizando esta misma pagina en vez
+// de sacar al host, mismo bug real que /mi-perfil (ver ese archivo). Mismo
+// patron que panel-login.astro ya usa para adminLogin.
+const logoutResult = Astro.getActionResult(actions.adminLogout);
+if (logoutResult && !logoutResult.error) {
+  return Astro.redirect("/panel-login");
+}
+
 const initialParticipants = await loadParticipants();
 const eventState = await fetchEventState();
 const initialMatches = await fetchMatches();

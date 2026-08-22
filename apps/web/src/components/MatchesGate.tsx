@@ -77,8 +77,9 @@ function MatchResultCardMini({
   copy: typeof PAGES.matches;
 }) {
   const winner = match.winnerId === player1.id ? player1 : match.winnerId === player2.id ? player2 : null;
-  return (
-    <div className="bg-lol-cardBg border border-lol-border overflow-hidden clip-edges">
+  const href = match.id ? `/combates/${match.id}` : null;
+  const content = (
+    <>
       <div className="grid grid-cols-2">
         <FighterHalfMini participant={player1} isWinner={winner?.id === player1.id} align="left" />
         <FighterHalfMini participant={player2} isWinner={winner?.id === player2.id} align="right" />
@@ -101,8 +102,18 @@ function MatchResultCardMini({
           <p className="text-sm text-slate-500 uppercase tracking-wide">{copy.pendingResult}</p>
         )}
       </div>
-    </div>
+    </>
   );
+
+  if (href) {
+    return (
+      <a href={href} className="match-card-mini match-card-mini-clickable block bg-lol-cardBg border border-lol-border overflow-hidden clip-edges">
+        {content}
+      </a>
+    );
+  }
+
+  return <div className="match-card-mini bg-lol-cardBg border border-lol-border overflow-hidden clip-edges">{content}</div>;
 }
 
 /**

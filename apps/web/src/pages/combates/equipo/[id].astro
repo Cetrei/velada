@@ -1,0 +1,100 @@
+---
+import Layout from "../../../layouts/Layout.astro";
+import TeamRosterDetailed from "../../../components/TeamRosterDetailed.astro";
+import VoteTallyDisplay from "../../../components/VoteTallyDisplay.astro";
+import { loadParticipants } from "../../../lib/loadParticipants";
+import { fetchTeamMatches, fetchTeamPredictionTallies } from "../../../lib/teamMatches";
+import { PAGES, computeTeamAverages } from "@velada/core";
+
+const { id } = Astro.params;
+
+const [participants, allTeamMatches] = await Promise.all([loadParticipants(), fetchTeamMatches()]);
+const teamMatch = allTeamMatches.find((tm) => tm.id === id);
+
+const copy = PAGES.teamMatchDetail;
+const matchesCopy = PAGES.matches;
+
+if (!teamMatch) {
+  return Astro.rewrite("/404");
+}
+
+const participantsById = Object.fromEntries(participants.map((p) => [p.id, p]));
+const teamA = teamMatch.teamAIds.map((tid) => participantsById[tid]).filter((p): p is (typeof participants)[number] => Boolean(p));
+const teamB = teamMatch.teamBIds.map((tid) => participantsById[tid]).filter((p): p is (typeof participants)[number] => Boolean(p));
+
+const avgA = computeTeamAverages(teamA);
+const avgB = computeTeamAverages(teamB);
+
+const tallies = await fetchTeamPredictionTallies([teamMatch]);
+const tally = teamMatch.id ? tallies.get(teamMatch.id) : undefined;
+const total = tally?.totalVotes ?? 0;
+const aPct = total > 0 ? Math.round((tally!.teamAVotes / total) * 1000) / 10 : 50;
+const bPct = total > 0 ? Math.round((100 - aPct) * 10) / 10 : 50;
+---
+
+<Layout title={teamMatch.name ? `${teamMatch.name} - ${copy.tabTitle}` : copy.tabTitle}>
+  <section class="pt-32 pb-24 bg-lol-darkBg min-h-screen">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+      <a
+        href="/combates"
+        class="inline-flex items-center gap-2 text-slate-400 hover:text-lol-gold transition-colors text-sm mb-8"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+        {copy.backCta}
+      </a>
+
+      {teamMatch.name && <p class="text-center text-slate-500 text-xs uppercase tracking-wide mb-4">{teamMatch.name}</p>}
+
+      <div class="text-center mb-10">
+        {
+          teamMatch.winnerTeam ? (
+            <>
+              <p class="text-xs uppercase text-slate-500 tracking-wide">{matchesCopy.teamWinnerLabel}</p>
+              <p class="font-display text-2xl font-bold text-lol-gold uppercase">
+                {teamMatch.winnerTeam === "A" ? matchesCopy.teamALabel : matchesCopy.teamBLabel}
+              </p>
+            </>
+          ) : (
+            <p class="text-sm text-slate-500 uppercase tracking-wide">{matchesCopy.pendingResult}</p>
+          )
+        }
+      </div>
+
+      <p class="text-center text-slate-500 text-xs uppercase tracking-wide mb-4">{copy.rosterTitle}</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-px bg-lol-border/50 mb-4 clip-edges">
+        <TeamRosterDetailed
+          team={teamA}
+          label={matchesCopy.teamALabel}
+          isWinner={teamMatch.winnerTeam === "A"}
+          side="A"
+          avgPerformanceRating={avgA.avgPerformanceRating}
+          avgDuelRating={avgA.avgDuelRating}
+        />
+        <TeamRosterDetailed
+          team={teamB}
+          label={matchesCopy.teamBLabel}
+          isWinner={teamMatch.winnerTeam === "B"}
+          side="B"
+          avgPerformanceRating={avgB.avgPerformanceRating}
+          avgDuelRating={avgB.avgDuelRating}
+        />
+      </div>
+
+      <div class="relative -mt-4 mb-8 flex justify-center z-20">
+        <div class="w-10 h-10 bg-lol-darkBg border border-lol-gold rotate-45 flex items-center justify-center">
+          <span class="text-lol-gold font-display font-bold text-xs -rotate-45">VS</span>
+        </div>
+      </div>
+
+      <VoteTallyDisplay
+        title={copy.votesTitle}
+        leftLabel={matchesCopy.teamALabel}
+        rightLabel={matchesCopy.teamBLabel}
+        leftPct={aPct}
+        rightPct={bPct}
+        totalVotes={total}
+      />
+    </div>
+  </section>
+</Layout>

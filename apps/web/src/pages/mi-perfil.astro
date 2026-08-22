@@ -19,6 +19,17 @@ if (!session) {
   return Astro.redirect("/inscripcion");
 }
 
+// El form de logout de mas abajo hace un POST nativo (sin JS) a esta misma
+// pagina -- sin este chequeo, destroySession ya corrio server-side (cookie
+// borrada) pero Astro seguia renderizando esta misma pagina con el
+// resultado de la action colgado sin usar, dejando a quien clickeo
+// "Cerrar sesion" viendo su propio perfil como si nada (el bug real
+// reportado). Mismo patron que panel-login.astro ya usa para adminLogin.
+const logoutResult = Astro.getActionResult(actions.logoutParticipant);
+if (logoutResult && !logoutResult.error) {
+  return Astro.redirect("/");
+}
+
 const existingParticipant = await findParticipantByOwner(session.userId, Astro.locals);
 const eventState = await fetchEventState();
 

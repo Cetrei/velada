@@ -1,0 +1,354 @@
+---
+import type { Participant } from "@velada/core";
+import { rankIconPath, stepsFromRankString, RANK_TIERS, PAGES } from "@velada/core";
+
+interface Props {
+  team: Participant[];
+  label: string;
+  isWinner: boolean;
+  side: "A" | "B";
+  avgPerformanceRating: number | null;
+  avgDuelRating: number | null;
+}
+
+const { team, label, isWinner, side, avgPerformanceRating, avgDuelRating } = Astro.props;
+const copy = PAGES.teamMatchDetail;
+
+const fallbackPhoto = (p: Participant) =>
+  `https://placehold.co/200x200/0A1428/C8AA6E?text=${encodeURIComponent(p.nickname[0] ?? "?")}`;
+
+// Barra de nivel por rango, 0-100%, misma nocion de "escalon" que ya usa
+// performanceRank.ts para todo el resto de la app -- evita inventar una
+// segunda escala solo para esta tarjeta.
+const MAX_STEPS = RANK_TIERS.length * 4 - 1;
+const rankPct = (rank: string | null | undefined) => {
+  const steps = stepsFromRankString(rank);
+  if (steps === null) return null;
+  return Math.round((steps / MAX_STEPS) * 100);
+};
+---
+
+<div class={`team-roster-detailed side-${side} ${isWinner ? "is-winner" : ""}`}>
+  <div class="team-roster-header">
+    <div class="team-roster-header-top">
+      <p class="team-roster-label">
+        {label}
+        {isWinner && <span class="team-roster-crown">★ Ganador</span>}
+      </p>
+      <span class="team-roster-count">{team.length} peleadores</span>
+    </div>
+    <div class="team-roster-avgs">
+      <div class="team-roster-avg">
+        <span class="team-roster-avg-label">{copy.avgPerformanceLabel}</span>
+        <span class="team-roster-avg-value">{avgPerformanceRating !== null ? avgPerformanceRating : "--"}</span>
+      </div>
+      <div class="team-roster-avg-sep" />
+      <div class="team-roster-avg">
+        <span class="team-roster-avg-label">{copy.avgDuelLabel}</span>
+        <span class="team-roster-avg-value team-roster-avg-value-duel">{avgDuelRating !== null ? avgDuelRating : "--"}</span>
+      </div>
+    </div>
+  </div>
+
+  <ul class="team-roster-list">
+    {
+      team.map((p) => {
+        const pct = rankPct(p.lolRank);
+        return (
+          <li class="team-roster-member">
+            <a href={`/peleadores/${p.id}`} class="team-roster-member-link">
+              <img
+                src={p.photo ?? fallbackPhoto(p)}
+                alt={p.name}
+                loading="lazy"
+                class="team-roster-member-photo"
+              />
+              <div class="team-roster-member-info">
+                <div class="team-roster-member-top">
+                  <p class="team-roster-member-name">{p.name}</p>
+                  <span class="team-roster-member-role">{p.mainRole}</span>
+                </div>
+                <div class="team-roster-member-meta">
+                  <img
+                    src={rankIconPath(p.lolRank)}
+                    alt=""
+                    class="team-roster-member-rank-icon"
+                    loading="lazy"
+                    onerror="this.style.display='none'"
+                  />
+                  <span class="team-roster-member-rank">{p.lolRank}</span>
+                  {p.performanceRank && (
+                    <>
+                      <span class="team-roster-member-sep">·</span>
+                      <span class="team-roster-member-performance">{p.performanceRank}</span>
+                    </>
+                  )}
+                </div>
+                {pct !== null && (
+                  <div class="team-roster-member-track">
+                    <div class="team-roster-member-fill" style={`width: ${pct}%`} />
+                  </div>
+                )}
+              </div>
+              <svg class="team-roster-member-arrow" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+            </a>
+          </li>
+        );
+      })
+    }
+  </ul>
+</div>
+
+<style>
+  /*
+   * Rediseno 2026-08-21: acento de color por lado (dorado = Equipo A,
+   * azul = Equipo B), mismo criterio de MatchComparisonCard.tsx para que
+   * el detalle de equipo se sienta parte de la misma familia visual que
+   * el detalle 1v1 en vez de una tarjeta generica aparte. clip-edges en
+   * el header (mismo corte de esquina que FighterCard/MatchResultCard) y
+   * glow en el equipo ganador en vez de solo un borde fino.
+   */
+  .team-roster-detailed {
+    --side-color: #C8AA6E;
+    --side-color-soft: rgba(200, 170, 110, 0.35);
+    background: var(--lol-card-bg, #0A1428);
+    border: 1px solid rgba(200, 170, 110, 0.12);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    transition: box-shadow 0.3s ease;
+  }
+
+  .team-roster-detailed.side-B {
+    --side-color: #4FC3E8;
+    --side-color-soft: rgba(79, 195, 232, 0.35);
+  }
+
+  .team-roster-detailed.is-winner {
+    box-shadow: inset 0 0 0 1px var(--side-color), 0 0 32px -12px var(--side-color);
+  }
+
+  .team-roster-header {
+    position: relative;
+    padding: 16px 18px 14px;
+    background: linear-gradient(to bottom, var(--side-color-soft) 0%, transparent 120%);
+    background-color: rgba(255, 255, 255, 0.02);
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 18px 100%, 0 calc(100% - 18px));
+  }
+
+  .team-roster-header-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .team-roster-label {
+    margin: 0;
+    font-family: var(--font-display, inherit);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #cfc9b8;
+    font-weight: 700;
+  }
+
+  .is-winner .team-roster-label {
+    color: var(--side-color);
+  }
+
+  .team-roster-crown {
+    margin-left: 8px;
+    font-size: 0.65rem;
+    letter-spacing: 0.04em;
+    color: var(--side-color);
+    text-shadow: 0 0 12px var(--side-color-soft);
+  }
+
+  .team-roster-count {
+    font-size: 0.62rem;
+    color: #6b6555;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+  }
+
+  .team-roster-avgs {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(200, 170, 110, 0.15);
+  }
+
+  .team-roster-avg {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .team-roster-avg-sep {
+    width: 1px;
+    align-self: stretch;
+    background: rgba(200, 170, 110, 0.15);
+  }
+
+  .team-roster-avg-label {
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #6b6555;
+  }
+
+  .team-roster-avg-value {
+    font-family: var(--font-display, inherit);
+    font-weight: 700;
+    font-size: 1.25rem;
+    color: var(--side-color);
+    line-height: 1.2;
+  }
+
+  .team-roster-avg-value-duel {
+    color: #f0e6d2;
+  }
+
+  .team-roster-list {
+    list-style: none;
+    margin: 0;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+  }
+
+  .team-roster-member-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px;
+    border-radius: 4px;
+    text-decoration: none;
+    border: 1px solid transparent;
+    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+  }
+
+  .team-roster-member-link:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: var(--side-color-soft);
+    transform: translateX(2px);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .team-roster-member-link:hover {
+      transform: none;
+    }
+  }
+
+  .team-roster-member-photo {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--side-color-soft);
+    flex-shrink: 0;
+    transition: border-color 0.2s ease;
+  }
+
+  .team-roster-member-link:hover .team-roster-member-photo {
+    border-color: var(--side-color);
+  }
+
+  .team-roster-member-info {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .team-roster-member-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .team-roster-member-name {
+    margin: 0;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: white;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .team-roster-member-role {
+    font-size: 0.6rem;
+    color: #6b6555;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .team-roster-member-meta {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 3px;
+  }
+
+  .team-roster-member-rank-icon {
+    width: 14px;
+    height: 14px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+
+  .team-roster-member-rank {
+    font-size: 0.68rem;
+    color: #a09b8c;
+    white-space: nowrap;
+  }
+
+  .team-roster-member-sep {
+    font-size: 0.6rem;
+    color: #4a4636;
+  }
+
+  .team-roster-member-performance {
+    font-size: 0.68rem;
+    color: var(--side-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .team-roster-member-track {
+    margin-top: 6px;
+    height: 3px;
+    border-radius: 2px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .team-roster-member-fill {
+    height: 100%;
+    background: linear-gradient(to right, var(--side-color-soft), var(--side-color));
+    transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .team-roster-member-arrow {
+    color: #4a4636;
+    flex-shrink: 0;
+    opacity: 0;
+    transform: translateX(-4px);
+    transition: opacity 0.2s ease, transform 0.2s ease, color 0.2s ease;
+  }
+
+  .team-roster-member-link:hover .team-roster-member-arrow {
+    opacity: 1;
+    transform: translateX(0);
+    color: var(--side-color);
+  }
+</style>

@@ -295,6 +295,139 @@ export function computeDuelWinProbability(playerA: DuelInput, playerB: DuelInput
   return { playerAWinPct, playerBWinPct: 100 - playerAWinPct };
 }
 
+/**
+ * Comparacion de Performance Rank entre dos peleadores, pensada para la
+ * pagina de detalle de un combate 1v1 (pedido del usuario 2026-08-21:
+ * "una comparacion de sus performances y sus duel rank... proporcional a
+ * la diferencia de nivel"). A diferencia de computeDuelWinProbability
+ * (que compara el numero 0-100 de duelRating), esto compara el
+ * PERFORMANCE RANK (ej. "Platinum II" vs "Gold IV") -- la otra metrica
+ * que ya existe en el perfil de cada peleador y que la ficha individual
+ * ya muestra por separado, nunca comparada contra un rival.
+ *
+ * Reusa stepsFromRankString (misma escala de 0 a RANK_TIERS.length*4-1
+ * que ya usa duelRating.ts para su propio ancla) y la misma curva
+ * logistica que computeDuelWinProbability, para que "probabilidad
+ * proporcional a la diferencia de nivel" tenga el mismo significado en
+ * los dos factores que se muestran lado a lado. Si algun peleador no
+ * tiene performanceRank todavia (sin partidas de mmradar cargadas), cae
+ * al lolRank (rango oficial) como aproximacion -- mismo fallback que
+ * ratingOrFallback usa para duelRating.
+ */
+export interface PerformanceComparisonInput {
+  performanceRank?: string | null;
+  lolRank?: string | null;
+}
+
+export interface PerformanceComparisonResult {
+  playerAWinPct: number;
+  playerBWinPct: number;
+  /** Steps 0-100 normalizados de cada jugador, para dibujar la barra de nivel si hace falta. */
+  playerARating: number;
+  playerBRating: number;
+}
+
+function performanceRatingOrFallback(input: PerformanceComparisonInput): number {
+  const steps = stepsFromRankString(input.performanceRank ?? input.lolRank ?? null);
+  if (steps === null) return NEUTRAL_RATING_FALLBACK;
+  return clamp((steps / RATING_SCALE_STEPS) * 100, 1, 99);
+}
+
+export function computePerformanceComparison(
+  playerA: PerformanceComparisonInput,
+  playerB: PerformanceComparisonInput
+): PerformanceComparisonResult {
+  const ratingA = performanceRatingOrFallback(playerA);
+  const ratingB = performanceRatingOrFallback(playerB);
+
+  const diff = ratingA - ratingB;
+  const probA = 1 / (1 + Math.exp(-diff / 12));
+
+  const playerAWinPct = Math.round(clamp(probA * 100, 2, 98));
+  return { playerAWinPct, playerBWinPct: 100 - playerAWinPct, playerARating: Math.round(ratingA), playerBRating: Math.round(ratingB) };
+}
+
+/**
+ * Combina Performance Rank y Habilidad 1v1 (duelRating) en una sola
+ * probabilidad "quien es mas probable a ganar", pedido explicito del
+ * usuario 2026-08-21 para la pagina de detalle de un combate 1v1:
+ * "con esos dos que esteticamente se muestre quien es el mas probable a
+ * ganar bajo esos dos factores (proporcional a la diferencia de nivel)".
+ * Promedia linealmente el rating 0-100 de cada factor (mismo peso para
+ * ambos -- no hay evidencia todavia de que uno prediga mejor que el otro,
+ * ver el PENDIENTE de mas arriba sobre la falta de un fixture set real de
+ * duelRating) y aplica la misma curva logistica que los otros dos
+ * comparadores, para que la proporcionalidad a la diferencia de nivel sea
+ * consistente en los tres.
+ */
+export interface OverallComparisonInput {
+  duelRating?: number | null;
+  performanceRank?: string | null;
+  lolRank?: string | null;
+}
+
+export interface OverallComparisonResult {
+  playerAWinPct: number;
+  playerBWinPct: number;
+  performance: PerformanceComparisonResult;
+  duel: DuelProbabilityResult;
+}
+
+export function computeOverallWinComparison(
+  playerA: OverallComparisonInput,
+  playerB: OverallComparisonInput
+): OverallComparisonResult {
+  const performance = computePerformanceComparison(playerA, playerB);
+  const duel = computeDuelWinProbability(playerA, playerB);
+
+  const ratingA = (performanceRatingOrFallback(playerA) + ratingOrFallback(playerA)) / 2;
+  const ratingB = (performanceRatingOrFallback(playerB) + ratingOrFallback(playerB)) / 2;
+
+  const diff = ratingA - ratingB;
+  const probA = 1 / (1 + Math.exp(-diff / 12));
+
+  const playerAWinPct = Math.round(clamp(probA * 100, 2, 98));
+  return { playerAWinPct, playerBWinPct: 100 - playerAWinPct, performance, duel };
+}
+
+/**
+ * Promedio de duelRating y de Performance Rank (en steps normalizados
+ * 0-100, misma escala que el resto de este archivo) de un equipo completo
+ * -- pedido del usuario 2026-08-21 para el desglose de equipo en
+ * /combates/equipo/[id]: "En el equipo puedes poner el promedio de
+ * performance y duel rank". Ignora participantes sin ningun dato (ni
+ * duelRating/performanceRank ni lolRank) en vez de contarlos como 50
+ * neutral, para que un equipo con datos reales no se diluya hacia el
+ * centro por companeros sin ficha de mmradar todavia.
+ */
+export interface TeamAverageInput {
+  duelRating?: number | null;
+  performanceRank?: string | null;
+  lolRank?: string | null;
+}
+
+export interface TeamAverageResult {
+  /** null si ningun miembro del equipo tiene dato suficiente para calcularlo. */
+  avgDuelRating: number | null;
+  avgPerformanceRating: number | null;
+  membersConsidered: number;
+}
+
+export function computeTeamAverages(members: TeamAverageInput[]): TeamAverageResult {
+  const duelValues = members
+    .filter((m) => typeof m.duelRating === "number" || Boolean(m.lolRank))
+    .map((m) => ratingOrFallback(m));
+  const perfValues = members
+    .filter((m) => Boolean(m.performanceRank) || Boolean(m.lolRank))
+    .map((m) => performanceRatingOrFallback(m));
+
+  return {
+    avgDuelRating: duelValues.length > 0 ? Math.round(average(duelValues)) : null,
+    avgPerformanceRating: perfValues.length > 0 ? Math.round(average(perfValues)) : null,
+    membersConsidered: members.length
+  };
+}
+
 export const DUEL_RATING_EXPLANATION = {
   title: "¿Cómo se calcula la Habilidad 1v1?",
   summary:

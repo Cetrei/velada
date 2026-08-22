@@ -73,8 +73,9 @@ function TeamMatchCard({
   copy: typeof PAGES.matches;
 }) {
   const winnerTeam = teamMatch.winnerTeam;
-  return (
-    <div className="bg-lol-cardBg border border-lol-border overflow-hidden clip-edges">
+  const href = teamMatch.id ? `/combates/equipo/${teamMatch.id}` : null;
+  const content = (
+    <>
       {teamMatch.name && <p className="text-center text-xs uppercase tracking-wide text-slate-500 pt-3">{teamMatch.name}</p>}
 
       <div className="grid grid-cols-2 gap-px bg-lol-border/50 mt-3">
@@ -100,8 +101,18 @@ function TeamMatchCard({
           <p className="text-sm text-slate-500 uppercase tracking-wide">{copy.pendingResult}</p>
         )}
       </div>
-    </div>
+    </>
   );
+
+  if (href) {
+    return (
+      <a href={href} className="match-card-mini-clickable block bg-lol-cardBg border border-lol-border overflow-hidden clip-edges">
+        {content}
+      </a>
+    );
+  }
+
+  return <div className="bg-lol-cardBg border border-lol-border overflow-hidden clip-edges">{content}</div>;
 }
 
 /**

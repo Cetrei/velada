@@ -315,7 +315,14 @@ const copy = PAGES.fighterDetail;
 
           {teamMatch && (
             <div class="bg-lol-cardBg border border-lol-border p-6 mb-8">
-              <p class="text-slate-500 text-xs uppercase tracking-wide mb-3">{PAGES.matches.tabTeams}</p>
+              <div class="flex items-center justify-between mb-3">
+                <p class="text-slate-500 text-xs uppercase tracking-wide">{PAGES.matches.tabTeams}</p>
+                {teamMatch.id && (
+                  <a href={`/combates/equipo/${teamMatch.id}`} class="text-lol-gold text-xs uppercase tracking-wide hover:underline">
+                    {PAGES.matches.viewDetailCta}
+                  </a>
+                )}
+              </div>
               <div class="grid grid-cols-2 gap-3">
                 <TeamRoster team={teamA} label={PAGES.matches.teamALabel} isWinner={teamMatch.winnerTeam === "A"} />
                 <TeamRoster team={teamB} label={PAGES.matches.teamBLabel} isWinner={teamMatch.winnerTeam === "B"} />

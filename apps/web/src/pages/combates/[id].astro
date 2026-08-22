@@ -1,0 +1,134 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import MatchComparisonCard from "../../components/MatchComparisonCard";
+import VoteTallyDisplay from "../../components/VoteTallyDisplay.astro";
+import FighterHalf from "../../components/FighterHalf.astro";
+import { loadParticipants } from "../../lib/loadParticipants";
+import { fetchMatches, fetchPredictionTallies } from "../../lib/matches";
+import { PAGES } from "@velada/core";
+
+const { id } = Astro.params;
+
+const [participants, allMatches] = await Promise.all([loadParticipants(), fetchMatches()]);
+const match = allMatches.find((m) => m.id === id);
+
+const copy = PAGES.matchDetail;
+const matchesCopy = PAGES.matches;
+
+if (!match) {
+  return Astro.rewrite("/404");
+}
+
+const participantsById = Object.fromEntries(participants.map((p) => [p.id, p]));
+const player1 = participantsById[match.player1Id];
+const player2 = participantsById[match.player2Id];
+
+if (!player1 || !player2) {
+  return Astro.rewrite("/404");
+}
+
+const winner = match.winnerId === player1.id ? player1 : match.winnerId === player2.id ? player2 : null;
+
+const talliesMap = await fetchPredictionTallies([match]);
+const tally = match.id ? talliesMap.get(match.id) : undefined;
+const total = tally?.totalVotes ?? 0;
+const p1Pct = total > 0 ? Math.round((tally!.player1Votes / total) * 1000) / 10 : 50;
+const p2Pct = total > 0 ? Math.round((100 - p1Pct) * 10) / 10 : 50;
+
+const fallbackPhoto = (p: typeof player1) =>
+  `https://placehold.co/100x100/0A1428/C8AA6E?text=${encodeURIComponent(p.nickname[0] ?? "?")}`;
+
+const pageLabel = `${player1.name} vs ${player2.name}`;
+---
+
+<Layout title={copy.tabTitle(pageLabel)}>
+  <section class="pt-32 pb-24 bg-lol-darkBg min-h-screen">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+      <a
+        href="/combates"
+        class="inline-flex items-center gap-2 text-slate-400 hover:text-lol-gold transition-colors text-sm mb-8"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+        {copy.backCta}
+      </a>
+
+      {match.name && <p class="text-center text-slate-500 text-xs uppercase tracking-wide mb-2">{match.name}</p>}
+      {match.matchNumber && (
+        <p class="text-center text-lol-gold/70 text-xs uppercase tracking-widest mb-4">Combate #{match.matchNumber}</p>
+      )}
+
+      <div class="bg-lol-cardBg border border-lol-border overflow-hidden clip-edges mb-10">
+        <div class="grid grid-cols-2">
+          <FighterHalf participant={player1} isWinner={winner?.id === player1.id} align="left" />
+          <FighterHalf participant={player2} isWinner={winner?.id === player2.id} align="right" />
+        </div>
+
+        <div class="relative -mt-6 flex justify-center z-20">
+          <div class="w-10 h-10 bg-lol-darkBg border border-lol-gold rotate-45 flex items-center justify-center">
+            <span class="text-lol-gold font-display font-bold text-xs -rotate-45">VS</span>
+          </div>
+        </div>
+
+        <div class="px-6 pb-5 pt-2 text-center">
+          {
+            winner ? (
+              <>
+                <p class="text-xs uppercase text-slate-500 tracking-wide">{matchesCopy.winnerLabel}</p>
+                <p class="font-display text-lg font-bold text-lol-gold uppercase">{winner.name}</p>
+                {match.decision && <p class="text-xs text-slate-500 mt-1">{match.decision}</p>}
+              </>
+            ) : (
+              <p class="text-sm text-slate-500 uppercase tracking-wide">{matchesCopy.pendingResult}</p>
+            )
+          }
+        </div>
+      </div>
+
+      <div class="mb-10">
+        <MatchComparisonCard
+          client:load
+          playerA={{
+            name: player1.name,
+            photo: player1.photo ?? fallbackPhoto(player1),
+            duelRating: player1.duelRating,
+            performanceRank: player1.performanceRank,
+            lolRank: player1.lolRank
+          }}
+          playerB={{
+            name: player2.name,
+            photo: player2.photo ?? fallbackPhoto(player2),
+            duelRating: player2.duelRating,
+            performanceRank: player2.performanceRank,
+            lolRank: player2.lolRank
+          }}
+        />
+      </div>
+
+      <VoteTallyDisplay
+        title={copy.votesTitle}
+        leftLabel={player1.name}
+        rightLabel={player2.name}
+        leftPct={p1Pct}
+        rightPct={p2Pct}
+        totalVotes={total}
+        leftPhoto={player1.photo ?? fallbackPhoto(player1)}
+        rightPhoto={player2.photo ?? fallbackPhoto(player2)}
+      />
+
+      <div class="grid grid-cols-2 gap-4 mt-8">
+        <a
+          href={`/peleadores/${player1.id}`}
+          class="text-center bg-lol-cardBg border border-lol-border hover:border-lol-gold transition-colors py-3 text-sm text-white font-bold uppercase tracking-wide"
+        >
+          {player1.name}
+        </a>
+        <a
+          href={`/peleadores/${player2.id}`}
+          class="text-center bg-lol-cardBg border border-lol-border hover:border-lol-blue transition-colors py-3 text-sm text-white font-bold uppercase tracking-wide"
+        >
+          {player2.name}
+        </a>
+      </div>
+    </div>
+  </section>
+</Layout>

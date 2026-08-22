@@ -7,19 +7,24 @@ interface Props {
   teamMatch: TeamMatch;
   participantsById: Record<string, Participant>;
   index: number;
+  /** Si es false, la tarjeta no es clickeable. Default true. */
+  linkToDetail?: boolean;
 }
 
-const { teamMatch, participantsById, index } = Astro.props;
+const { teamMatch, participantsById, index, linkToDetail = true } = Astro.props;
 const copy = PAGES.matches;
 
 const teamA = teamMatch.teamAIds.map((id) => participantsById[id]).filter((p): p is Participant => Boolean(p));
 const teamB = teamMatch.teamBIds.map((id) => participantsById[id]).filter((p): p is Participant => Boolean(p));
 
 const winnerTeam = teamMatch.winnerTeam;
+const href = linkToDetail && teamMatch.id ? `/combates/equipo/${teamMatch.id}` : null;
+const Wrapper = href ? "a" : "div";
 ---
 
-<div
-  class="reveal-on-scroll bg-lol-cardBg border border-lol-border overflow-hidden clip-edges"
+<Wrapper
+  href={href ?? undefined}
+  class={`reveal-on-scroll bg-lol-cardBg border border-lol-border overflow-hidden clip-edges block ${href ? "match-card-clickable" : ""}`}
   style={`transition-delay: ${(index % 4) * 80}ms`}
 >
   {
@@ -53,7 +58,7 @@ const winnerTeam = teamMatch.winnerTeam;
       )
     }
   </div>
-</div>
+</Wrapper>
 
 <script>
   const observer = new IntersectionObserver(
@@ -80,11 +85,23 @@ const winnerTeam = teamMatch.winnerTeam;
     opacity: 1;
     transform: translateY(0);
   }
+  .match-card-clickable {
+    cursor: pointer;
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+  }
+  .match-card-clickable:hover {
+    transform: translateY(-4px);
+    border-color: rgba(200, 170, 110, 0.6);
+    box-shadow: 0 12px 24px rgba(200, 170, 110, 0.15);
+  }
   @media (prefers-reduced-motion: reduce) {
     .reveal-on-scroll {
       opacity: 1;
       transform: none;
       transition: none;
+    }
+    .match-card-clickable:hover {
+      transform: none;
     }
   }
 </style>

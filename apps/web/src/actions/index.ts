@@ -196,6 +196,7 @@ export const server = {
   }),
 
   adminLogout: defineAction({
+    accept: "form",
     handler: async (_input, context) => {
       destroyAdminSession(context.cookies);
       return { success: true };
@@ -310,6 +311,7 @@ export const server = {
   }),
 
   logoutParticipant: defineAction({
+    accept: "form",
     handler: async (_input, context) => {
       await destroySession(context.cookies, context.locals);
       return { success: true };

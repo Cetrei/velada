@@ -1,0 +1,46 @@
+---
+import { PAGES } from "@velada/core";
+
+interface Props {
+  title: string;
+  leftLabel: string;
+  rightLabel: string;
+  leftPct: number;
+  rightPct: number;
+  totalVotes: number;
+  leftPhoto?: string | null;
+  rightPhoto?: string | null;
+}
+
+const { title, leftLabel, rightLabel, leftPct, rightPct, totalVotes, leftPhoto, rightPhoto } = Astro.props;
+const copy = PAGES.predictions;
+---
+
+<div class="vote-tally bg-lol-cardBg border border-lol-border p-6">
+  <div class="flex items-center justify-between mb-4">
+    <span class="text-xs uppercase text-slate-500 tracking-wide">{title}</span>
+    <span class="text-xs text-slate-500">{copy.votesLabel(totalVotes)}</span>
+  </div>
+
+  <div class="flex items-center justify-between gap-4 mb-3">
+    <div class="flex items-center gap-3 min-w-0">
+      {leftPhoto && <img src={leftPhoto} alt="" class="w-10 h-10 rounded-full object-cover border-2 border-lol-gold/60 flex-shrink-0" />}
+      <div class="min-w-0">
+        <p class="text-white font-bold text-sm truncate">{leftLabel}</p>
+        <p class="font-display font-bold text-2xl text-lol-gold">{leftPct}%</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3 min-w-0 text-right flex-row-reverse">
+      {rightPhoto && <img src={rightPhoto} alt="" class="w-10 h-10 rounded-full object-cover border-2 border-lol-blue/60 flex-shrink-0" />}
+      <div class="min-w-0">
+        <p class="text-white font-bold text-sm truncate">{rightLabel}</p>
+        <p class="font-display font-bold text-2xl text-lol-blue">{rightPct}%</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="h-2.5 rounded-full overflow-hidden bg-lol-darkBg border border-lol-border/50 flex">
+    <div class="h-full bg-gradient-to-r from-lol-gold to-yellow-400" style={`width: ${leftPct}%`} />
+    <div class="h-full bg-gradient-to-r from-lol-blue to-cyan-400" style={`width: ${rightPct}%`} />
+  </div>
+</div>

@@ -2666,6 +2666,58 @@ era el de arriba, no whitelist).
   para confirmar que no quedo ningun tipo roto (cambio de props de
   `AdminControl`, import nuevo de `@velada/core` en dos componentes).
 
+## Sesion 2026-08-21 (6): rediseno visual de TeamRosterDetailed.astro
+- Pedido del usuario: "mejora la apariencia del componente de los
+  equipos" (`TeamRosterDetailed.astro`, usado por
+  `/combates/equipo/[id].astro`) -- el componente venia de una sesion
+  previa (ver sesion sin numerar arriba sobre paginas de detalle de
+  combate) con estilos inline en hex sueltos, sin usar el lenguaje visual
+  real del resto de la app (`clip-edges`, colores `lol-gold`/`lol-blue`
+  por lado, glow en hover) que ya usan `FighterCard.astro` y
+  `MatchComparisonCard.tsx`.
+- **Cambios**: nueva prop requerida `side: "A" | "B"` que fija un
+  `--side-color`/`--side-color-soft` CSS var (dorado `#C8AA6E` para A,
+  azul `#4FC3E8` para B -- mismo criterio de color por lado que
+  `MatchComparisonCard.tsx`). Header con `clip-path` (mismo corte de
+  esquina que `.clip-edges` global, pero solo en el borde inferior
+  interno para no cortar contra el borde exterior de la grid) y gradiente
+  sutil del color de lado. Equipo ganador ahora tiene glow real
+  (`box-shadow` con blur) en vez de solo un borde fino de 1px. Cada fila
+  de peleador: foto mas grande (44px vs 40px antes), rol alineado a la
+  derecha del nombre, Performance Rank como texto de color de lado (antes
+  siempre azul fijo aunque el equipo fuera B), nueva barra fina de nivel
+  (`team-roster-member-track`/`-fill`) basada en `stepsFromRankString`
+  sobre `lolRank` (misma nocion de "escalon" 0-100% que ya usa
+  `performanceRank.ts`, en vez de inventar una escala nueva), flecha `>`
+  que aparece en hover (mismo lenguaje de afordance de link que el resto
+  de la app) y micro-transform `translateX` al hover. Header ahora
+  tambien muestra el conteo de peleadores del equipo.
+- El contenedor grid en `combates/equipo/[id].astro` (dos
+  `TeamRosterDetailed` lado a lado) ahora lleva la clase `clip-edges`
+  global para que el bloque completo tenga el corte de esquina exterior
+  consistente con `FighterCard`/`MatchResultCard`, ademas del clip-path
+  interno del header de cada tarjeta.
+- Import nuevo en el componente: `stepsFromRankString`, `RANK_TIERS`
+  desde `@velada/core` (ya exportados, sin cambios en `packages/core`).
+- Herramientas: exclusivamente `filesystem:edit_file`/`read_text_file`
+  sobre el proyecto real, sin `create_file`/`str_replace` del sandbox
+  aislado (ese error ya se habia cometido y corregido en una sesion
+  anterior, ver mas arriba -- confirmado un intento fallido de
+  `str_replace` al arrancar esta sesion, corregido de inmediato sin tocar
+  el archivo).
+- Archivos tocados y confirmados con `read_text_file` posterior:
+  `apps/web/src/components/TeamRosterDetailed.astro` (rediseno completo),
+  `apps/web/src/pages/combates/equipo/[id].astro` (prop `side` nueva +
+  `clip-edges` en el grid contenedor).
+- Pendiente para el usuario (sin bash real sobre el proyecto en esta
+  sesion, todo via filesystem MCP): `bun run dev`, entrar a un combate por
+  equipos (`/combates/equipo/[id]`) y confirmar visualmente el glow del
+  ganador, el color correcto por lado (A dorado, B azul) y que la barra de
+  nivel por peleador se vea bien en mobile (`grid-cols-1` a ese ancho, las
+  dos tarjetas quedan apiladas). `bun run build`/typecheck del editor para
+  confirmar que no quedo ningun tipo roto (prop `side` nueva es requerida,
+  pero el unico caller ya la pasa).
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.

@@ -119,7 +119,36 @@ export const PAGES = {
     teamWinnerLabel: "Equipo ganador",
     teamsRevealEyebrow: "Combates por equipo",
     teamsRevealTitle: "Asi quedaron los equipos",
-    teamsRevealSkipCta: "Saltar"
+    teamsRevealSkipCta: "Saltar",
+    viewDetailCta: "Ver combate"
+  },
+
+  matchDetail: {
+    tabTitle: (label: string) => `${label} - La Follada del Año`,
+    backCta: "Volver a combates",
+    notFoundTitle: "Combate no encontrado",
+    notFoundSubtitle: "Puede que el link esté roto o el combate ya no exista.",
+    notFoundCta: "Volver a combates",
+    comparisonTitle: "Quién gana el 1v1",
+    comparisonSubtitle: "Estimado según Performance y Habilidad 1v1 de cada uno",
+    comparisonCaption: "Probabilidad combinada de ganar este combate",
+    performanceCompareLabel: "Performance",
+    duelCompareLabel: "Habilidad 1v1",
+    noDataHint: "Todavía no hay datos de mmradar suficientes para uno o ambos peleadores -- la estimación usa el rango oficial como aproximación.",
+    votesTitle: "Votos de la comunidad"
+  },
+
+  teamMatchDetail: {
+    tabTitle: "Combate por equipos - La Follada del Año",
+    backCta: "Volver a combates",
+    notFoundTitle: "Combate no encontrado",
+    notFoundSubtitle: "Puede que el link esté roto o el combate ya no exista.",
+    notFoundCta: "Volver a combates",
+    rosterTitle: "Combatientes",
+    avgPerformanceLabel: "Performance promedio",
+    avgDuelLabel: "1v1 promedio",
+    votesTitle: "Votos de la comunidad",
+    noAvgDataHint: "Sin datos suficientes todavía."
   },
 
   predictions: {
@@ -136,7 +165,17 @@ export const PAGES = {
     votingPhaseClosedSubtitle: "El host todavía no habilitó la fase de votaciones.",
     tab1v1: "1 vs 1",
     tabTeams: "Por equipos",
-    teamsEmptyState: "No hay combates por equipos abiertos a pronóstico todavía."
+    teamsEmptyState: "No hay combates por equipos abiertos a pronóstico todavía.",
+    insightsTitle: "Lo que dice la comunidad",
+    insightsEmptyState: "Todavía no hay suficientes votos para mostrar estadísticas.",
+    mostVotedFighterLabel: "Peleador más votado",
+    mostVotedTeamLabel: "Equipo más votado",
+    biggestGapMatchLabel: "Mayor diferencia (1v1)",
+    biggestGapTeamMatchLabel: "Mayor diferencia (equipos)",
+    mostVotedMatchLabel: "Combate con más votos",
+    totalVotesLabel: "Votos totales",
+    gapSuffix: "de diferencia",
+    votesSuffix: "votos"
   },
 
   raffle: {
