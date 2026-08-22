@@ -1,5 +1,81 @@
 # AGENT.md — velada_lol
 
+## Sesion 2026-08-21 (cont.): voto variable + likes en pronosticos
+Dos pedidos del usuario sobre `/pronosticos`, via filesystem MCP:
+
+1. **"El usuario puede variar su voto sobre cada combate"**: `PredictionCard.tsx`
+   y `TeamPredictionCard.tsx` ya NO bloquean un segundo click con
+   `disabled={Boolean(votedFor)}` -- ahora `vote()` solo ignora un click
+   sobre la opcion ya elegida o mientras hay un upsert en curso. El tally
+   local se ajusta a mano (resta el voto previo si habia, suma el nuevo)
+   en vez de esperar un refetch. La tabla `predictions`/`team_predictions`
+   ya soportaba UPDATE via upsert (`onConflict: match_id,voter_id`) desde
+   la sesion anterior, asi que no hizo falta tocar el schema SQL para esto.
+   Indicios de que se puede cambiar: SIN texto nuevo obligatorio, solo
+   estado visual (borde dorado + fondo tenue en la opcion elegida, check
+   animado que aparece encima de la foto/label, cursor pointer, hover en
+   las no elegidas) + un `title` (tooltip nativo del navegador) tipo
+   "Toca al rival para cambiar tu pronostico". Animacion: pulso de escala
+   en el boton recien votado + pop del check, keyframes CSS inline en cada
+   componente.
+2. **Feature de like/favorito por peleador**: nuevo, de punta a punta.
+   - `packages/core/schemas.ts`: `FighterLikeSchema`, `FighterLikeCountSchema`.
+   - `scripts/setup-supabase.ts`: tabla nueva `fighter_likes`
+     (`participant_id, voter_id` como PK compuesta, SIN unique de un solo
+     ganador -- a diferencia de predictions, likear no es exclusivo, se
+     puede likear a cuantos peleadores se quiera). RLS publica con
+     SELECT/INSERT/DELETE (a diferencia de predictions que solo permite
+     UPDATE para cambiar de voto, aca se permite borrar la fila entera
+     para quitar el like), + realtime.
+   - `apps/web/src/lib/likes.ts`: `fetchLikeCounts()`, conteo server-side
+     (mismo patron que `fetchPredictionTallies` en `matches.ts`, para que
+     no se pueda falsear el conteo desde el cliente).
+   - `apps/web/src/lib/voterId.ts`: `isLocallyLiked`/`setLocalLike`, mismo
+     `voterId` anonimo que predictions pero guardando un SET de ids
+     likeados (no un solo valor por match) en localStorage.
+   - `FighterLikeButton.tsx` (nuevo): corazon SVG reusable, toggle
+     optimista (INSERT o DELETE segun el estado, revierte si falla),
+     animacion "pop" (scale keyframes) al likear/deslikear, prop opcional
+     `onCountChange` para que un padre pueda reordenarse.
+   - `FighterLikesSection.tsx` (nuevo): tab "Likes" de `/pronosticos`,
+     ranking de TODOS los participantes ordenado por likes (recalculado en
+     el cliente via `onCountChange`, sin refetch ni realtime), cada fila
+     con foto+nombre+boton de like.
+   - `pronosticos.astro`: tercer tab "Likes" (mismo patron radio+CSS que
+     ya usaban "1 vs 1"/"Por equipos"). `participants` ahora se carga
+     siempre (antes solo si `votingEnabled`), porque los likes son
+     independientes de la fase de votaciones -- se puede likear a un
+     peleador aunque el host todavia no abrio pronosticos.
+   - Boton de like integrado tambien en: `PredictionCard.tsx` (junto a
+     cada peleador de la tarjeta de voto 1v1), la ficha individual
+     `/peleadores/[id].astro` (junto al nombre en el header) y
+     `/combates/[id].astro` (junto a cada link de nombre al final,
+     pagina de resultado oficial). `TeamPredictionCard.tsx` NO tiene like
+     individual porque vota por equipo completo, no por jugador.
+   - **`/peleadores/[id].astro` ademas se reescribio para votar de verdad**:
+     el bloque de pronostico de esa ficha era 100% read-only (barra +
+     porcentajes calculados a mano via `predictionPctsFor`, ya eliminada).
+     Ahora usa el mismo `PredictionCard` votable que `/pronosticos`, asi
+     que se puede pronosticar (y cambiar el pronostico, y likear) desde la
+     ficha de cualquier peleador, no solo desde `/pronosticos`.
+   - `content.ts`: `tabLikes`, `likesEmptyState` agregados a `PAGES.predictions`.
+
+**Pendiente para el usuario**: correr `bun run scripts/setup-supabase.ts`
+para crear la tabla `fighter_likes` + RLS + realtime contra el proyecto
+real -- sin eso el feature de like va a fallar en runtime (insert/delete
+sobre una tabla que no existe) aunque el codigo compile. No se corrio
+ningun build/typecheck real en esta sesion (todo via filesystem MCP, dos
+herramientas -- `create_file`/`str_replace` del sandbox local vs
+`filesystem:write_file`/`filesystem:edit_file` del MCP -- se confundieron
+al principio y un par de archivos nuevos (`likes.ts`, `FighterLikeButton.tsx`,
+`FighterLikesSection.tsx`) tuvieron que reescribirse con la herramienta
+correcta tras notar que no habian quedado en disco; verificado con
+`filesystem:list_directory` al final que los tres estan presentes).
+Confirmar visual en mobile que el tab "Likes" no rompe con nombres largos,
+y que el `title` (tooltip) de "cambiar tu pronostico" es aceptable como
+unico indicio en desktop (en touch no hay hover/tooltip nativo, el indicio
+real ahi es el estilo visual: borde dorado + check).
+
 ## Sesion 2026-08-21: fix exclusion equipos, multi-1v1 en perfil, pronosticos por equipo
 Tres pedidos del usuario, resueltos via filesystem MCP (sin bash real sobre
 el proyecto en esta sesion):
@@ -2782,6 +2858,95 @@ era el de arriba, no whitelist).
   para confirmar que no quedo ningun tipo roto (prop nueva
   `excludedIds: Set<string>` en `RouletteCoverageHint`, unico caller ya
   la pasa).
+
+## Sesion 2026-08-21 (8): modo equilibrado (combates renidos) en el sorteo 1v1
+- Contexto: la sesion anterior (7, exclusion en la ruleta) fue la ultima
+  registrada aca, pero el usuario pego como "ultimo mensaje del agente" un
+  reporte de una sesion intermedia (multi-1v1 en `peleadores/[id].astro` +
+  `TeamMatchMiniCard.astro` para el bloque de equipo, nunca documentada en
+  este archivo -- posible corte antes de escribir el resumen). Se verifico
+  con `read_file` real que ESE trabajo si estaba aplicado en disco
+  (`TeamMatchMiniCard.astro` existe, `DuelRatingCard`/`MmradarPanel` ya
+  reciben `rivals: DuelRatingCardRival[]`, `peleadores/[id].astro` ya usa
+  `participantMatches`/`rivals` plural) antes de continuar -- no hizo falta
+  rehacer nada de eso, solo confirmar.
+- Pedido nuevo del usuario: "agrega al generador de 1 vs 1 que tenga la
+  funcionalidad de ademas de balanceado poder generar por equilibrio
+  (combates renidos)", explicitando que el modo "desventaja" (unfair) NO
+  hace falta para el 1v1 (a diferencia de `teamBalancer.ts`, que si lo
+  tiene para equipos). Metrica confirmada con el usuario: duelRating con
+  fallback a lolRank ("o una mezcla de ambas") -- exactamente lo que ya
+  resuelve `computeDuelWinProbability` en `duelRating.ts`, se reuso tal
+  cual sin inventar una metrica nueva.
+- **`packages/core/roulette.ts`**: nueva funcion `pickBalancedPair`
+  (exportada, mismo archivo que `pickNextPair` -- NO se toco
+  `pickNextPair`, queda intacto como modo 100% aleatorio). Mismas reglas
+  de cobertura sin repeticion que `pickNextPair` (frescos primero, 1
+  sobrante fuerza repeticion forzosa, cobertura completa reinicia ronda),
+  pero en vez de elegir al azar DENTRO del pool elegible en cada paso,
+  evalua TODOS los pares posibles (`closestPairAmong`, O(n^2) sobre el pool
+  de frescos -- trivial para el tamano real de una velada) y elige el que
+  tenga `playerAWinPct` mas cerca de 50 segun `computeDuelWinProbability`
+  (importado de `duelRating.ts`). Empates dentro de
+  `CLOSENESS_TIE_TOLERANCE` (1 punto) se desempatan al azar via la misma
+  `random` inyectable que ya usaba `pickNextPair`, para no ser 100%
+  determinista con varios pares igual de parejos. Nuevo tipo
+  `RouletteRatingInput` (`{ duelRating, lolRank }`, mismo shape que
+  `DuelInput` de duelRating.ts pero declarado aparte para no acoplar este
+  archivo a la forma completa de `Participant`) -- el caller arma un
+  `Map<string, RouletteRatingInput>` con un entry por participante.
+- **`AdminControl.tsx`**: nuevo estado `rouletteMode: "random" | "balanced"`
+  (en memoria, no persistido -- mismo criterio que `excludedRouletteIds` de
+  la sesion anterior, es una preferencia de "este panel ahora", no del
+  evento). Selector de 2 botones (mismo patron visual que
+  `TeamMatchManager` para su propio selector de modo, pero sin la tercera
+  opcion "unfair") entre el bloque de exclusion y el boton "Emitir
+  sorteo". `triggerRandomMatch` ahora bifurca a `pickBalancedPair` o
+  `pickNextPair` segun `rouletteMode`, armando el `Map` de ratings desde
+  `availableParticipants` (ya filtrado de exclusion) en la misma linea.
+- **`RouletteWheel.tsx`** (`/sorteo`, standalone): mismo selector (mismo
+  copy de `ADMIN_CONTROL`, sin duplicar strings), mismo estado
+  `rouletteMode`, misma bifurcacion en `triggerLocalSpin`. A diferencia de
+  la exclusion de participantes (sesion 7, deliberadamente NO replicada
+  aca por ser control administrativo detras de gate), el modo del sorteo
+  SI se replico -- elegir "quiero combates parejos" no es una accion
+  sensible, es una preferencia de que tan reñido salga el proximo giro,
+  disponible tanto con sesion admin como en el flujo publico.
+- **`packages/core/content.ts`** (`ADMIN_CONTROL`): copy nuevo
+  (`rouletteModeTitle`, `rouletteModeRandom`, `rouletteModeBalanced`,
+  `rouletteModeRandomHint`, `rouletteModeBalancedHint`), reusado tal cual
+  por los dos componentes.
+- Herramientas: exclusivamente `filesystem:edit_file`/`read_file` sobre el
+  proyecto real en `/home/cetrei/Proyectos/Personal/velada_lol` (la ruta
+  correcta -- un primer intento con `/root/Proyectos/...` fue rechazado por
+  el sandbox de filesystem, confirmado con `list_directory` antes de tocar
+  nada). Un desliz real cometido y corregido en esta sesion: una llamada a
+  `bash_tool` ("echo skip") que no debia usarse para este proyecto -- no
+  toco ningun archivo del proyecto real, se descarto de inmediato.
+- Archivos tocados y confirmados con `read_file` posterior:
+  `packages/core/roulette.ts` (nueva funcion + import),
+  `apps/web/src/components/AdminControl.tsx`,
+  `apps/web/src/components/RouletteWheel.tsx`,
+  `packages/core/content.ts` (bloque `ADMIN_CONTROL`).
+- Pendiente para el usuario (sin bash real sobre el proyecto en esta
+  sesion, todo via filesystem MCP): `bun run dev`, entrar a
+  `/gestion-roster-x9f2` (pestana Evento), cambiar a modo "Equilibrado" y
+  confirmar que "Emitir sorteo" arma pares con duelRating/lolRank
+  parecidos entre si (mas notorio con roster real con rangos variados).
+  Confirmar que el modo "Aleatorio" sigue funcionando exactamente igual
+  que antes (no se toco `pickNextPair`). Entrar a `/sorteo` (flujo
+  standalone) y repetir lo mismo con "Girar Ruleta". `bun run
+  build`/typecheck del editor para confirmar que no quedo ningun tipo roto
+  (imports nuevos `pickBalancedPair`/`RouletteRatingInput` en dos
+  componentes, import nuevo de `computeDuelWinProbability` dentro de
+  `roulette.ts` -- riesgo de dependencia circular entre `roulette.ts` y
+  `duelRating.ts` si `duelRating.ts` alguna vez importa algo de
+  `roulette.ts`, hoy no lo hace pero vale la pena confirmar que el build
+  no tira warning). Idealmente un test unitario para `pickBalancedPair`
+  analogo a los que ya deberian existir para `pickNextPair` (ver
+  `scripts/test-roulette.test.ts` de sesion 5) -- no se creo en esta
+  sesion, no se pudo correr `bun test` real (sin bash con acceso al
+  proyecto, todo via filesystem MCP).
 
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones

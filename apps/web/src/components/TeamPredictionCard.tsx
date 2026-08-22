@@ -18,6 +18,7 @@ export default function TeamPredictionCard({ teamMatch, teamA, teamB, initialTal
   const [votedFor, setVotedFor] = useState<"A" | "B" | null>(null);
   const [isVoting, setIsVoting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [justVotedFor, setJustVotedFor] = useState<"A" | "B" | null>(null);
 
   useEffect(() => {
     if (!teamMatch.id) return;
@@ -30,7 +31,9 @@ export default function TeamPredictionCard({ teamMatch, teamA, teamB, initialTal
   const bPct = total > 0 ? Math.round((100 - aPct) * 10) / 10 : 50;
 
   async function vote(team: "A" | "B") {
-    if (!teamMatch.id || isVoting || votedFor) return;
+    // Igual que en PredictionCard: se puede cambiar de equipo pronosticado
+    // las veces que se quiera, solo se ignora tocar la opcion ya elegida.
+    if (!teamMatch.id || isVoting || team === votedFor) return;
 
     const supabase = getSupabaseClient();
     if (!supabase) {
@@ -38,6 +41,7 @@ export default function TeamPredictionCard({ teamMatch, teamA, teamB, initialTal
       return;
     }
 
+    const previousVote = votedFor;
     setIsVoting(true);
     setError(null);
     const voterId = getVoterId();
@@ -58,12 +62,18 @@ export default function TeamPredictionCard({ teamMatch, teamA, teamB, initialTal
 
     setLocalVote(teamMatch.id, team);
     setVotedFor(team);
-    setTally((prev) => ({
-      ...prev,
-      totalVotes: prev.totalVotes + 1,
-      teamAVotes: team === "A" ? prev.teamAVotes + 1 : prev.teamAVotes,
-      teamBVotes: team === "B" ? prev.teamBVotes + 1 : prev.teamBVotes
-    }));
+    setJustVotedFor(team);
+    window.setTimeout(() => setJustVotedFor(null), 500);
+
+    setTally((prev) => {
+      let { teamAVotes, teamBVotes, totalVotes } = prev;
+      if (previousVote === "A") teamAVotes -= 1;
+      if (previousVote === "B") teamBVotes -= 1;
+      if (!previousVote) totalVotes += 1;
+      if (team === "A") teamAVotes += 1;
+      if (team === "B") teamBVotes += 1;
+      return { ...prev, teamAVotes, teamBVotes, totalVotes };
+    });
   }
 
   return (
@@ -79,7 +89,8 @@ export default function TeamPredictionCard({ teamMatch, teamA, teamB, initialTal
           members={teamA}
           pct={aPct}
           isPicked={votedFor === "A"}
-          disabled={Boolean(votedFor) || isVoting}
+          justVoted={justVotedFor === "A"}
+          isVoting={isVoting}
           onClick={() => vote("A")}
         />
         <TeamVoteButton
@@ -87,7 +98,8 @@ export default function TeamPredictionCard({ teamMatch, teamA, teamB, initialTal
           members={teamB}
           pct={bPct}
           isPicked={votedFor === "B"}
-          disabled={Boolean(votedFor) || isVoting}
+          justVoted={justVotedFor === "B"}
+          isVoting={isVoting}
           onClick={() => vote("B")}
           align="right"
         />
@@ -105,7 +117,6 @@ export default function TeamPredictionCard({ teamMatch, teamA, teamB, initialTal
       </div>
 
       {error && <p className="text-red-400 text-xs mt-3">{error}</p>}
-      {votedFor && <p className="text-lol-blue text-xs mt-3 uppercase tracking-wide font-bold">{copy.votedLabel}</p>}
     </div>
   );
 }
@@ -115,7 +126,8 @@ function TeamVoteButton({
   members,
   pct,
   isPicked,
-  disabled,
+  justVoted,
+  isVoting,
   onClick,
   align = "left"
 }: {
@@ -123,7 +135,8 @@ function TeamVoteButton({
   members: Participant[];
   pct: number;
   isPicked: boolean;
-  disabled: boolean;
+  justVoted: boolean;
+  isVoting: boolean;
   onClick: () => void;
   align?: "left" | "right";
 }) {
@@ -131,12 +144,26 @@ function TeamVoteButton({
     <button
       type="button"
       onClick={onClick}
-      disabled={disabled}
-      className={`flex-1 text-left disabled:cursor-default ${
+      disabled={isVoting}
+      title={isPicked ? "Tocá el otro equipo para cambiar tu pronóstico" : "Tocá para pronosticar a este equipo"}
+      className={`team-vote-btn flex-1 text-left disabled:cursor-default rounded-lg p-3 -m-1 border-2 transition-all duration-200 ${
         align === "right" ? "text-right" : ""
-      } ${!disabled ? "hover:opacity-80" : ""} transition-opacity`}
+      } ${
+        isPicked
+          ? "border-lol-gold bg-lol-gold/10"
+          : "border-transparent hover:border-lol-border hover:bg-white/5"
+      } ${justVoted ? "team-vote-pulse" : ""}`}
     >
-      <p className={`text-white font-bold text-sm mb-1 ${isPicked ? "text-lol-gold" : ""}`}>{label}</p>
+      <div className={`flex items-center gap-1.5 mb-1 ${align === "right" ? "flex-row-reverse" : ""}`}>
+        <p className={`text-white font-bold text-sm ${isPicked ? "text-lol-gold" : ""}`}>{label}</p>
+        {isPicked && (
+          <span className="w-4 h-4 rounded-full bg-lol-gold flex items-center justify-center check-pop shrink-0">
+            <svg viewBox="0 0 24 24" className="w-2.5 h-2.5" fill="none" stroke="#0A1428" strokeWidth="3">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M20 6L9 17l-5-5" />
+            </svg>
+          </span>
+        )}
+      </div>
       <p
         className={`font-display font-bold text-xl sm:text-2xl ${
           align === "right" ? "text-lol-blue" : "text-lol-gold"
@@ -151,6 +178,27 @@ function TeamVoteButton({
           </li>
         ))}
       </ul>
+      <style>{`
+        @keyframes teamVotePulse {
+          0% { transform: scale(1); }
+          40% { transform: scale(1.03); }
+          100% { transform: scale(1); }
+        }
+        .team-vote-pulse {
+          animation: teamVotePulse 0.4s ease-out;
+        }
+        @keyframes checkPop {
+          0% { transform: scale(0); opacity: 0; }
+          60% { transform: scale(1.3); opacity: 1; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        .check-pop {
+          animation: checkPop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .team-vote-btn:not(:disabled) {
+          cursor: pointer;
+        }
+      `}</style>
     </button>
   );
 }

@@ -3,7 +3,7 @@ import { actions } from "astro:actions";
 import type { Participant, MmradarPerformanceScores, MmradarTitle } from "@velada/core";
 import { emitMmradarUpdate } from "../lib/mmradarUpdateBus";
 import MmradarPerformanceCard from "./MmradarPerformanceCard";
-import DuelRatingCard from "./DuelRatingCard";
+import DuelRatingCard, { type DuelRatingCardRival } from "./DuelRatingCard";
 
 type ParticipantMmradarData = Pick<
   Participant,
@@ -24,12 +24,8 @@ type ParticipantMmradarData = Pick<
   | "memeIconUrl"
 >;
 
-/** Rival ya asignado en la ruleta (ver `rival` en peleadores/[id].astro), pasado tal cual para calcular la probabilidad de un 1v1. */
-export interface DuelRivalData {
-  name: string;
-  duelRating?: number | null;
-  lolRank?: string | null;
-}
+/** Rival ya asignado en la ruleta (ver `rivals` en peleadores/[id].astro), pasado tal cual para calcular la probabilidad de un 1v1. */
+export type DuelRivalData = DuelRatingCardRival;
 
 interface MmradarPanelProps {
   participant: ParticipantMmradarData;
@@ -37,8 +33,14 @@ interface MmradarPanelProps {
   canUpdate: boolean;
   /** Notifica al padre (PlayerCardLive) cuando hay datos nuevos, ver mmradarUpdateBus. */
   onUpdated?: (data: { performanceRank: string | null; performanceScores: MmradarPerformanceScores | null }) => void;
-  /** Rival ya asignado (ver peleadores/[id].astro) para mostrar probabilidad de 1v1 -- opcional. */
-  rival?: DuelRivalData | null;
+  /**
+   * Rivales ya asignados (ver peleadores/[id].astro) para mostrar
+   * probabilidad de cada 1v1 -- un peleador puede tener varios combates
+   * 1v1 (pedido del usuario 2026-08-21), asi que esto es un array. Antes
+   * era un `rival` unico que solo mostraba el primer combate del
+   * peleador, escondiendo el resto.
+   */
+  rivals?: DuelRivalData[] | null;
 }
 
 type StatusMessage = { type: "success" | "error"; text: string } | null;
@@ -59,7 +61,7 @@ function errorMessage(err: unknown): string {
  * (memeTitles/memeIconUrl). El render vive centralizado en
  * MmradarPerformanceCard, compartido con el preview de /mi-perfil.
  */
-export default function MmradarPanel({ participant, canUpdate, onUpdated, rival }: MmradarPanelProps) {
+export default function MmradarPanel({ participant, canUpdate, onUpdated, rivals }: MmradarPanelProps) {
   const [scores, setScores] = useState(participant.performanceScores ?? null);
   const [performanceRank, setPerformanceRank] = useState(participant.performanceRank ?? null);
   const [titles, setTitles] = useState(participant.titles ?? null);
@@ -154,7 +156,7 @@ export default function MmradarPanel({ participant, canUpdate, onUpdated, rival 
         duelConfidence={duelConfidence}
         name={participant.name}
         lolRank={participant.lolRank}
-        rival={rival}
+        rivals={rivals}
       />
     </>
   );

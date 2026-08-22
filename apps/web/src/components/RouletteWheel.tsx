@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import type { Match, Participant, SpinStartPayload } from "@velada/core";
-import { pickNextPair, countRandomAppearances, PAGES } from "@velada/core";
+import { pickNextPair, pickBalancedPair, countRandomAppearances, PAGES, ADMIN_CONTROL, type RouletteRatingInput } from "@velada/core";
 import { getSupabaseClient, ROULETTE_CHANNEL, SPIN_START_EVENT } from "../lib/supabase";
 import { hasUnseenRaffleResults, markRaffleResultsSeen } from "../lib/revealTracking";
 import SequentialReveal from "./SequentialReveal";
@@ -140,6 +140,14 @@ export default function RouletteWheel({ participants, rouletteUnlocked, existing
   const [pastPairs, setPastPairs] = useState<RaffledPair[]>(() =>
     resolvePairsFromMatches(existingMatches, participants)
   );
+  // Modo del sorteo -- mismo criterio que AdminControl (pedido del usuario
+  // 2026-08-21: modo "equilibrado" ademas del aleatorio, sin modo
+  // "desventaja"). Este flujo es publico (sin gate de admin), a diferencia
+  // de AdminControl que vive detras del login del panel -- el selector se
+  // muestra igual, elegir el modo del proximo giro no es una accion
+  // administrativa sensible como si lo es excluir participantes (por eso
+  // ESE control no se replico aca, ver AGENT.md sesion 7).
+  const [rouletteMode, setRouletteMode] = useState<"random" | "balanced">("random");
 
   // Presentacion secuencial en la primera visita despues de que el sorteo
   // ya salio (pedido del usuario 2026-08-21): se calcula UNA sola vez al
@@ -299,10 +307,19 @@ export default function RouletteWheel({ participants, rouletteUnlocked, existing
       player2Id: p.player2.id,
       isRandom: true
     }));
-    const pair = pickNextPair(
-      participants.map((p) => p.id),
-      existingAsMatches
-    );
+    const pair =
+      rouletteMode === "balanced"
+        ? pickBalancedPair(
+            participants.map((p) => p.id),
+            existingAsMatches,
+            new Map<string, RouletteRatingInput>(
+              participants.map((p) => [p.id, { duelRating: p.duelRating, lolRank: p.lolRank }])
+            )
+          )
+        : pickNextPair(
+            participants.map((p) => p.id),
+            existingAsMatches
+          );
     if (!pair) {
       isSpinningRef.current = false;
       return;
@@ -542,6 +559,36 @@ export default function RouletteWheel({ participants, rouletteUnlocked, existing
           </h3>
           <p className="text-sm text-slate-400 mb-6">
             Presiona para emparejar aleatoriamente a los combatientes.
+          </p>
+
+          <div className="grid grid-cols-2 gap-2 mb-4">
+            <button
+              type="button"
+              onClick={() => setRouletteMode("random")}
+              disabled={isSpinning}
+              className={`px-4 py-3 rounded border text-sm font-bold uppercase tracking-wide transition-all disabled:opacity-50 ${
+                rouletteMode === "random"
+                  ? "bg-lol-gold/10 border-lol-gold text-lol-gold"
+                  : "bg-lol-darkBg border-lol-border text-slate-400 hover:border-lol-gold/50"
+              }`}
+            >
+              {ADMIN_CONTROL.rouletteModeRandom}
+            </button>
+            <button
+              type="button"
+              onClick={() => setRouletteMode("balanced")}
+              disabled={isSpinning}
+              className={`px-4 py-3 rounded border text-sm font-bold uppercase tracking-wide transition-all disabled:opacity-50 ${
+                rouletteMode === "balanced"
+                  ? "bg-lol-gold/10 border-lol-gold text-lol-gold"
+                  : "bg-lol-darkBg border-lol-border text-slate-400 hover:border-lol-gold/50"
+              }`}
+            >
+              {ADMIN_CONTROL.rouletteModeBalanced}
+            </button>
+          </div>
+          <p className="text-slate-500 text-xs mb-6 -mt-2">
+            {rouletteMode === "balanced" ? ADMIN_CONTROL.rouletteModeBalancedHint : ADMIN_CONTROL.rouletteModeRandomHint}
           </p>
 
           <button

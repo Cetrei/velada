@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import type { Match, Participant, SpinStartPayload } from "@velada/core";
-import { ADMIN_CONTROL, pickNextPair, countRandomAppearances } from "@velada/core";
+import { ADMIN_CONTROL, pickNextPair, pickBalancedPair, countRandomAppearances, type RouletteRatingInput } from "@velada/core";
 import { getSupabaseClient, ROULETTE_CHANNEL, SPIN_START_EVENT } from "../lib/supabase";
 
 interface AdminControlProps {
@@ -68,6 +68,13 @@ export default function AdminControl({
   // recargas de pagina a proposito -- es una exclusion de "esta ronda",
   // no una propiedad del participante).
   const [excludedRouletteIds, setExcludedRouletteIds] = useState<Set<string>>(new Set());
+  // Modo del sorteo 1v1 -- pedido del usuario 2026-08-21: ademas del
+  // aleatorio puro (pickNextPair), poder generar por equilibrio (combates
+  // renidos, pickBalancedPair) usando duelRating con fallback a lolRank
+  // (ver computeDuelWinProbability en duelRating.ts). Sin modo "unfair"
+  // aca -- a diferencia del balanceador de EQUIPOS (TeamMatchManager), el
+  // usuario pidio explicitamente que ese no hace falta para el 1v1.
+  const [rouletteMode, setRouletteMode] = useState<"random" | "balanced">("random");
   const [startTime, setStartTime] = useState(initialStartTime);
   const [startTimeInput, setStartTimeInput] = useState(toDatetimeLocalValue(initialStartTime));
   const [status, setStatus] = useState<StatusMessage>(null);
@@ -187,10 +194,19 @@ export default function AdminControl({
     // participante excluido no puede salir sorteado, pero SI sigue contando
     // para la cobertura de matches previos en los que ya haya salido antes
     // de ser excluido (pickNextPair solo mira el pool que se le pasa).
-    const pair = pickNextPair(
-      availableParticipants.map((p) => p.id),
-      matches
-    );
+    const pair =
+      rouletteMode === "balanced"
+        ? pickBalancedPair(
+            availableParticipants.map((p) => p.id),
+            matches,
+            new Map<string, RouletteRatingInput>(
+              availableParticipants.map((p) => [p.id, { duelRating: p.duelRating, lolRank: p.lolRank }])
+            )
+          )
+        : pickNextPair(
+            availableParticipants.map((p) => p.id),
+            matches
+          );
     if (!pair) {
       setStatus({ type: "error", text: "No se pudo armar un par -- revisa el roster." });
       isEmittingRef.current = false;
@@ -405,6 +421,39 @@ export default function AdminControl({
               </label>
             ))}
           </div>
+        </div>
+
+        <div className="mb-4">
+          <span className="text-sm uppercase text-slate-400 font-bold block mb-2">
+            {ADMIN_CONTROL.rouletteModeTitle}
+          </span>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setRouletteMode("random")}
+              className={`px-4 py-3 rounded border text-sm font-bold uppercase tracking-wide transition-all ${
+                rouletteMode === "random"
+                  ? "bg-lol-gold/10 border-lol-gold text-lol-gold"
+                  : "bg-lol-darkBg border-lol-border text-slate-400 hover:border-lol-gold/50"
+              }`}
+            >
+              {ADMIN_CONTROL.rouletteModeRandom}
+            </button>
+            <button
+              type="button"
+              onClick={() => setRouletteMode("balanced")}
+              className={`px-4 py-3 rounded border text-sm font-bold uppercase tracking-wide transition-all ${
+                rouletteMode === "balanced"
+                  ? "bg-lol-gold/10 border-lol-gold text-lol-gold"
+                  : "bg-lol-darkBg border-lol-border text-slate-400 hover:border-lol-gold/50"
+              }`}
+            >
+              {ADMIN_CONTROL.rouletteModeBalanced}
+            </button>
+          </div>
+          <p className="text-slate-500 text-xs mt-2">
+            {rouletteMode === "balanced" ? ADMIN_CONTROL.rouletteModeBalancedHint : ADMIN_CONTROL.rouletteModeRandomHint}
+          </p>
         </div>
 
         <button

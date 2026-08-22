@@ -212,6 +212,21 @@ CREATE TABLE IF NOT EXISTS team_predictions (
   PRIMARY KEY (team_match_id, voter_id)
 );
 
+-- Likes por peleador: cualquier voter_id anonimo (mismo esquema que
+-- predictions/team_predictions, ver voterId.ts) puede likear a cuantos
+-- peleadores quiera -- no es un voto exclusivo como las predicciones, por
+-- eso NO tiene UNIQUE compuesto sobre un solo ganador, sino que cada fila
+-- es simplemente "este voter likeo a este participante" y se borra la fila
+-- entera para quitar el like (ver toggle en lib/likes.ts). Pedido del
+-- usuario 2026-08-21: feature de favorito/like por peleador, con tab
+-- propio en /pronosticos ordenado por cantidad de likes.
+CREATE TABLE IF NOT EXISTS fighter_likes (
+  participant_id TEXT NOT NULL,
+  voter_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (participant_id, voter_id)
+);
+
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -241,6 +256,13 @@ BEGIN
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE team_predictions;
   END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND tablename = 'fighter_likes'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE fighter_likes;
+  END IF;
 END $$;
 
 -- RLS deshabilitado en todo: sin Supabase Auth no hay auth.uid() con el
@@ -259,6 +281,7 @@ ALTER TABLE participant_users DISABLE ROW LEVEL SECURITY;
 ALTER TABLE sessions DISABLE ROW LEVEL SECURITY;
 ALTER TABLE predictions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE team_predictions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE fighter_likes ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Lectura publica de predictions" ON predictions;
 CREATE POLICY "Lectura publica de predictions" ON predictions FOR SELECT USING (true);
@@ -277,6 +300,19 @@ CREATE POLICY "Voto publico anonimo team_predictions" ON team_predictions FOR IN
 
 DROP POLICY IF EXISTS "Cambio de voto publico anonimo team_predictions" ON team_predictions;
 CREATE POLICY "Cambio de voto publico anonimo team_predictions" ON team_predictions FOR UPDATE USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Lectura publica de fighter_likes" ON fighter_likes;
+CREATE POLICY "Lectura publica de fighter_likes" ON fighter_likes FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Like publico anonimo" ON fighter_likes;
+CREATE POLICY "Like publico anonimo" ON fighter_likes FOR INSERT WITH CHECK (true);
+
+-- A diferencia de predictions (que solo permite UPDATE para cambiar de
+-- voto), aca se permite DELETE: el like es un toggle on/off, no una
+-- eleccion exclusiva -- quitar el like borra la fila entera en vez de
+-- pisarla.
+DROP POLICY IF EXISTS "Quitar like publico anonimo" ON fighter_likes;
+CREATE POLICY "Quitar like publico anonimo" ON fighter_likes FOR DELETE USING (true);
 
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('participant-photos', 'participant-photos', true)

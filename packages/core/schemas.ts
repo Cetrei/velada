@@ -192,6 +192,17 @@ export const TeamPredictionTallySchema = z.object({
   totalVotes: z.number().int().nonnegative()
 });
 
+export const FighterLikeSchema = z.object({
+  participantId: z.string().min(1),
+  voterId: z.string().min(1),
+  createdAt: z.string().datetime().optional()
+});
+
+export const FighterLikeCountSchema = z.object({
+  participantId: z.string().min(1),
+  likes: z.number().int().nonnegative()
+});
+
 export type Participant = z.infer<typeof ParticipantSchema>;
 export type ParticipantStat = z.infer<typeof ParticipantStatSchema>;
 export type ParticipantStats = z.infer<typeof ParticipantStatsSchema>;
@@ -207,3 +218,5 @@ export type TeamPrediction = z.infer<typeof TeamPredictionSchema>;
 export type TeamPredictionTally = z.infer<typeof TeamPredictionTallySchema>;
 export type MmradarPerformanceScores = z.infer<typeof MmradarPerformanceScoresSchema>;
 export type MmradarTitle = z.infer<typeof MmradarTitleSchema>;
+export type FighterLike = z.infer<typeof FighterLikeSchema>;
+export type FighterLikeCount = z.infer<typeof FighterLikeCountSchema>;

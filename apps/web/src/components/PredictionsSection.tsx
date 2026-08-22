@@ -6,11 +6,12 @@ interface PredictionsSectionProps {
   matches: Match[];
   participantsById: Record<string, Participant>;
   tallies: Record<string, PredictionTally>;
+  likeCounts?: Record<string, number>;
 }
 
 const copy = PAGES.predictions;
 
-export default function PredictionsSection({ matches, participantsById, tallies }: PredictionsSectionProps) {
+export default function PredictionsSection({ matches, participantsById, tallies, likeCounts }: PredictionsSectionProps) {
   const renderable = matches
     .filter((m) => m.id)
     .map((m) => ({
@@ -42,6 +43,7 @@ export default function PredictionsSection({ matches, participantsById, tallies 
               totalVotes: 0
             }
           }
+          initialLikes={likeCounts}
         />
       ))}
     </div>

@@ -5,6 +5,8 @@ import VoteTallyDisplay from "../../components/VoteTallyDisplay.astro";
 import FighterHalf from "../../components/FighterHalf.astro";
 import { loadParticipants } from "../../lib/loadParticipants";
 import { fetchMatches, fetchPredictionTallies } from "../../lib/matches";
+import { fetchLikeCounts } from "../../lib/likes";
+import FighterLikeButton from "../../components/FighterLikeButton";
 import { PAGES } from "@velada/core";
 
 const { id } = Astro.params;
@@ -34,6 +36,7 @@ const tally = match.id ? talliesMap.get(match.id) : undefined;
 const total = tally?.totalVotes ?? 0;
 const p1Pct = total > 0 ? Math.round((tally!.player1Votes / total) * 1000) / 10 : 50;
 const p2Pct = total > 0 ? Math.round((100 - p1Pct) * 10) / 10 : 50;
+const likeCounts = await fetchLikeCounts();
 
 const fallbackPhoto = (p: typeof player1) =>
   `https://placehold.co/100x100/0A1428/C8AA6E?text=${encodeURIComponent(p.nickname[0] ?? "?")}`;
@@ -116,18 +119,24 @@ const pageLabel = `${player1.name} vs ${player2.name}`;
       />
 
       <div class="grid grid-cols-2 gap-4 mt-8">
-        <a
-          href={`/peleadores/${player1.id}`}
-          class="text-center bg-lol-cardBg border border-lol-border hover:border-lol-gold transition-colors py-3 text-sm text-white font-bold uppercase tracking-wide"
-        >
-          {player1.name}
-        </a>
-        <a
-          href={`/peleadores/${player2.id}`}
-          class="text-center bg-lol-cardBg border border-lol-border hover:border-lol-blue transition-colors py-3 text-sm text-white font-bold uppercase tracking-wide"
-        >
-          {player2.name}
-        </a>
+        <div class="flex flex-col items-center gap-2">
+          <a
+            href={`/peleadores/${player1.id}`}
+            class="w-full text-center bg-lol-cardBg border border-lol-border hover:border-lol-gold transition-colors py-3 text-sm text-white font-bold uppercase tracking-wide"
+          >
+            {player1.name}
+          </a>
+          <FighterLikeButton client:load participantId={player1.id} initialLikes={likeCounts[player1.id] ?? 0} />
+        </div>
+        <div class="flex flex-col items-center gap-2">
+          <a
+            href={`/peleadores/${player2.id}`}
+            class="w-full text-center bg-lol-cardBg border border-lol-border hover:border-lol-blue transition-colors py-3 text-sm text-white font-bold uppercase tracking-wide"
+          >
+            {player2.name}
+          </a>
+          <FighterLikeButton client:load participantId={player2.id} initialLikes={likeCounts[player2.id] ?? 0} />
+        </div>
       </div>
     </div>
   </section>

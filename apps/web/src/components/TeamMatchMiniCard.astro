@@ -1,0 +1,323 @@
+---
+import type { Participant, TeamMatch } from "@velada/core";
+import { rankIconPath, PAGES } from "@velada/core";
+
+/**
+ * Tarjeta compacta de combate por equipos para la ficha de un peleador
+ * (/peleadores/[id]) -- pedido del usuario 2026-08-21: el bloque de
+ * equipo ahi era "todo simplon" (dos TeamRoster.astro genericos, sin
+ * distinguir cual es el equipo del propio peleador ni cual el rival) y
+ * no dejaba ir al combate haciendo click en el componente completo, a
+ * diferencia del 1v1 (MatchResultCard.astro) que si.
+ *
+ * Reusa el mismo shell 100% clickeable que MatchResultCard/
+ * TeamMatchResultCard (Wrapper "a"/"div" segun linkToDetail + href),
+ * pero muestra el roster como avatares compactos en fila en vez del
+ * roster completo estilo TeamRosterDetailed (eso queda para la pagina de
+ * detalle en si, /combates/equipo/[id] -- aca es solo un resumen). El
+ * lado que contiene a `participant` siempre se etiqueta "Tu equipo" y va
+ * primero, sin importar si es el equipo A o B del TeamMatch original --
+ * la ficha es DE ese peleador, tiene que leerse desde su perspectiva.
+ */
+interface Props {
+  teamMatch: TeamMatch;
+  participantsById: Record<string, Participant>;
+  /** El peleador cuya ficha es esta -- decide cual lado se pinta como "Tu equipo" y se destaca dentro del roster. */
+  participantId: string;
+  /** Si es false, la tarjeta no es clickeable. Default true. */
+  linkToDetail?: boolean;
+}
+
+const { teamMatch, participantsById, participantId, linkToDetail = true } = Astro.props;
+const copy = PAGES.matches;
+
+const isInTeamA = teamMatch.teamAIds.includes(participantId);
+const ownIds = isInTeamA ? teamMatch.teamAIds : teamMatch.teamBIds;
+const rivalIds = isInTeamA ? teamMatch.teamBIds : teamMatch.teamAIds;
+const ownWon = teamMatch.winnerTeam ? (isInTeamA ? teamMatch.winnerTeam === "A" : teamMatch.winnerTeam === "B") : null;
+const rivalWon = teamMatch.winnerTeam === null || teamMatch.winnerTeam === undefined ? null : !ownWon;
+
+const ownTeam = ownIds.map((id) => participantsById[id]).filter((p): p is Participant => Boolean(p));
+const rivalTeam = rivalIds.map((id) => participantsById[id]).filter((p): p is Participant => Boolean(p));
+
+const fallbackPhoto = (p: Participant) =>
+  `https://placehold.co/100x100/0A1428/C8AA6E?text=${encodeURIComponent(p.nickname[0] ?? "?")}`;
+
+const href = linkToDetail && teamMatch.id ? `/combates/equipo/${teamMatch.id}` : null;
+const Wrapper = href ? "a" : "div";
+---
+
+<Wrapper
+  href={href ?? undefined}
+  class={`team-mini-card bg-lol-cardBg border border-lol-border overflow-hidden clip-edges block ${href ? "team-mini-card-clickable" : ""}`}
+>
+  {teamMatch.name && <p class="team-mini-name">{teamMatch.name}</p>}
+
+  <div class="team-mini-sides">
+    <div class={`team-mini-side side-own ${ownWon ? "is-winner" : ""}`}>
+      <div class="team-mini-side-header">
+        <span class="team-mini-side-label">
+          Tu equipo
+          {ownWon && <span class="team-mini-crown">★</span>}
+        </span>
+        <span class="team-mini-side-count">{ownTeam.length}</span>
+      </div>
+      <div class="team-mini-avatars">
+        {
+          ownTeam.map((p) => (
+            <div class={`team-mini-avatar-wrap ${p.id === participantId ? "is-self" : ""}`} title={p.name}>
+              <img
+                src={p.photo ?? fallbackPhoto(p)}
+                alt={p.name}
+                loading="lazy"
+                class="team-mini-avatar"
+              />
+              {p.id === participantId && <span class="team-mini-self-dot" />}
+            </div>
+          ))
+        }
+      </div>
+    </div>
+
+    <div class="team-mini-vs">
+      <span>VS</span>
+    </div>
+
+    <div class={`team-mini-side side-rival ${rivalWon ? "is-winner" : ""}`}>
+      <div class="team-mini-side-header">
+        <span class="team-mini-side-count">{rivalTeam.length}</span>
+        <span class="team-mini-side-label">
+          {rivalWon && <span class="team-mini-crown">★</span>}
+          Rivales
+        </span>
+      </div>
+      <div class="team-mini-avatars team-mini-avatars-right">
+        {
+          rivalTeam.map((p) => (
+            <div class="team-mini-avatar-wrap" title={p.name}>
+              <img
+                src={p.photo ?? fallbackPhoto(p)}
+                alt={p.name}
+                loading="lazy"
+                class="team-mini-avatar"
+              />
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </div>
+
+  <div class="team-mini-footer">
+    {
+      teamMatch.winnerTeam ? (
+        <span class={`team-mini-result ${ownWon ? "is-win" : "is-loss"}`}>
+          {ownWon ? "Victoria" : "Derrota"}
+        </span>
+      ) : (
+        <span class="team-mini-result is-pending">{copy.pendingResult}</span>
+      )
+    }
+    {href && <span class="team-mini-cta">{copy.viewDetailCta} →</span>}
+  </div>
+</Wrapper>
+
+<style>
+  .team-mini-card {
+    display: block;
+    text-decoration: none;
+    padding: 16px;
+  }
+
+  .team-mini-card-clickable {
+    cursor: pointer;
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+  }
+
+  .team-mini-card-clickable:hover {
+    transform: translateY(-3px);
+    border-color: rgba(200, 170, 110, 0.6);
+    box-shadow: 0 12px 24px rgba(200, 170, 110, 0.15);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .team-mini-card-clickable:hover {
+      transform: none;
+    }
+  }
+
+  .team-mini-name {
+    margin: 0 0 12px;
+    text-align: center;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #6b6555;
+  }
+
+  .team-mini-sides {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .team-mini-side {
+    flex: 1;
+    min-width: 0;
+    --side-color: #C8AA6E;
+    --side-color-soft: rgba(200, 170, 110, 0.35);
+    padding: 10px;
+    border-radius: 4px;
+    background: rgba(200, 170, 110, 0.05);
+    border: 1px solid transparent;
+  }
+
+  .side-rival {
+    --side-color: #4FC3E8;
+    --side-color-soft: rgba(79, 195, 232, 0.35);
+    background: rgba(79, 195, 232, 0.05);
+  }
+
+  .team-mini-side.is-winner {
+    border-color: var(--side-color-soft);
+    box-shadow: 0 0 20px -8px var(--side-color);
+  }
+
+  .team-mini-side-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .side-rival .team-mini-side-header {
+    flex-direction: row-reverse;
+  }
+
+  .team-mini-side-label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--side-color);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+  }
+
+  .team-mini-crown {
+    color: var(--side-color);
+    text-shadow: 0 0 10px var(--side-color-soft);
+  }
+
+  .team-mini-side-count {
+    font-size: 0.62rem;
+    color: #6b6555;
+  }
+
+  .team-mini-avatars {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .team-mini-avatars-right {
+    justify-content: flex-end;
+  }
+
+  .team-mini-avatar-wrap {
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .team-mini-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--side-color-soft);
+  }
+
+  .team-mini-avatar-wrap.is-self .team-mini-avatar {
+    border-color: var(--side-color);
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.4), 0 0 12px var(--side-color-soft);
+  }
+
+  .team-mini-self-dot {
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--side-color);
+    border: 2px solid var(--lol-card-bg, #0A1428);
+  }
+
+  .team-mini-vs {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-display, inherit);
+    font-weight: 700;
+    font-size: 0.7rem;
+    color: #a09b8c;
+    padding-top: 20px;
+  }
+
+  .team-mini-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(200, 170, 110, 0.15);
+  }
+
+  .team-mini-result {
+    font-family: var(--font-display, inherit);
+    font-weight: 700;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .team-mini-result.is-win {
+    color: #C8AA6E;
+  }
+
+  .team-mini-result.is-loss {
+    color: #4FC3E8;
+  }
+
+  .team-mini-result.is-pending {
+    color: #6b6555;
+    font-weight: 400;
+  }
+
+  .team-mini-cta {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #6b6555;
+    opacity: 0;
+    transform: translateX(-4px);
+    transition: opacity 0.2s ease, transform 0.2s ease, color 0.2s ease;
+  }
+
+  .team-mini-card-clickable:hover .team-mini-cta {
+    opacity: 1;
+    transform: translateX(0);
+    color: #C8AA6E;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .team-mini-cta {
+      transition: none;
+    }
+  }
+</style>

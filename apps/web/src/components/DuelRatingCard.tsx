@@ -1,18 +1,29 @@
 import { DUEL_RATING_EXPLANATION, computeDuelWinProbability, type DuelInput } from "@velada/core";
 import InfoModal from "./InfoModal";
 
+export interface DuelRatingCardRival {
+  name: string;
+  duelRating?: number | null;
+  lolRank?: string | null;
+  /** Id del combate 1v1 contra este rival, para linkear a /combates/[id] -- ver peleadores/[id].astro. Sin id la fila no es clickeable. */
+  matchId?: string | null;
+}
+
 export interface DuelRatingCardProps {
   /** Rating 0-100 ya cacheado (o null si no hubo partidas suficientes). */
   duelRating?: number | null;
   duelConfidence?: number | null;
-  /** Nombre a mostrar para este peleador en la comparacion contra el rival. */
+  /** Nombre a mostrar para este peleador en la comparacion contra el/los rival(es). */
   name?: string | null;
-  /** Rival ya asignado (ver `rival` en peleadores/[id].astro) -- opcional, sin rival solo se muestra el rating propio. */
-  rival?: {
-    name: string;
-    duelRating?: number | null;
-    lolRank?: string | null;
-  } | null;
+  /**
+   * Rivales ya asignados (ver `rivals` en peleadores/[id].astro) -- un
+   * peleador puede tener varios 1v1 (pedido del usuario 2026-08-21: "cada
+   * jugador puede tener varios 1 vs 1"), asi que esto es un array, no un
+   * rival unico. Sin rivales solo se muestra el rating propio. Cada fila
+   * es clickeable hacia /combates/[id] si trae matchId, mismo patron que
+   * MatchResultCard.astro.
+   */
+  rivals?: DuelRatingCardRival[] | null;
   /** Fallback por lolRank cuando este peleador todavia no tiene duelRating calculado (ver computeDuelWinProbability). */
   lolRank?: string | null;
   size?: "full" | "compact";
@@ -24,7 +35,7 @@ export default function DuelRatingCard({
   duelRating,
   duelConfidence,
   name,
-  rival,
+  rivals,
   lolRank,
   size = "full"
 }: DuelRatingCardProps) {
@@ -33,13 +44,12 @@ export default function DuelRatingCard({
   const compact = size === "compact";
   const lowConfidence = duelConfidence !== null && duelConfidence !== undefined && duelConfidence < LOW_CONFIDENCE_THRESHOLD;
 
-  let probability: { selfPct: number; rivalPct: number } | null = null;
-  if (rival) {
-    const selfInput: DuelInput = { duelRating, lolRank };
+  const selfInput: DuelInput = { duelRating, lolRank };
+  const matchups = (rivals ?? []).map((rival) => {
     const rivalInput: DuelInput = { duelRating: rival.duelRating, lolRank: rival.lolRank };
     const result = computeDuelWinProbability(selfInput, rivalInput);
-    probability = { selfPct: result.playerAWinPct, rivalPct: result.playerBWinPct };
-  }
+    return { rival, selfPct: result.playerAWinPct, rivalPct: result.playerBWinPct };
+  });
 
   return (
     <div className={`duel-card ${compact ? "duel-card-compact" : ""}`}>
@@ -66,24 +76,38 @@ export default function DuelRatingCard({
 
       {lowConfidence && <p className="duel-low-confidence">Basado en pocas partidas -- el número puede cambiar.</p>}
 
-      {rival && probability && (
-        <div className="duel-vs">
-          <div className="duel-vs-row">
-            <div className="duel-vs-side">
-              <p className="duel-vs-name">{name ?? "Vos"}</p>
-              <p className="duel-vs-pct duel-vs-pct-self">{probability.selfPct}%</p>
-            </div>
-            <span className="duel-vs-label">VS</span>
-            <div className="duel-vs-side duel-vs-side-right">
-              <p className="duel-vs-name">{rival.name}</p>
-              <p className="duel-vs-pct duel-vs-pct-rival">{probability.rivalPct}%</p>
-            </div>
-          </div>
-          <div className="duel-vs-track">
-            <div className="duel-vs-fill-self" style={{ width: `${probability.selfPct}%` }} />
-            <div className="duel-vs-fill-rival" style={{ width: `${probability.rivalPct}%` }} />
-          </div>
-          <p className="duel-vs-caption">Probabilidad estimada de ganar un 1v1 directo</p>
+      {matchups.length > 0 && (
+        <div className="duel-vs-list">
+          {matchups.map(({ rival, selfPct, rivalPct }, i) => {
+            const href = rival.matchId ? `/combates/${rival.matchId}` : null;
+            const Wrapper = href ? "a" : "div";
+            return (
+              <Wrapper
+                key={rival.matchId ?? `${rival.name}-${i}`}
+                {...(href ? { href } : {})}
+                className={`duel-vs ${href ? "duel-vs-clickable" : ""}`}
+              >
+                <div className="duel-vs-row">
+                  <div className="duel-vs-side">
+                    <p className="duel-vs-name">{name ?? "Vos"}</p>
+                    <p className="duel-vs-pct duel-vs-pct-self">{selfPct}%</p>
+                  </div>
+                  <span className="duel-vs-label">VS</span>
+                  <div className="duel-vs-side duel-vs-side-right">
+                    <p className="duel-vs-name">{rival.name}</p>
+                    <p className="duel-vs-pct duel-vs-pct-rival">{rivalPct}%</p>
+                  </div>
+                </div>
+                <div className="duel-vs-track">
+                  <div className="duel-vs-fill-self" style={{ width: `${selfPct}%` }} />
+                  <div className="duel-vs-fill-rival" style={{ width: `${rivalPct}%` }} />
+                </div>
+                <p className="duel-vs-caption">
+                  {href ? "Ver combate -- probabilidad estimada de ganar" : "Probabilidad estimada de ganar un 1v1 directo"}
+                </p>
+              </Wrapper>
+            );
+          })}
         </div>
       )}
 
@@ -160,10 +184,44 @@ export default function DuelRatingCard({
           color: #eab308;
         }
 
-        .duel-vs {
+        .duel-vs-list {
           margin-top: 16px;
           padding-top: 14px;
           border-top: 1px solid rgba(200, 170, 110, 0.15);
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .duel-vs {
+          display: block;
+          text-decoration: none;
+          border-radius: 4px;
+        }
+
+        .duel-vs-list .duel-vs + .duel-vs {
+          padding-top: 10px;
+          border-top: 1px dashed rgba(200, 170, 110, 0.12);
+        }
+
+        .duel-vs-clickable {
+          margin: -6px;
+          padding: 6px;
+          cursor: pointer;
+          border: 1px solid transparent;
+          transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+        }
+
+        .duel-vs-clickable:hover {
+          background: rgba(200, 170, 110, 0.06);
+          border-color: rgba(200, 170, 110, 0.3);
+          transform: translateX(2px);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .duel-vs-clickable:hover {
+            transform: none;
+          }
         }
 
         .duel-vs-row {

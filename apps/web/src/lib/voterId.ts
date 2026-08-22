@@ -38,3 +38,40 @@ export function setLocalVote(matchId: string, predictedWinnerId: string): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(votedKey(matchId), predictedWinnerId);
 }
+
+const LIKED_FIGHTERS_KEY = "velada_liked_fighters";
+
+/**
+ * Local mirror of which participant ids this browser has liked, separate
+ * from the single-winner vote keys above: a like is not exclusive (you can
+ * like as many fighters as you want), so it's a set of ids rather than one
+ * value per match. Kept in sync with fighter_likes in Supabase purely so
+ * the UI can show the filled/unfilled heart state without an extra fetch
+ * per participant on every render.
+ */
+function getLikedFighterIds(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  const raw = window.localStorage.getItem(LIKED_FIGHTERS_KEY);
+  if (!raw) return new Set();
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? new Set(parsed) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+export function isLocallyLiked(participantId: string): boolean {
+  return getLikedFighterIds().has(participantId);
+}
+
+export function setLocalLike(participantId: string, liked: boolean): void {
+  if (typeof window === "undefined") return;
+  const ids = getLikedFighterIds();
+  if (liked) {
+    ids.add(participantId);
+  } else {
+    ids.delete(participantId);
+  }
+  window.localStorage.setItem(LIKED_FIGHTERS_KEY, JSON.stringify([...ids]));
+}

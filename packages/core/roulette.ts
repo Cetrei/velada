@@ -24,6 +24,8 @@
  * =============================================================================
  */
 
+import { computeDuelWinProbability } from "./duelRating";
+
 export interface RouletteMatchLike {
   player1Id: string;
   player2Id: string;
@@ -33,6 +35,18 @@ export interface RouletteMatchLike {
 export interface RoulettePair {
   player1Id: string;
   player2Id: string;
+}
+
+/**
+ * Rating de un participante para el modo "equilibrado" del sorteo (ver
+ * pickBalancedPair mas abajo) -- mismo shape que DuelInput en
+ * duelRating.ts (duelRating con fallback a lolRank), pasado por el caller
+ * ya resuelto por participante para no acoplar este archivo a la forma
+ * completa de Participant.
+ */
+export interface RouletteRatingInput {
+  duelRating?: number | null;
+  lolRank?: string | null;
 }
 
 /**
@@ -129,4 +143,114 @@ export function pickNextPair(
   const opponentId = shuffle(usedPool, random)[0];
 
   return { player1Id: soleFreshId, player2Id: opponentId };
+}
+
+/**
+ * Que tan lejos del 50/50 esta un par -- 0 es el combate mas renido
+ * posible (ambos con la misma probabilidad de ganar), 48 el mas parejo
+ * posible dentro del clamp de computeDuelWinProbability (2/98).
+ */
+function closenessScore(
+  aId: string,
+  bId: string,
+  ratingsById: Map<string, RouletteRatingInput>
+): number {
+  const a = ratingsById.get(aId) ?? {};
+  const b = ratingsById.get(bId) ?? {};
+  const { playerAWinPct } = computeDuelWinProbability(a, b);
+  return Math.abs(playerAWinPct - 50);
+}
+
+/**
+ * Entre pares con un closenessScore casi identico (diferencia menor a
+ * este umbral en puntos porcentuales), se desempata al azar en vez de
+ * quedarse siempre con el primero encontrado -- evita que el modo
+ * equilibrado sea 100% determinista cuando hay varios pares igual de
+ * parejos disponibles (ej. todo el pool con el mismo duelRating).
+ */
+const CLOSENESS_TIE_TOLERANCE = 1;
+
+/**
+ * Arma TODOS los pares posibles dentro de `ids` y devuelve el mas renido
+ * segun closenessScore -- entre empates (dentro de CLOSENESS_TIE_TOLERANCE
+ * puntos del mejor encontrado), elige al azar. O(n^2) sobre el pool de
+ * frescos, trivial en tamaño para cualquier cantidad realista de
+ * participantes de una velada.
+ */
+function closestPairAmong(
+  ids: string[],
+  ratingsById: Map<string, RouletteRatingInput>,
+  random: () => number
+): RoulettePair {
+  const candidates: { pair: RoulettePair; score: number }[] = [];
+  for (let i = 0; i < ids.length; i++) {
+    for (let j = i + 1; j < ids.length; j++) {
+      const score = closenessScore(ids[i], ids[j], ratingsById);
+      candidates.push({ pair: { player1Id: ids[i], player2Id: ids[j] }, score });
+    }
+  }
+
+  const bestScore = Math.min(...candidates.map((c) => c.score));
+  const bestCandidates = candidates.filter((c) => c.score <= bestScore + CLOSENESS_TIE_TOLERANCE);
+  const chosen = bestCandidates[Math.floor(random() * bestCandidates.length)];
+  return chosen.pair;
+}
+
+/**
+ * Mismas reglas de cobertura que pickNextPair (frescos primero, 1 sobrante
+ * fuerza repeticion, cobertura completa reinicia la ronda -- ver el
+ * comentario grande de pickNextPair mas arriba, no se repite aca) pero en
+ * vez de elegir al azar DENTRO del pool elegible, elige el par MAS RENIDO
+ * segun computeDuelWinProbability (duelRating con fallback a lolRank, ver
+ * duelRating.ts) -- pedido del usuario 2026-08-21: "agrega al generador de
+ * 1 vs 1 que ademas de balanceado poder generar por equilibrio (combates
+ * renidos)". A diferencia del balanceador de EQUIPOS
+ * (teamBalancer.ts/TeamGenerationMode), ese es el unico modo que se pide
+ * para el 1v1 -- no hay equivalente a "unfair" aca ("el de desventaja no
+ * hace falta").
+ *
+ * `ratings` debe traer un entry por cada id en `allParticipantIds` -- a
+ * quien le falte se le calcula igual (computeDuelWinProbability ya cae a
+ * 50 neutral sin duelRating ni lolRank), pero puede terminar emparejado de
+ * forma menos precisa al no tener ninguna señal real.
+ */
+export function pickBalancedPair(
+  allParticipantIds: string[],
+  existingMatches: RouletteMatchLike[],
+  ratings: Map<string, RouletteRatingInput>,
+  options: PickNextPairOptions = {}
+): RoulettePair | null {
+  const uniqueIds = [...new Set(allParticipantIds)];
+  if (uniqueIds.length < 2) return null;
+
+  const random = options.random ?? Math.random;
+  const appearances = countRandomAppearances(existingMatches);
+
+  let fresh = uniqueIds.filter((id) => !appearances.has(id));
+  if (fresh.length === 0) fresh = [...uniqueIds];
+
+  if (fresh.length >= 2) {
+    return closestPairAmong(fresh, ratings, random);
+  }
+
+  // Exactamente 1 fresco sobrante: en vez de un rival al azar entre los ya
+  // usados (como pickNextPair), elige el rival ya-usado que le de el
+  // combate mas parejo -- sigue siendo la unica repeticion forzosa
+  // (regla 3), pero eligiendo CUAL repeticion segun cercania de nivel.
+  const soleFreshId = fresh[0];
+  const usedPool = uniqueIds.filter((id) => id !== soleFreshId);
+  if (usedPool.length === 0) return null;
+
+  // soleFreshId SIEMPRE tiene que quedar en el par (es el unico sin
+  // cobertura todavia) -- se busca entre los pares que lo incluyen a el
+  // contra cada rival ya-usado, el mas renido segun closenessScore.
+  const pairsWithFresh = usedPool.map((opponentId) => ({
+    opponentId,
+    score: closenessScore(soleFreshId, opponentId, ratings)
+  }));
+  const bestScore = Math.min(...pairsWithFresh.map((p) => p.score));
+  const bestCandidates = pairsWithFresh.filter((p) => p.score <= bestScore + CLOSENESS_TIE_TOLERANCE);
+  const chosen = bestCandidates[Math.floor(random() * bestCandidates.length)];
+
+  return { player1Id: soleFreshId, player2Id: chosen.opponentId };
 }
