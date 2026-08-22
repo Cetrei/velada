@@ -3003,6 +3003,57 @@ era el de arriba, no whitelist).
   caller ya la pasa; imports nuevos de `PredictionCard`/`TeamPredictionCard`
   en las dos paginas .astro).
 
+## Sesion 2026-08-21 (10): embed custom (Discord/WhatsApp) para /combates + banner de invitacion a pronosticos
+- Pedido del usuario: "custom link con embed de discord o whatsapp
+  personalizado para mostrarle a mis amigos que ya estan los combates" +
+  "agrega en esa pagina (la normal de combates) algo que le insite a ir a
+  pronosticos".
+- **`Layout.astro`**: agrega meta tags Open Graph (`og:type`,
+  `og:site_name`, `og:title`, `og:description`, `og:url`, `og:image` +
+  dimensiones, `theme-color`) y Twitter Card (`summary_large_image`) que
+  antes NO existian en absoluto (cero meta tags de preview en todo el
+  sitio). Nuevas props opcionales: `ogImage` (default
+  `/images/hero-banner.jpg`, la imagen del hero del landing -- ya existia
+  en `public/images`, no hizo falta generar nada nuevo) y `ogTitle`
+  (default = `title`, para poder tener un titulo de pestana corto pero un
+  titulo de embed mas llamativo sin acoplar los dos). `og:image`/`og:url`
+  se resuelven a URL ABSOLUTA con `new URL(ogImage, Astro.url.origin)` --
+  Discord/WhatsApp ignoran rutas relativas. No se hardcodeo ningun dominio
+  (no hay `site:` en `astro.config.mjs`); `Astro.url.origin` ya resuelve
+  el host real detras de Cloudflare en cualquier ambiente.
+- **`combates.astro`**: pasa `description`/`ogTitle` custom al Layout
+  ("¡Ya están los combates! 🔥 - Combates" / "Entrá a ver los
+  enfrentamientos...") para que el preview compartido en Discord/WhatsApp
+  sea llamativo en vez del generico `SITE.defaultDescription`. El `<title>`
+  de la pestana (`copy.tabTitle`) no cambio -- sigue siendo el de siempre,
+  solo el embed es distinto.
+- **Banner "Ir a Pronósticos"**: nuevo bloque clickeable (toda la tarjeta
+  es un `<a href="/pronosticos">`, mismo lenguaje visual que el resto del
+  sitio -- `clip-edges`, borde dorado, hover) entre el header y las tabs
+  de `/combates`, visible apenas se entra a la pagina sin estorbar el
+  contenido principal. Copy nuevo en `content.ts`
+  (`PAGES.matches.predictionsPromptTitle/Subtitle/Cta`): "¿Ya sabes quien
+  gana?" + CTA "Ir a Pronosticos".
+- Herramientas: exclusivamente `filesystem:edit_file`/`read_file` sobre
+  el proyecto real. Se confirmo `/images/hero-banner.jpg` como imagen OG
+  reusando `filesystem:list_directory`/`read_file` de `HeroBanner.astro`
+  antes de asumir que existia -- no se genero ninguna imagen nueva.
+- Archivos tocados y confirmados con `read_file` posterior:
+  `apps/web/src/layouts/Layout.astro`,
+  `apps/web/src/pages/combates.astro`,
+  `packages/core/content.ts` (bloque `PAGES.matches`).
+- Pendiente para el usuario (sin bash real sobre el proyecto en esta
+  sesion, todo via filesystem MCP): `bun run dev`/deploy y pegar el link
+  de `/combates` en Discord y WhatsApp para confirmar que el embed muestra
+  el titulo/descripcion/imagen nuevos (WhatsApp en particular a veces
+  cachea el preview de un link ya compartido antes -- puede hacer falta
+  agregar un `?v=2` al final del link o esperar a que expire el cache si
+  se probo la URL antes de este cambio). Confirmar visualmente el banner
+  de "Ir a Pronosticos" en `/combates` en mobile y desktop. `bun run
+  build`/typecheck del editor para confirmar que no quedo ningun tipo roto
+  (props nuevas `ogImage`/`ogTitle` en `Layout.astro`, ambas opcionales
+  asi que ningun caller existente se rompe).
+
 ## Convenciones del proyecto
 Ver `shared/code_standards.md` del sistema de roles. camelCase, funciones
 chicas, guard clauses, sin comentarios obvios.

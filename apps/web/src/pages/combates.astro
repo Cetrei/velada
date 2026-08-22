@@ -22,9 +22,17 @@ const officialMatches = await fetchMatches();
 const teamMatches = await fetchTeamMatches();
 
 const copy = PAGES.matches;
+
+// Copy custom para el preview de Discord/WhatsApp de esta pagina en
+// particular -- pedido del usuario 2026-08-21: "custom link... para
+// mostrarle a mis amigos que ya estan los combates". og:title/description
+// llamativos en vez del generico de SITE.defaultDescription (que es solo
+// el nombre del sitio, sin gancho).
+const ogTitle = "¡Ya están los combates! 🔥 - " + copy.title;
+const ogDescription = "Entrá a ver los enfrentamientos de La Follada del Año y no te pierdas nada.";
 ---
 
-<Layout title={copy.tabTitle}>
+<Layout title={copy.tabTitle} description={ogDescription} ogTitle={ogTitle}>
   <section class="pt-32 pb-24 bg-lol-darkBg min-h-screen">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="text-center mb-10">
@@ -36,6 +44,20 @@ const copy = PAGES.matches;
           {copy.subtitle}
         </p>
       </div>
+
+      <a
+        href="/pronosticos"
+        class="predictions-prompt group flex flex-col sm:flex-row items-center justify-between gap-4 bg-lol-cardBg border border-lol-gold/40 hover:border-lol-gold transition-colors clip-edges px-6 py-5 mb-12"
+      >
+        <div class="text-center sm:text-left">
+          <p class="font-display text-lg font-bold text-white uppercase tracking-wide">{copy.predictionsPromptTitle}</p>
+          <p class="text-slate-400 text-sm mt-1">{copy.predictionsPromptSubtitle}</p>
+        </div>
+        <span class="shrink-0 inline-flex items-center gap-2 px-6 py-3 bg-lol-gold/10 border border-lol-gold text-lol-gold group-hover:bg-lol-gold group-hover:text-lol-darkBg transition-all font-bold text-sm tracking-wide uppercase clip-edges">
+          {copy.predictionsPromptCta}
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="transition-transform group-hover:translate-x-1"><path d="m9 18 6-6-6-6"/></svg>
+        </span>
+      </a>
 
       <div class="matches-tabs">
         <input type="radio" name="matches-tab" id="tab-1v1" class="matches-tab-input" checked />

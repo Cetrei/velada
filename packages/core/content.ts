@@ -125,7 +125,10 @@ export const PAGES = {
     teamsRevealEyebrow: "Combates por equipo",
     teamsRevealTitle: "Asi quedaron los equipos",
     teamsRevealSkipCta: "Saltar",
-    viewDetailCta: "Ver combate"
+    viewDetailCta: "Ver combate",
+    predictionsPromptTitle: "¿Ya sabés quién gana?",
+    predictionsPromptSubtitle: "Votá tu pronóstico para cada combate antes de que se cierren las votaciones.",
+    predictionsPromptCta: "Ir a Pronósticos"
   },
 
   matchDetail: {

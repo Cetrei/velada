@@ -6,14 +6,32 @@ import { getSession } from "../lib/session";
 interface Props {
   title: string;
   description?: string;
+  /** Ruta absoluta o relativa a la imagen OG/Twitter Card para este preview -- default el hero banner del sitio (representa bien "La Follada del Año" en general). Pasada como ruta relativa ("/images/x.jpg"), se resuelve a URL absoluta con Astro.url para que Discord/WhatsApp puedan leerla (los meta OG exigen URL absoluta, no sirve una relativa). */
+  ogImage?: string;
+  /** Titulo especifico para el preview de Discord/WhatsApp (og:title/twitter:title), separado del <title> real de la pestana -- default el mismo `title`. Util para paginas donde el titulo de pestana es corto/generico ("Combates") pero el embed compartido conviene mas llamativo ("¡Ya estan los combates!"). */
+  ogTitle?: string;
 }
 
-const { title, description = SITE.defaultDescription } = Astro.props;
+const {
+  title,
+  description = SITE.defaultDescription,
+  ogImage = "/images/hero-banner.jpg",
+  ogTitle = title
+} = Astro.props;
 const navLinks = NAV.links;
 const session = await getSession(Astro.cookies, Astro);
 
 // Detectar si estamos en el landing para cortar el scroll del body
 const isHome = Astro.url.pathname === "/";
+
+// URLs absolutas para los meta OG/Twitter (Discord y WhatsApp ignoran
+// rutas relativas en og:image/og:url) -- pedido del usuario 2026-08-21:
+// "custom link con un embed de discord o whatsapp personalizado" para
+// avisarle a los amigos que ya estan los combates. Astro.url ya resuelve
+// el host correcto detras de Cloudflare (no hay `site` fijo en
+// astro.config.mjs, asi que no se hardcodea ningun dominio aca).
+const absoluteOgImage = new URL(ogImage, Astro.url.origin).toString();
+const canonicalUrl = Astro.url.origin + Astro.url.pathname;
 ---
 
 <!doctype html>
@@ -23,6 +41,25 @@ const isHome = Astro.url.pathname === "/";
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{title}</title>
     <meta name="description" content={description} />
+
+    <!-- Open Graph (Discord, WhatsApp, Facebook, etc) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={SITE.name} />
+    <meta property="og:title" content={ogTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:image" content={absoluteOgImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <!-- Discord pinta la franja lateral del embed con este color. -->
+    <meta name="theme-color" content="#C8AA6E" />
+
+    <!-- Twitter Card -- WhatsApp/Discord no lo usan, pero X si, y no cuesta nada tenerlo. -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={ogTitle} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={absoluteOgImage} />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Oswald:wght@500;700&display=swap" rel="stylesheet" />
